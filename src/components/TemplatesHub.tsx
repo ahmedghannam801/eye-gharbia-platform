@@ -49,7 +49,7 @@ interface TemplateItem {
 export const TemplatesHub: React.FC<TemplatesHubProps> = ({ currentUser }) => {
   const { isRtl, language } = useLanguage();
   const isAr = language === 'ar';
-  const isAdminOrLeader = ['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader'].includes(currentUser.role);
+  const isAdminOrLeader = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader'].includes(currentUser.role);
 
   const [templates, setTemplates] = useState<TemplateItem[]>([]);
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);

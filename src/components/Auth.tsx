@@ -172,6 +172,24 @@ export const Auth: React.FC<AuthProps> = ({
     const cleanPassword = loginPassword.trim();
     const cleanGovernorate = loginGovernorate.trim();
 
+    // Check client-side rate limit / cooldown lockout
+    const lockUntilStr = localStorage.getItem('eye_login_lockout_until');
+    if (lockUntilStr) {
+      const lockUntil = parseInt(lockUntilStr, 10);
+      if (Date.now() < lockUntil) {
+        const remainingSec = Math.ceil((lockUntil - Date.now()) / 1000);
+        setErrorMsg(
+          language === 'ar'
+            ? `تم حظر المحاولات مؤقتاً بسبب تكرار المحاولات الخاطئة. يرجى الانتظار ${remainingSec} ثانية.`
+            : `Too many failed attempts. Please wait ${remainingSec} seconds before retrying.`
+        );
+        return;
+      } else {
+        localStorage.removeItem('eye_login_lockout_until');
+        localStorage.removeItem('eye_failed_login_count');
+      }
+    }
+
     if (!cleanGovernorate) {
       setErrorMsg(language === 'ar' ? 'يرجى اختيار المحافظة أولاً قبل تسجيل الدخول.' : 'Please select your governorate before signing in.');
       return;
@@ -184,6 +202,10 @@ export const Auth: React.FC<AuthProps> = ({
 
     const res = await db.login(cleanEmail, cleanPassword);
     if (res.success && res.user) {
+      // Clear failed attempts on successful login
+      localStorage.removeItem('eye_failed_login_count');
+      localStorage.removeItem('eye_login_lockout_until');
+
       const userGov = (res.user.governorate || '').trim();
       const normalizeGov = (g: string) => g.replace(/^محافظة\s+/, '').trim();
 
@@ -218,6 +240,21 @@ export const Auth: React.FC<AuthProps> = ({
       setIsLoggingIn(true);
       setTimeout(() => { onAuthSuccess(res.user!); }, 1500);
     } else {
+      // Track consecutive failed login attempts
+      const currentFailCount = parseInt(localStorage.getItem('eye_failed_login_count') || '0', 10) + 1;
+      localStorage.setItem('eye_failed_login_count', String(currentFailCount));
+
+      if (currentFailCount >= 5) {
+        const lockoutDuration = Math.min(300, 30 * Math.pow(2, currentFailCount - 5)); // 30s, 60s, up to 5min
+        localStorage.setItem('eye_login_lockout_until', String(Date.now() + lockoutDuration * 1000));
+        setErrorMsg(
+          language === 'ar'
+            ? `تم تجاوز الحد الأقصى للمحاولات الخاطئة (5 محاولات). تم قفل تسجيل الدخول مؤقتاً لمدة ${lockoutDuration} ثانية.`
+            : `Maximum login attempts exceeded. Account login locked for ${lockoutDuration} seconds.`
+        );
+        return;
+      }
+
       const arFailMsg = 'فشل تسجيل الدخول. يرجى التحقق من البريد الإلكتروني (أو كود العضوية) وكلمة المرور.';
       setErrorMsg(getFriendlyErrorMessage(res.error || (language === 'ar' ? arFailMsg : 'Invalid credentials.')));
     }

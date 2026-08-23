@@ -2,14 +2,22 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { db, calculateMemberAVG } from '../db/localDb';
 import { supabase, getPermanentStorageUrl } from '../lib/supabaseClient';
-import { UserProfile, ActivityLog, IssuedCertificate, CertificateType, MemberEvaluation, DisciplinaryRecord, getUserRoleTitle } from '../types';
-import { Phone, Award, Activity, Calendar, User, Camera, Loader2, ZoomIn, ZoomOut, RotateCw, X, Download, Eye, Star, Crown, Target, Trash2, ShieldCheck, Lock, Sliders, MessageSquare, Sparkles, CheckCircle2, ArrowLeft, Linkedin, Facebook, Cake, Globe, Printer, ShieldAlert, FileText, AlertTriangle, Maximize2, Minimize2 } from 'lucide-react';
+import { UserProfile, ActivityLog, IssuedCertificate, CertificateType, MemberEvaluation, DisciplinaryRecord, CommitteeChangeRequest, getUserRoleTitle } from '../types';
+import { Phone, Award, Activity, Calendar, User, Camera, Loader2, ZoomIn, ZoomOut, RotateCw, X, Download, Eye, Star, Crown, Target, Trash2, ShieldCheck, Lock, Clock, Sliders, MessageSquare, Sparkles, CheckCircle2, ArrowLeft, Linkedin, Facebook, Cake, Globe, Printer, ShieldAlert, FileText, AlertTriangle, Maximize2, Minimize2, ArrowRightLeft } from 'lucide-react';
 import { useLanguage } from '../lib/LanguageContext';
 import { downloadCertificate, printCertificate, getCommitteeSignatories } from '../lib/certificateGenerator';
 import { printDedicatedOfficialDocument } from '../lib/dedicatedPrint';
 import PremiumCertificate from './PremiumCertificate';
 import { fillAndDownloadDocxTemplate } from '../lib/docxFiller';
 import { CareerCompass } from './CareerCompass';
+
+const COMMITTEES_OPTIONS = ['HR', 'PR', 'SM', 'OR'];
+const COMMITTEE_DEPTS_MAPPING: Record<string, string[]> = {
+  HR: ['HRM', 'HRS', 'HRIS', 'HRD'],
+  PR: ['EPR', 'IPR', 'FR', 'CR', 'IR'],
+  SM: ['Content Writing', 'Graphic Design', 'Photography', 'Video Editing', 'Media Coverage'],
+  OR: ['VIP', 'Protocol', 'Planning', 'Event Management', 'Coordination'],
+};
 
 interface MemberProfileProps {
   currentUser: UserProfile;
@@ -537,6 +545,54 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({
   const [showPhoneToOthers, setShowPhoneToOthers] = useState<boolean>(activeUser.showPhoneToOthers !== false);
   const [showAvatarToOthers, setShowAvatarToOthers] = useState<boolean>(activeUser.showAvatarToOthers !== false);
 
+  // Committee Change Transfer Request States
+  const [showCommitteeModal, setShowCommitteeModal] = useState(false);
+  const [targetCommittee, setTargetCommittee] = useState<string>(() => {
+    return activeUser.committee === 'HR' ? 'PR' : 'HR';
+  });
+  const [targetDept, setTargetDept] = useState<string>('None');
+  const [transferReason, setTransferReason] = useState('');
+  const [transferSuccess, setTransferSuccess] = useState('');
+  const [committeeRequests, setCommitteeRequests] = useState<CommitteeChangeRequest[]>(() => {
+    return db.getCommitteeChangeRequests();
+  });
+
+  useEffect(() => {
+    const loadReqs = () => {
+      setCommitteeRequests(db.getCommitteeChangeRequests());
+    };
+    loadReqs();
+    const unsub = db.onChange(loadReqs);
+    return () => unsub();
+  }, []);
+
+  const pendingTransferRequest = committeeRequests.find(
+    r => r.memberId === activeUser.id && r.status === 'Pending'
+  );
+
+  const handleRequestCommitteeTransfer = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!transferReason.trim()) return;
+
+    db.createCommitteeChangeRequest({
+      memberId: currentUser.id,
+      memberName: currentUser.fullName,
+      governorate: currentUser.governorate,
+      currentCommittee: currentUser.committee,
+      targetCommittee: targetCommittee,
+      currentDepartment: currentUser.department,
+      targetDepartment: targetDept,
+      reason: transferReason,
+    }, currentUser);
+
+    setTransferReason('');
+    setTransferSuccess(language === 'ar' ? 'تم إرسال طلب نقل اللجنة للقادة والإدارة بنجاح!' : 'Transfer request submitted successfully!');
+    setTimeout(() => {
+      setTransferSuccess('');
+      setShowCommitteeModal(false);
+    }, 2500);
+  };
+
   // Disciplinary records & Official document viewing
   const [disciplinaryRecords, setDisciplinaryRecords] = useState<DisciplinaryRecord[]>(() => {
     const all = db.getDisciplinaryRecords(currentUser) || [];
@@ -743,10 +799,11 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({
     printWindow.document.close();
   };
 
-  const targetIsLeaderOrAbove = ['Leader', 'Vice', 'Super Admin', 'Coordinator', 'Deputy Coordinator'].includes(activeUser.role);
-  const isExecOrVice = ['Super Admin', 'Coordinator', 'Deputy Coordinator', 'Vice'].includes(currentUser.role);
-  const canEvaluateTarget = !isOwnProfile && (
-    isExecOrVice || (currentUser.role === 'Leader' && !targetIsLeaderOrAbove)
+  const isLeadershipTarget = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM', 'Central'].includes(activeUser.role);
+  const isExecOrVice = ['Super Admin', 'Head', 'Coordinator', 'Deputy Coordinator', 'Vice', 'HRM', 'Central'].includes(currentUser.role);
+  // Leadership roles have NO evaluations ("ملناش تقييم")
+  const canEvaluateTarget = !isOwnProfile && !isLeadershipTarget && (
+    isExecOrVice || (currentUser.role === 'Leader' && activeUser.role === 'Member')
   );
 
   const handleSaveEvaluation = async (e: React.FormEvent) => {
@@ -793,7 +850,7 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
 
-      const isExec = ['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator'].includes(userProfile.role);
+      const isExec = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator'].includes(userProfile.role);
       const isLeader = userProfile.role === 'Leader';
 
       // 1. Background Luxury Metallic Linear Gradient
@@ -1828,7 +1885,7 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({
       <div className="lg:col-span-4 space-y-6">
         {/* Profile Card — Custom Luxury VIP styling for Executive Leadership */}
         {(() => {
-          const isExec = ['Super Admin', 'Coordinator', 'Deputy Coordinator', 'Leader', 'Vice'].includes(userProfile.role);
+          const isExec = ['Super Admin', 'Head', 'Coordinator', 'Deputy Coordinator', 'Leader', 'Vice'].includes(userProfile.role);
           const isSuperAdmin = userProfile.role === 'Super Admin';
           const isGovernorCoord = userProfile.role === 'Coordinator';
           const isDeputyCoord = userProfile.role === 'Deputy Coordinator';
@@ -2109,6 +2166,37 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({
                         <span className={`font-bold ${isExec ? 'text-white' : 'text-amber-600'}`}>{translateDepartment(userProfile.department)}</span>
                       </div>
                     )}
+
+                    {/* Committee Transfer Request Action / Status */}
+                    {isOwnProfile && (
+                      <div className="py-2">
+                        {pendingTransferRequest ? (
+                          <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="font-bold flex items-center gap-1.5">
+                                <Clock className="w-3.5 h-3.5 text-amber-400 animate-spin" />
+                                {language === 'ar' ? 'طلب نقل لجنة قيد المراجعة ⏳' : 'Transfer Pending ⏳'}
+                              </span>
+                              <span className="text-[10px] font-mono opacity-80">{new Date(pendingTransferRequest.createdAt).toLocaleDateString()}</span>
+                            </div>
+                            <p className="text-[11px] opacity-90">
+                              {language === 'ar' 
+                                ? `طلب نقل إلى لجنة (${pendingTransferRequest.targetCommittee}) قيد المراجعة من القادة والإدارة.` 
+                                : `Requested transfer to (${pendingTransferRequest.targetCommittee}). Awaiting approval.`}
+                            </p>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setShowCommitteeModal(true)}
+                            className="w-full py-2 px-3 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm hover:scale-[1.01]"
+                          >
+                            <ArrowRightLeft className="w-3.5 h-3.5" />
+                            <span>{language === 'ar' ? 'طلب تغيير أو نقل اللجنة الرسمية 🔄' : 'Request Committee Transfer 🔄'}</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </>
                 )}
                 <div className="flex justify-between py-1 border-b border-white/10">
@@ -2117,7 +2205,7 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({
                 </div>
 
                 {/* Phone — WhatsApp clickable, only visible if allowed */}
-                {(isOwnProfile || currentUser.role === 'Super Admin' || currentUser.role === 'Coordinator' || userProfile.showPhoneToOthers !== false) && userProfile.phoneNumber && (
+                {(isOwnProfile || ['Super Admin', 'Head', 'Vice', 'Coordinator'].includes(currentUser.role) || userProfile.showPhoneToOthers !== false) && userProfile.phoneNumber && (
                   <div className="flex justify-between items-center py-1 border-b border-white/10">
                     <span className="font-semibold opacity-70">{language === 'ar' ? 'الهاتف' : 'Phone'}</span>
                     <a
@@ -2408,7 +2496,7 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({
 
         {/* Interactive Flippable 3D Membership Card */}
         {(() => {
-          const isExecCard = ['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator'].includes(userProfile.role);
+          const isExecCard = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator'].includes(userProfile.role);
           const isLeaderCard = userProfile.role === 'Leader';
 
           const cardGradientClass = isExecCard
@@ -2615,9 +2703,57 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({
       {/* Right side: Detailed Activity Log and timeline */}
       <div className="lg:col-span-8 bg-white rounded-3xl border border-slate-200 p-6 space-y-6 shadow-sm" dir={language === 'ar' ? 'rtl' : 'ltr'}>
 
-        {/* ── MEMBER PERFORMANCE EVALUATION SECTION ── */}
+        {/* ── MEMBER PERFORMANCE EVALUATION SECTION / EXECUTIVE LEADERSHIP TIER ── */}
         <div className="border-b border-slate-100 pb-5">
-          {(() => {
+          {isLeadershipTarget ? (
+            <div className="p-6 rounded-3xl bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-950 text-white border-2 border-amber-400/50 shadow-xl space-y-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-white/10 pb-4">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-14 h-14 rounded-2xl bg-amber-500/20 border border-amber-400/60 flex items-center justify-center text-2xl shadow-inner shrink-0">
+                    👑
+                  </div>
+                  <div>
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-300 text-[10px] font-bold mb-1">
+                      <span>⭐ {language === 'ar' ? 'منصب قيادي وإداري رفيع' : 'Executive Leadership Tier'}</span>
+                    </div>
+                    <h2 className="text-base font-extrabold text-white">
+                      {getUserRoleTitle(activeUser, language === 'ar' ? 'ar' : 'en')}
+                    </h2>
+                    <p className="text-[11px] text-slate-300 font-medium">
+                      {language === 'ar' 
+                        ? 'هذا الحساب يشغل منصباً إدارياً وقيادياً بالكيان، ولا يخضع لمنظومة تقييم الأعضاء العادية أو احتساب نقاط الـ AVG.'
+                        : 'This account holds an executive leadership role and is exempt from standard member AVG ratings.'}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-end shrink-0">
+                  <span className="px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-bold flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                    <span>{language === 'ar' ? 'صلاحيات قيادية كاملة' : 'Full Executive Authority'}</span>
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                <div className="p-3 bg-white/5 border border-white/10 rounded-2xl">
+                  <span className="text-slate-400 text-[10px] block font-bold">{language === 'ar' ? 'الدور والمسؤولية' : 'Role'}</span>
+                  <span className="font-extrabold text-amber-300 text-xs mt-0.5 block">{activeUser.role}</span>
+                </div>
+                <div className="p-3 bg-white/5 border border-white/10 rounded-2xl">
+                  <span className="text-slate-400 text-[10px] block font-bold">{language === 'ar' ? 'نطاق الإشراف' : 'Supervision'}</span>
+                  <span className="font-extrabold text-blue-300 text-xs mt-0.5 block">
+                    {activeUser.committee === 'All' || activeUser.role === 'Super Admin' || activeUser.role === 'Coordinator'
+                      ? (language === 'ar' ? 'كافة لجان وقطاعات الكيان' : 'All Committees')
+                      : (translateCommittee(activeUser.committee))}
+                  </span>
+                </div>
+                <div className="p-3 bg-white/5 border border-white/10 rounded-2xl">
+                  <span className="text-slate-400 text-[10px] block font-bold">{language === 'ar' ? 'التحكم الإداري' : 'Administrative'}</span>
+                  <span className="font-extrabold text-emerald-300 text-xs mt-0.5 block">{language === 'ar' ? 'معتمد ومُفعل ✓' : 'Active & Certified'}</span>
+                </div>
+              </div>
+            </div>
+          ) : (() => {
             const avgBreakdown = calculateMemberAVG(
               activeUser.id,
               db.getMeetings(),
@@ -2846,54 +2982,56 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({
             );
           })()}
 
-          {/* Evaluations List */}
-          {evaluations.length === 0 ? (
-            <div className="text-center py-6 bg-slate-50/50 dark:bg-slate-950/20 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
-              <Star className="w-6 h-6 text-slate-300 mx-auto mb-1.5" />
-              <p className="text-xs text-slate-500 font-semibold">
-                {language === 'ar' ? 'لم يتلق هذا العضو أي تقييم إداري بعد.' : 'No evaluations recorded for this member yet.'}
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {evaluations.map((ev) => (
-                <div key={ev.id} className="p-4 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 rounded-2xl space-y-2">
-                  <div className="flex items-center justify-between border-b border-slate-200/60 dark:border-slate-700/60 pb-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-lg bg-amber-500/10 text-amber-600 flex items-center justify-center font-bold text-xs">
-                        {ev.evaluatorName.charAt(0)}
+          {/* Evaluations List — Only for regular members/targets */}
+          {!isLeadershipTarget && (
+            evaluations.length === 0 ? (
+              <div className="text-center py-6 bg-slate-50/50 dark:bg-slate-950/20 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
+                <Star className="w-6 h-6 text-slate-300 mx-auto mb-1.5" />
+                <p className="text-xs text-slate-500 font-semibold">
+                  {language === 'ar' ? 'لم يتلق هذا العضو أي تقييم إداري بعد.' : 'No evaluations recorded for this member yet.'}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {evaluations.map((ev) => (
+                  <div key={ev.id} className="p-4 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 rounded-2xl space-y-2">
+                    <div className="flex items-center justify-between border-b border-slate-200/60 dark:border-slate-700/60 pb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-lg bg-amber-500/10 text-amber-600 flex items-center justify-center font-bold text-xs">
+                          {ev.evaluatorName.charAt(0)}
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-slate-900 dark:text-white">{ev.evaluatorName}</p>
+                          <p className="text-[9px] text-amber-600 dark:text-amber-400 font-bold uppercase">{ev.evaluatorRole}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-xs font-bold text-slate-900 dark:text-white">{ev.evaluatorName}</p>
-                        <p className="text-[9px] text-amber-600 dark:text-amber-400 font-bold uppercase">{ev.evaluatorRole}</p>
+                      <div className="text-end">
+                        <div className="flex items-center gap-1 justify-end">
+                          {[1, 2, 3, 4, 5].map(n => (
+                            <Star key={n} className={`w-3 h-3 ${n <= ev.overallRating ? 'text-amber-400 fill-amber-400' : 'text-slate-300 dark:text-slate-600'}`} />
+                          ))}
+                          <span className="text-xs font-black text-amber-500 ms-1">{ev.overallRating}</span>
+                        </div>
+                        <span className="text-[9px] text-slate-400">{new Date(ev.createdAt).toLocaleDateString()}</span>
                       </div>
                     </div>
-                    <div className="text-end">
-                      <div className="flex items-center gap-1 justify-end">
-                        {[1, 2, 3, 4, 5].map(n => (
-                          <Star key={n} className={`w-3 h-3 ${n <= ev.overallRating ? 'text-amber-400 fill-amber-400' : 'text-slate-300 dark:text-slate-600'}`} />
-                        ))}
-                        <span className="text-xs font-black text-amber-500 ms-1">{ev.overallRating}</span>
-                      </div>
-                      <span className="text-[9px] text-slate-400">{new Date(ev.createdAt).toLocaleDateString()}</span>
+
+                    {ev.feedbackComment && (
+                      <p className="text-xs text-slate-700 dark:text-slate-300 italic bg-white dark:bg-slate-900/60 p-2.5 rounded-xl border border-slate-200/50 dark:border-slate-800">
+                        "{ev.feedbackComment}"
+                      </p>
+                    )}
+
+                    <div className="grid grid-cols-4 gap-1 text-[9px] font-bold text-slate-500 pt-1">
+                      <div>{language === 'ar' ? 'انضباط:' : 'Commit:'} <span className="text-slate-800 dark:text-slate-200">{ev.commitmentRating}/5</span></div>
+                      <div>{language === 'ar' ? 'جودة:' : 'Quality:'} <span className="text-slate-800 dark:text-slate-200">{ev.qualityRating}/5</span></div>
+                      <div>{language === 'ar' ? 'تعاون:' : 'Team:'} <span className="text-slate-800 dark:text-slate-200">{ev.teamworkRating}/5</span></div>
+                      <div>{language === 'ar' ? 'ابتكار:' : 'Act:'} <span className="text-slate-800 dark:text-slate-200">{ev.activityRating}/5</span></div>
                     </div>
                   </div>
-
-                  {ev.feedbackComment && (
-                    <p className="text-xs text-slate-700 dark:text-slate-300 italic bg-white dark:bg-slate-900/60 p-2.5 rounded-xl border border-slate-200/50 dark:border-slate-800">
-                      "{ev.feedbackComment}"
-                    </p>
-                  )}
-
-                  <div className="grid grid-cols-4 gap-1 text-[9px] font-bold text-slate-500 pt-1">
-                    <div>{language === 'ar' ? 'انضباط:' : 'Commit:'} <span className="text-slate-800 dark:text-slate-200">{ev.commitmentRating}/5</span></div>
-                    <div>{language === 'ar' ? 'جودة:' : 'Quality:'} <span className="text-slate-800 dark:text-slate-200">{ev.qualityRating}/5</span></div>
-                    <div>{language === 'ar' ? 'تعاون:' : 'Team:'} <span className="text-slate-800 dark:text-slate-200">{ev.teamworkRating}/5</span></div>
-                    <div>{language === 'ar' ? 'ابتكار:' : 'Act:'} <span className="text-slate-800 dark:text-slate-200">{ev.activityRating}/5</span></div>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )
           )}
         </div>
 
@@ -3610,6 +3748,119 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({
                 #معا_نحو_مستقبل_افضل
               </div>
             </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Committee Change Transfer Modal */}
+      {showCommitteeModal && createPortal(
+        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in" dir={language === 'ar' ? 'rtl' : 'ltr'}>
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full p-6 border border-slate-200 dark:border-slate-800 space-y-5 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <h3 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
+                <ArrowRightLeft className="w-5 h-5 text-amber-500" />
+                <span>{language === 'ar' ? 'طلب تغيير أو نقل اللجنة الرسمية' : 'Request Committee Transfer'}</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowCommitteeModal(false)}
+                className="p-1.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 text-amber-900 dark:text-amber-300 text-xs space-y-1">
+              <p className="font-bold">{language === 'ar' ? '📌 معلومات هامة:' : '📌 Important Notice:'}</p>
+              <p>
+                {language === 'ar' 
+                  ? 'سيصل طلبك إلى الإدارة والقادة (Super Admin, Vice, HRM وقادة اللجان) لدراسته واعتماده. فور الموافقة سيتم تعديل لجنتك تلقائياً.' 
+                  : 'Your request will be submitted to the Leaders and Super Admins for review and approval.'}
+              </p>
+              <p className="font-mono pt-1 text-[11px]">
+                <strong>{language === 'ar' ? 'اللجنة الحالية:' : 'Current Committee:'}</strong> {translateCommittee(currentUser.committee)} {currentUser.department && currentUser.department !== 'None' ? `• ${translateDepartment(currentUser.department)}` : ''}
+              </p>
+            </div>
+
+            {transferSuccess && (
+              <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 text-xs font-bold flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                <span>{transferSuccess}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleRequestCommitteeTransfer} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
+                    {language === 'ar' ? 'اللجنة المراد الانتقال إليها' : 'Target Committee'}
+                  </label>
+                  <select
+                    value={targetCommittee}
+                    onChange={e => {
+                      setTargetCommittee(e.target.value);
+                      const depts = COMMITTEE_DEPTS_MAPPING[e.target.value] || [];
+                      setTargetDept(depts[0] || 'None');
+                    }}
+                    className="w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 p-3 text-xs font-bold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-amber-500 outline-none"
+                  >
+                    {COMMITTEES_OPTIONS.map(c => (
+                      <option key={c} value={c}>
+                        {translateCommittee(c)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
+                    {language === 'ar' ? 'القسم المطلوب (اختياري)' : 'Target Department (Optional)'}
+                  </label>
+                  <select
+                    value={targetDept}
+                    onChange={e => setTargetDept(e.target.value)}
+                    className="w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 p-3 text-xs font-bold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-amber-500 outline-none"
+                  >
+                    <option value="None">{language === 'ar' ? 'بدون تخصص محدد' : 'None / General'}</option>
+                    {(COMMITTEE_DEPTS_MAPPING[targetCommittee] || []).map(d => (
+                      <option key={d} value={d}>{translateDepartment(d)}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
+                  {language === 'ar' ? 'سبب طلب تغيير اللجنة بالتفصيل' : 'Reason for Transfer'}
+                </label>
+                <textarea
+                  rows={4}
+                  value={transferReason}
+                  onChange={e => setTransferReason(e.target.value)}
+                  placeholder={language === 'ar' ? 'يرجى كتابة سبب طلب النقل وخبراتك أو اهتماماتك في اللجنة الجديدة...' : 'Explain why you want to transfer...'}
+                  required
+                  className="w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 p-3 text-xs font-bold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-amber-500 outline-none resize-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCommitteeModal(false)}
+                  className="px-4 py-2.5 rounded-xl text-slate-600 dark:text-slate-400 font-bold text-xs hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  {language === 'ar' ? 'إلغاء' : 'Cancel'}
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-amber-500/20 cursor-pointer"
+                >
+                  <ArrowRightLeft className="w-4 h-4" />
+                  <span>{language === 'ar' ? 'إرسال الطلب للقادة' : 'Submit Transfer Request'}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>,
         document.body

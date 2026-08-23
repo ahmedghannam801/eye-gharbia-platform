@@ -1,30 +1,58 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../db/localDb';
-import { UserProfile, ExcuseRequest, FreezeRequest, ExcuseType } from '../types';
+import { UserProfile, ExcuseRequest, FreezeRequest, CommitteeChangeRequest, ExcuseType } from '../types';
 import { useLanguage } from '../lib/LanguageContext';
-import { FileText, Snowflake, Clock, CheckCircle2, XCircle, Send, MessageSquare } from 'lucide-react';
+import { isAdminUser } from '../lib/permissions';
+import { FileText, Snowflake, Clock, CheckCircle2, XCircle, Send, MessageSquare, ArrowRightLeft } from 'lucide-react';
 
 interface ExcusesAndFreezeProps {
   currentUser: UserProfile;
   onNavigateToView?: (view: string) => void;
 }
 
+const COMMITTEES_LIST = ['HR', 'PR', 'SM', 'OR'];
+const COMMITTEE_DEPTS_MAP: Record<string, string[]> = {
+  HR: ['HR OF PR', 'HR OF SM', 'HR OF OR', 'HRM', 'HRS', 'HRIS', 'HRD'],
+  PR: ['EPR', 'IPR', 'FR', 'CR', 'IR'],
+  SM: ['Content Writing', 'Graphic Design', 'Photography', 'Video Editing', 'Media Coverage'],
+  OR: ['VIP', 'Protocol', 'Planning', 'Event Management', 'Coordination'],
+};
+
 export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ currentUser }) => {
   const { language, isRtl } = useLanguage();
   const isAr = language === 'ar';
-  const isSuperAdminOrVice = ['Super Admin', 'Vice'].includes(currentUser.role);
-  const isAdminOrLeader = ['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader', 'HRM'].includes(currentUser.role);
+  const isHRResponsible =
+    isAdminUser(currentUser) ||
+    ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM', 'Central'].includes(currentUser.role) ||
+    currentUser.department === 'HRM' ||
+    currentUser.committee === 'HR' ||
+    currentUser.committee === 'All' ||
+    (currentUser.department || '').includes('HR') ||
+    ((currentUser as any).subCommittee || '').includes('HR');
 
-  // Check if a request requires Super Admin / Vice approval (All member and leader requests route to Super Admin / Head HR & Vice first)
-  const canApproveRequest = (requestMemberId: string): boolean => {
-    return ['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM'].includes(currentUser.role);
+  const isSuperAdminOrVice = isAdminUser(currentUser) || ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Central', 'HRM'].includes(currentUser.role);
+  const isAdminOrLeader = isHRResponsible || currentUser.role === 'Leader';
+
+  // Check if a user can approve/reject requests (Super Admin / Head / Vice / HR have full management and approval authority)
+  const canApproveRequest = (requestMemberId?: string): boolean => {
+    if (isAdminUser(currentUser) || isHRResponsible || isSuperAdminOrVice) {
+      return true; // Unrestricted access for all leadership and HR admins
+    }
+    if (currentUser.role === 'Leader') {
+      if (requestMemberId && requestMemberId === currentUser.id) return false;
+      return true;
+    }
+    return false;
   };
 
-  const [activeTab, setActiveTab] = useState<'excuses' | 'freeze' | 'manage' | 'activity'>('excuses');
+  const [activeTab, setActiveTab] = useState<'excuses' | 'freeze' | 'committee-change' | 'manage' | 'activity'>(() => {
+    return isAdminOrLeader ? 'manage' : 'excuses';
+  });
   const [activitySearch, setActivitySearch] = useState('');
 
   const [excuses, setExcuses] = useState<ExcuseRequest[]>([]);
   const [freezes, setFreezes] = useState<FreezeRequest[]>([]);
+  const [committeeChanges, setCommitteeChanges] = useState<CommitteeChangeRequest[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
 
   // Excuse Form state
@@ -38,16 +66,27 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
   const [freezeEnd, setFreezeEnd] = useState('');
   const [freezeReason, setFreezeReason] = useState('');
 
+  // Committee Change Form state
+  const [targetCommittee, setTargetCommittee] = useState<string>(() => {
+    return currentUser.committee === 'HR' ? 'PR' : 'HR';
+  });
+  const [targetDepartment, setTargetDepartment] = useState<string>('None');
+  const [committeeChangeReason, setCommitteeChangeReason] = useState('');
+
   // Status message
   const [successMsg, setSuccessMsg] = useState('');
 
   // Admin Response Modal
-  const [selectedRequest, setSelectedRequest] = useState<{ type: 'excuse' | 'freeze'; item: ExcuseRequest | FreezeRequest } | null>(null);
+  const [selectedRequest, setSelectedRequest] = useState<{
+    type: 'excuse' | 'freeze' | 'committee';
+    item: any;
+  } | null>(null);
   const [adminNote, setAdminNote] = useState('');
 
   const loadData = () => {
     setExcuses(db.getExcuseRequests());
     setFreezes(db.getFreezeRequests());
+    setCommitteeChanges(db.getCommitteeChangeRequests());
     setLogs(db.getLogs());
   };
 
@@ -58,10 +97,10 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
   }, []);
 
   const handleClearAllSampleRequests = () => {
-    if (confirm(isAr ? 'هل أنت متأكد من مسح جميع طلبات الأعذار والفريز الحالية؟' : 'Clear all excuse and freeze requests?')) {
+    if (confirm(isAr ? 'هل أنت متأكد من مسح جميع طلبات الأعذار والفريز وتغيير اللجان؟' : 'Clear all excuse, freeze, and committee requests?')) {
       db.clearAllExcuseAndFreezeRequests(currentUser);
       loadData();
-      setSuccessMsg(isAr ? 'تم مسح جميع الأعذار وطلبات الفريز بنجاح.' : 'Cleared all requests.');
+      setSuccessMsg(isAr ? 'تم مسح جميع الطلبات بنجاح.' : 'Cleared all requests.');
       setTimeout(() => setSuccessMsg(''), 3000);
     }
   };
@@ -83,7 +122,7 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
 
     setExcuseReason('');
     setExcuseTarget('');
-    setSuccessMsg(isAr ? 'تم تقديم طلب العذر بنجاح، وسوف تراجعة الإدارة قريباً.' : 'Excuse request submitted successfully.');
+    setSuccessMsg(isAr ? 'تم تقديم طلب العذر بنجاح، وسوف تراجعه الإدارة وقادة اللجان قريباً.' : 'Excuse request submitted successfully.');
     setTimeout(() => setSuccessMsg(''), 3000);
     setActiveTab('manage');
   };
@@ -105,18 +144,41 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
     setFreezeStart('');
     setFreezeEnd('');
     setFreezeReason('');
-    setSuccessMsg(isAr ? 'تم تقديم طلب فريز العضوية بنجاح، وسوف تراجعة الإدارة.' : 'Freeze request submitted successfully.');
+    setSuccessMsg(isAr ? 'تم تقديم طلب فريز العضوية بنجاح، وسوف تراجعه الإدارة.' : 'Freeze request submitted successfully.');
     setTimeout(() => setSuccessMsg(''), 3000);
     setActiveTab('manage');
   };
 
-  const handleAdminDecision = (status: 'Approved' | 'Rejected') => {
+  const handleCreateCommitteeChange = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!committeeChangeReason.trim()) return;
+
+    db.createCommitteeChangeRequest({
+      memberId: currentUser.id,
+      memberName: currentUser.fullName,
+      governorate: currentUser.governorate,
+      currentCommittee: currentUser.committee,
+      targetCommittee: targetCommittee,
+      currentDepartment: currentUser.department,
+      targetDepartment: targetDepartment,
+      reason: committeeChangeReason,
+    }, currentUser);
+
+    setCommitteeChangeReason('');
+    setSuccessMsg(isAr ? 'تم إرسال طلب تغيير اللجنة بنجاح! تم إشعار القادة والإدارة لمراجعة طلبك.' : 'Committee change request submitted to Leaders and Admins.');
+    setTimeout(() => setSuccessMsg(''), 4000);
+    setActiveTab('manage');
+  };
+
+  const handleAdminDecision = async (status: 'Approved' | 'Rejected') => {
     if (!selectedRequest) return;
 
-    if (selectedRequest.type === 'excuse') {
-      db.updateExcuseStatus(selectedRequest.item.id, status, adminNote, currentUser);
+    if (selectedRequest.type === 'committee') {
+      await db.updateCommitteeChangeRequestStatus(selectedRequest.item.id, status, adminNote, currentUser);
+    } else if (selectedRequest.type === 'excuse') {
+      await db.updateExcuseStatus(selectedRequest.item.id, status, adminNote, currentUser);
     } else {
-      db.updateFreezeStatus(selectedRequest.item.id, status, adminNote, currentUser);
+      await db.updateFreezeStatus(selectedRequest.item.id, status, adminNote, currentUser);
     }
 
     setSelectedRequest(null);
@@ -124,36 +186,47 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
     loadData();
   };
 
-  const allUsers = db.getUsers();
-
   const visibleExcuses = excuses.filter(exc => {
-    if (['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM'].includes(currentUser.role)) {
-      return true;
-    }
+    if (isHRResponsible) return true;
     if (currentUser.role === 'Leader') {
-      const author = allUsers.find(u => u.id === exc.memberId);
-      const isMember = !author || author.role === 'Member';
-      return isMember && exc.committee === currentUser.committee;
+      const excComm = (exc.committee || '').trim().toLowerCase();
+      const userComm = (currentUser.committee || '').trim().toLowerCase();
+      if (excComm === userComm || excComm === 'all' || userComm === 'all') return true;
+      if ((userComm === 'hr' || userComm === 'hrm') && (excComm === 'hr' || excComm === 'hrm')) return true;
+      return false;
     }
     return exc.memberId === currentUser.id;
   });
 
   const visibleFreezes = freezes.filter(frz => {
-    if (['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM'].includes(currentUser.role)) {
-      return true;
-    }
+    if (isHRResponsible) return true;
     if (currentUser.role === 'Leader') {
-      const author = allUsers.find(u => u.id === frz.memberId);
-      const isMember = !author || author.role === 'Member';
-      return isMember && frz.committee === currentUser.committee;
+      const frzComm = (frz.committee || '').trim().toLowerCase();
+      const userComm = (currentUser.committee || '').trim().toLowerCase();
+      if (frzComm === userComm || frzComm === 'all' || userComm === 'all') return true;
+      if ((userComm === 'hr' || userComm === 'hrm') && (frzComm === 'hr' || frzComm === 'hrm')) return true;
+      return false;
     }
     return frz.memberId === currentUser.id;
+  });
+
+  const visibleCommitteeChanges = committeeChanges.filter(c => {
+    if (isHRResponsible) return true;
+    if (currentUser.role === 'Leader') {
+      const curComm = (c.currentCommittee || '').trim().toLowerCase();
+      const targetComm = (c.targetCommittee || '').trim().toLowerCase();
+      const userComm = (currentUser.committee || '').trim().toLowerCase();
+      if (curComm === userComm || targetComm === userComm || userComm === 'all') return true;
+      if ((userComm === 'hr' || userComm === 'hrm') && (curComm === 'hr' || targetComm === 'hr')) return true;
+      return false;
+    }
+    return c.memberId === currentUser.id;
   });
 
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'Approved':
-        return <span className="px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 text-[10px] font-bold flex items-center gap-1 w-fit"><CheckCircle2 className="w-3 h-3" /> {isAr ? 'مقبول' : 'Approved'}</span>;
+        return <span className="px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 text-[10px] font-bold flex items-center gap-1 w-fit"><CheckCircle2 className="w-3 h-3" /> {isAr ? 'مقبول ومُعتمد' : 'Approved'}</span>;
       case 'Rejected':
         return <span className="px-2.5 py-1 rounded-full bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 text-[10px] font-bold flex items-center gap-1 w-fit"><XCircle className="w-3 h-3" /> {isAr ? 'مرفوض' : 'Rejected'}</span>;
       default:
@@ -161,26 +234,38 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
     }
   };
 
+  const pendingCount =
+    visibleExcuses.filter(e => e.status === 'Pending').length +
+    visibleFreezes.filter(f => f.status === 'Pending').length +
+    visibleCommitteeChanges.filter(c => c.status === 'Pending').length;
+
   return (
     <div className="space-y-6 p-4 sm:p-6" dir={isRtl ? 'rtl' : 'ltr'}>
-      {/* Header Banner */}
       <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-xl relative overflow-hidden">
         <div className="absolute top-0 right-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
         <div className="relative z-10 space-y-2">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30 text-blue-200 text-xs font-black">
             <Snowflake className="w-3.5 h-3.5" />
-            <span>{isAr ? 'منظومة الأعذار وتجميد العضوية' : 'Excuses & Membership Freeze System'}</span>
+            <span>{isAr ? 'منظومة الأعذار والطلبات وتجميد العضوية' : 'Excuses, Requests & Freeze System'}</span>
           </div>
-          <h1 className="text-xl sm:text-3xl font-black">{isAr ? 'تقديم عذر أو طلب فريز (تجميد نشاط)' : 'Excuses & Freeze Requests'}</h1>
+          <h1 className="text-xl sm:text-3xl font-black">{isAr ? 'تقديم الأعذار وطلبات نقل اللجان وتجميد النشاط' : 'Excuses & Requests Hub'}</h1>
           <p className="text-xs sm:text-sm text-slate-300 max-w-2xl font-semibold">
             {isAr 
-              ? 'يمكنك تقديم عذر رسمي عن عدم حضور اجتماع أو تأخر تسليم مهمة، أو تقديم طلب فريز لتجميد نشاطك مؤقتاً لظروف صحية أو دراسية.' 
-              : 'Submit official excuses for meetings or tasks, or request a temporary membership freeze due to exams or personal events.'}
+              ? 'يمكنك تقديم عذر رسمي عن عدم حضور اجتماع، أو طلب فريز لتجميد نشاطك مؤقتاً، أو تقديم طلب رسمي لتغيير ونقل لجنتك إلى لجنة أخرى بموافقة القادة والإدارة.' 
+              : 'Submit official excuses for meetings, request membership freezes, or request a committee transfer with Leader and Admin approval.'}
           </p>
         </div>
       </div>
 
-      {/* Tabs */}
+      {successMsg && (
+        <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs font-bold flex items-center justify-between animate-fade-in shadow-sm">
+          <span>{successMsg}</span>
+          <button onClick={() => setSuccessMsg('')} className="p-1 hover:bg-emerald-100 dark:hover:bg-emerald-900 rounded-lg">
+            <CheckCircle2 className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
         <button
           onClick={() => setActiveTab('excuses')}
@@ -207,6 +292,18 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
         </button>
 
         <button
+          onClick={() => setActiveTab('committee-change')}
+          className={`px-4 py-2.5 rounded-2xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
+            activeTab === 'committee-change'
+              ? 'bg-emerald-600 text-white shadow-md'
+              : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
+          }`}
+        >
+          <ArrowRightLeft className="w-4 h-4 text-emerald-400" />
+          <span>{isAr ? '🔄 طلب تغيير لجنة' : 'Change Committee'}</span>
+        </button>
+
+        <button
           onClick={() => setActiveTab('manage')}
           className={`px-4 py-2.5 rounded-2xl font-bold text-xs flex items-center gap-2 transition-all cursor-pointer ${
             activeTab === 'manage'
@@ -217,7 +314,7 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
           <Clock className="w-4 h-4" />
           <span>
             {isAdminOrLeader
-              ? (isAr ? `إدارة ومراجعة الطلبات (${visibleExcuses.filter(e=>e.status==='Pending').length + visibleFreezes.filter(f=>f.status==='Pending').length})` : 'Manage Requests')
+              ? (isAr ? `إدارة ومراجعة الطلبات (${pendingCount})` : `Manage Requests (${pendingCount})`)
               : (isAr ? 'طلباتي السابقة' : 'My Requests')}
           </span>
         </button>
@@ -231,63 +328,47 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
                 : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
             }`}
           >
-            <Clock className="w-4 h-4 text-purple-400" />
-            <span>{isAr ? 'سجل تحركات وأنشطة الكيان 📜' : 'Activity Audit Logs 📜'}</span>
-          </button>
-        )}
-
-        {isSuperAdminOrVice && activeTab === 'manage' && (visibleExcuses.length > 0 || visibleFreezes.length > 0) && (
-          <button
-            onClick={handleClearAllSampleRequests}
-            className="ms-auto px-3 py-2 rounded-2xl bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 text-xs font-bold hover:bg-red-100 transition-colors cursor-pointer flex items-center gap-1.5"
-          >
-            <span>🗑️ {isAr ? 'مسح أرشيف الطلبات' : 'Clear All Requests'}</span>
+            <span>📜 {isAr ? 'سجل الأنشطة والتحركات اللحظي' : 'Audit Logs'}</span>
           </button>
         )}
       </div>
 
-      {successMsg && (
-        <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-bold flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500" />
-          <span>{successMsg}</span>
-        </div>
-      )}
-
-      {/* TAB 1: SUBMIT EXCUSE */}
       {activeTab === 'excuses' && (
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 space-y-6 shadow-sm">
           <h2 className="text-base font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-2">
             <FileText className="w-5 h-5 text-blue-500" />
-            <span>{isAr ? 'نموذج تقديم عذر عن اجتماع أو مهمة' : 'Official Excuse Submission Form'}</span>
+            <span>{isAr ? 'نموذج تقديم عذر رسمي جديد' : 'Submit Official Excuse'}</span>
           </h2>
 
           <form onSubmit={handleCreateExcuse} className="space-y-4 max-w-xl">
-            <div>
-              <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
-                {isAr ? 'نوع العذر' : 'Excuse Type'}
-              </label>
-              <select
-                value={excuseType}
-                onChange={e => setExcuseType(e.target.value as ExcuseType)}
-                className="w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 p-3 text-xs font-bold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 outline-none"
-              >
-                <option value="Meeting">{isAr ? 'عذر عن عدم حضور اجتماع' : 'Meeting Absence'}</option>
-                <option value="Task">{isAr ? 'عذر عن تأخير أو عدم تسليم مهمة' : 'Task Delay/Absence'}</option>
-                <option value="General">{isAr ? 'عذر عام عن نشاط الكيان' : 'General Activity Excuse'}</option>
-              </select>
-            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
+                  {isAr ? 'نوع العذر' : 'Excuse Type'}
+                </label>
+                <select
+                  value={excuseType}
+                  onChange={e => setExcuseType(e.target.value as ExcuseType)}
+                  className="w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 p-3 text-xs font-bold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                >
+                  <option value="Meeting">{isAr ? 'عذر عن اجتماع' : 'Meeting'}</option>
+                  <option value="Task">{isAr ? 'عذر عن تأخر تسليم مهمة' : 'Task'}</option>
+                  <option value="General">{isAr ? 'عذر عام / ظرف طارئ' : 'General'}</option>
+                </select>
+              </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
-                {isAr ? 'عنوان الاجتماع أو المهمة المعنية' : 'Target Meeting or Task Name'}
-              </label>
-              <input
-                type="text"
-                value={excuseTarget}
-                onChange={e => setExcuseTarget(e.target.value)}
-                placeholder={isAr ? 'مثال: اجتماع لجنة الموارد أو مهمة التصميم' : 'e.g. Weekly HR Meeting'}
-                className="w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 p-3 text-xs font-bold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 outline-none"
-              />
+              <div>
+                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
+                  {isAr ? 'اسم الفاعلية / التكليف (اختياري)' : 'Target Item (Optional)'}
+                </label>
+                <input
+                  type="text"
+                  value={excuseTarget}
+                  onChange={e => setExcuseTarget(e.target.value)}
+                  placeholder={isAr ? 'مثال: اجتماع الجمعة، تكليف الإيفنت...' : 'Meeting / Task title...'}
+                  className="w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 p-3 text-xs font-bold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
             </div>
 
             <div>
@@ -327,7 +408,6 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
         </div>
       )}
 
-      {/* TAB 2: SUBMIT FREEZE */}
       {activeTab === 'freeze' && (
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 space-y-6 shadow-sm">
           <h2 className="text-base font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-2">
@@ -393,10 +473,164 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
         </div>
       )}
 
-      {/* TAB 3: MANAGE / LIST REQUESTS */}
+      {activeTab === 'committee-change' && (
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 space-y-6 shadow-sm">
+          <h2 className="text-base font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+            <ArrowRightLeft className="w-5 h-5 text-emerald-500" />
+            <span>{isAr ? 'نموذج طلب نقل / تغيير اللجنة الرسمية' : 'Committee Transfer Request Form'}</span>
+          </h2>
+
+          <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs space-y-1">
+            <p className="font-bold">{isAr ? '📌 شروط وإجراءات نقل اللجنة:' : '📌 Committee Transfer Guidelines:'}</p>
+            <p>
+              {isAr 
+                ? 'عند تقديم طلب نقل لجنة، يتم إرسال إشعار رسمي وفوري للقادة والإدارة العليا لمراجعة طلبك. عند موافقة القادة سيتم تحديث لجنتك تلقائياً في النظام وإشعارك بالقرار.' 
+                : 'Your request will be forwarded to Committee Leaders and Executive Admins for review. Upon approval, your committee will be updated immediately.'}
+            </p>
+            <div className="pt-2 text-[11px] font-mono">
+              <strong>{isAr ? 'لجنتك الحالية:' : 'Current Committee:'}</strong> {currentUser.committee} {currentUser.department && currentUser.department !== 'None' ? `(${currentUser.department})` : ''}
+            </div>
+          </div>
+
+          <form onSubmit={handleCreateCommitteeChange} className="space-y-4 max-w-xl">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
+                  {isAr ? 'اللجنة المراد الانتقال إليها' : 'Target Committee'}
+                </label>
+                <select
+                  value={targetCommittee}
+                  onChange={e => {
+                    setTargetCommittee(e.target.value);
+                    const depts = COMMITTEE_DEPTS_MAP[e.target.value] || [];
+                    setTargetDepartment(depts[0] || 'None');
+                  }}
+                  className="w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 p-3 text-xs font-bold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500 outline-none"
+                >
+                  {COMMITTEES_LIST.map(comm => (
+                    <option key={comm} value={comm}>
+                      {comm === 'HR' ? (isAr ? 'الموارد البشرية (HR)' : 'Human Resources (HR)')
+                        : comm === 'PR' ? (isAr ? 'العلاقات العامة (PR)' : 'Public Relations (PR)')
+                        : comm === 'SM' ? (isAr ? 'السوشيال ميديا (SM)' : 'Social Media (SM)')
+                        : (isAr ? 'العلاقات التنظيمية واللوجستية (OR)' : 'Organization & Logistics (OR)')}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
+                  {isAr ? 'القسم المطلوب (اختياري)' : 'Target Department (Optional)'}
+                </label>
+                <select
+                  value={targetDepartment}
+                  onChange={e => setTargetDepartment(e.target.value)}
+                  className="w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 p-3 text-xs font-bold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500 outline-none"
+                >
+                  <option value="None">{isAr ? 'بدون تخصيص محدد / غير محدد' : 'General / None'}</option>
+                  {(COMMITTEE_DEPTS_MAP[targetCommittee] || []).map(dept => (
+                    <option key={dept} value={dept}>{dept}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
+                {isAr ? 'سبب طلب نقل اللجنة بالتفصيل' : 'Reason for Transfer'}
+              </label>
+              <textarea
+                rows={4}
+                value={committeeChangeReason}
+                onChange={e => setCommitteeChangeReason(e.target.value)}
+                placeholder={isAr ? 'يرجى توضيح أسباب رغبتك في النقل وخبراتك أو مهاراتك في اللجنة الجديدة...' : 'State your transfer reasons and relevant skills...'}
+                required
+                className="w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 p-3 text-xs font-bold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500 outline-none resize-none"
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="px-6 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-2 shadow-lg shadow-emerald-500/20 transition-all cursor-pointer"
+            >
+              <ArrowRightLeft className="w-4 h-4" />
+              <span>{isAr ? 'إرسال طلب نقل اللجنة للقادة والإدارة' : 'Submit Transfer Request'}</span>
+            </button>
+          </form>
+        </div>
+      )}
+
       {activeTab === 'manage' && (
         <div className="space-y-6">
-          {/* Excuse Requests Table/List */}
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 space-y-4 shadow-sm">
+            <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100 flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <ArrowRightLeft className="w-4 h-4 text-emerald-500" />
+                {isAr ? 'طلبات تغيير ونقل اللجان' : 'Committee Transfer Requests'}
+              </span>
+              <span className="text-xs text-slate-400 font-mono font-bold">
+                {visibleCommitteeChanges.length}
+              </span>
+            </h3>
+
+            {visibleCommitteeChanges.length === 0 ? (
+              <p className="text-xs text-slate-400 text-center py-6">{isAr ? 'لا توجد طلبات تغيير لجان حالياً.' : 'No committee transfer requests found.'}</p>
+            ) : (
+              <div className="space-y-3">
+                {visibleCommitteeChanges.map((commReq) => (
+                  <div
+                    key={commReq.id}
+                    className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                  >
+                    <div className="space-y-1.5 text-start">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-[9px] font-bold">
+                          {isAr ? 'طلب نقل لجنة' : 'Transfer'}
+                        </span>
+                        <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                          {commReq.memberName}
+                        </h4>
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          {new Date(commReq.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs font-black text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 w-fit">
+                        <span className="text-amber-600 dark:text-amber-400">{commReq.currentCommittee}</span>
+                        <ArrowRightLeft className="w-3.5 h-3.5 text-slate-400" />
+                        <span className="text-emerald-600 dark:text-emerald-400">{commReq.targetCommittee} {commReq.targetDepartment && commReq.targetDepartment !== 'None' ? `(${commReq.targetDepartment})` : ''}</span>
+                      </div>
+                      <p className="text-xs text-slate-600 dark:text-slate-300">{commReq.reason}</p>
+                      {commReq.adminResponse && (
+                        <p className="text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 p-2 rounded-xl border border-amber-200 dark:border-amber-800/40 mt-1">
+                          💬 <strong>{isAr ? 'رد الإدارة:' : 'Admin Note:'}</strong> {commReq.adminResponse}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex sm:flex-col items-center sm:items-end justify-between gap-2 shrink-0">
+                      {getStatusBadge(commReq.status)}
+
+                      {commReq.status === 'Pending' && (
+                        canApproveRequest(commReq.memberId) ? (
+                          <button
+                            onClick={() => setSelectedRequest({ type: 'committee', item: commReq })}
+                            className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] shadow-sm cursor-pointer"
+                          >
+                            {isAr ? 'مراجعة وقبول / رفض' : 'Review'}
+                          </button>
+                        ) : (
+                          <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-lg border border-amber-200 dark:border-amber-800">
+                            🔒 {isAr ? 'يتطلب موافقة القادة أو الإدارة' : 'Leader / Admin Approval Required'}
+                          </span>
+                        )
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 space-y-4 shadow-sm">
             <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100 flex items-center justify-between">
               <span className="flex items-center gap-2">
@@ -462,12 +696,11 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
             )}
           </div>
 
-          {/* Freeze Requests Table/List */}
           <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 space-y-4 shadow-sm">
             <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100 flex items-center justify-between">
               <span className="flex items-center gap-2">
                 <Snowflake className="w-4 h-4 text-cyan-500" />
-                {isAr ? 'طلبات فريز العضوية (تجميد النشاط)' : 'Membership Freeze Requests'}
+                {isAr ? 'طلبات الفريز وتجميد النشاط' : 'Freeze Requests'}
               </span>
               <span className="text-xs text-slate-400 font-mono font-bold">
                 {visibleFreezes.length}
@@ -485,8 +718,8 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
                   >
                     <div className="space-y-1.5 text-start">
                       <div className="flex items-center gap-2">
-                        <span className="px-2 py-0.5 rounded-md bg-cyan-100 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 text-[9px] font-bold flex items-center gap-1">
-                          <Snowflake className="w-3 h-3" /> {isAr ? 'فريز' : 'Freeze'}
+                        <span className="px-2 py-0.5 rounded-md bg-cyan-100 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 text-[9px] font-bold">
+                          {isAr ? 'تجميد نشاط' : 'Freeze'}
                         </span>
                         <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">
                           {frz.memberName} ({frz.committee})
@@ -529,7 +762,6 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
         </div>
       )}
 
-      {/* TAB 4: ACTIVITY AUDIT LOGS */}
       {activeTab === 'activity' && (
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 space-y-5 shadow-sm">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
@@ -599,7 +831,7 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
 
             <div className="bg-slate-50 dark:bg-slate-850 p-3 rounded-2xl text-xs space-y-1">
               <p className="font-bold text-slate-800 dark:text-slate-200">
-                {selectedRequest.item.memberName} — {selectedRequest.item.committee}
+                {selectedRequest.item.memberName} {selectedRequest.type === 'committee' ? `(طلب نقل: من ${selectedRequest.item.currentCommittee} إلى ${selectedRequest.item.targetCommittee})` : `— ${selectedRequest.item.committee}`}
               </p>
               <p className="text-slate-600 dark:text-slate-400">{selectedRequest.item.reason}</p>
             </div>

@@ -41,6 +41,7 @@ export const FeedbackSystem: React.FC<FeedbackSystemProps> = ({ currentUser, ini
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
   const [committeeFilter, setCommitteeFilter] = useState('all');
+  const [subCommitteeFilter, setSubCommitteeFilter] = useState('all');
   const [roleFilter, setRoleFilter] = useState<'all' | 'leaders' | 'members' | 'executive'>('all');
 
   // Rating Modal State
@@ -78,17 +79,24 @@ export const FeedbackSystem: React.FC<FeedbackSystemProps> = ({ currentUser, ini
     return () => unsub();
   }, []);
 
-  // Filter members list — Excludes Vice, Coordinators, and Super Admin from evaluation targets
+  // Filter members list — Excludes Leadership (Super Admin, Head, Vice, Coordinator, Deputy Coordinator, HRM, Central) from evaluation targets
   const filteredUsers = useMemo(() => {
     return allUsersList.filter(u => {
-      // Exclude Executive Officers (Vice, Coordinator, Deputy Coordinator, Super Admin) from being rating targets
-      const isTargetable = u.role === 'Leader' || u.role === 'Member';
+      // Exclude Executive Leadership from being rating targets (Leadership has no evaluations)
+      const isTargetable = (u.role === 'Member' || u.role === 'Leader') && !['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM', 'Central'].includes(u.role);
       if (!isTargetable) return false;
 
       const matchesSearch = u.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
                             u.membershipCode.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesCommittee = committeeFilter === 'all' || u.committee === committeeFilter;
+      const isHrm = committeeFilter === 'HR' || committeeFilter === 'HRM';
+      const matchesCommittee = committeeFilter === 'all' || u.committee === committeeFilter || (isHrm && (u.committee === 'HR' || u.committee === 'HRM'));
       
+      let matchesSub = true;
+      if (isHrm && subCommitteeFilter !== 'all') {
+        const sub = subCommitteeFilter.toLowerCase();
+        matchesSub = (u.department || '').toLowerCase().includes(sub) || ((u as any).subCommittee || '').toLowerCase().includes(sub);
+      }
+
       let matchesRole = true;
       if (roleFilter === 'leaders') {
         matchesRole = u.role === 'Leader';
@@ -96,20 +104,24 @@ export const FeedbackSystem: React.FC<FeedbackSystemProps> = ({ currentUser, ini
         matchesRole = u.role === 'Member';
       }
 
-      return matchesSearch && matchesCommittee && matchesRole;
+      return matchesSearch && matchesCommittee && matchesSub && matchesRole;
     });
-  }, [allUsersList, searchQuery, committeeFilter, roleFilter]);
+  }, [allUsersList, searchQuery, committeeFilter, subCommitteeFilter, roleFilter]);
 
-  // Permission logic: SuperAdmin/Vice can rate Leaders & Members; Leaders can rate Members
+  // Permission logic: Leadership & Leaders can rate regular members
   const canUserRateTarget = (evaluator: UserProfile, target: UserProfile): boolean => {
     if (evaluator.id === target.id) return false;
 
-    const isExecOrVice = ['Super Admin', 'Coordinator', 'Deputy Coordinator', 'Vice'].includes(evaluator.role);
+    // Leadership roles are not evaluated
+    const isLeadershipTarget = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM', 'Central'].includes(target.role);
+    if (isLeadershipTarget) return false;
+
+    const isExecOrVice = ['Super Admin', 'Head', 'Coordinator', 'Deputy Coordinator', 'Vice', 'HRM', 'Central'].includes(evaluator.role);
     const isLeader = evaluator.role === 'Leader';
     const targetIsLeader = target.role === 'Leader';
     const targetIsMember = target.role === 'Member';
 
-    if (isExecOrVice && (targetIsLeader || targetIsMember)) return true; // Super Admin & Vice can rate Leaders and Members
+    if (isExecOrVice && (targetIsLeader || targetIsMember)) return true; // Leadership can rate Leaders and Members
     if (isLeader && targetIsMember) return true; // Leaders can rate regular Members
     return false;
   };
@@ -267,8 +279,8 @@ export const FeedbackSystem: React.FC<FeedbackSystemProps> = ({ currentUser, ini
     fullBodyText += `═════════════════════════════════════════════════════\n`;
     fullBodyText += `              • الاعتماد والتوقيعات الرسمية •\n`;
     fullBodyText += `═════════════════════════════════════════════════════\n\n`;
-    fullBodyText += `مسؤول لجنة الموارد البشرية\n`;
-    fullBodyText += `   أ. أحمد إبراهيم\n`;
+    fullBodyText += `مسؤول لجنة الموارد البشرية         نائب رئيس لجنة الموارد البشرية\n`;
+    fullBodyText += `   أ. أحمد إبراهيم                 أ. ريهام أشرف\n`;
 
     const reportTitle = isLeaderboard 
       ? `تقرير لوحة الصدارة والتميز - ${selectedCommText}` 
@@ -277,7 +289,8 @@ export const FeedbackSystem: React.FC<FeedbackSystemProps> = ({ currentUser, ini
     fillAndDownloadDocxTemplate('bg_report', {
       reportTitle,
       reportBody: fullBodyText,
-      hrManager: 'أحمد إبراهيم'
+      hrManager: 'أحمد إبراهيم',
+      deputy: 'ريهام أشرف'
     });
   };
 
@@ -375,7 +388,8 @@ export const FeedbackSystem: React.FC<FeedbackSystemProps> = ({ currentUser, ini
       docNumber: `EYE-EVAL-${Date.now().toString().slice(-6)}`,
       bodyHtml: reportHtml,
       signatures: [
-        { title: 'مسؤول لجنة الموارد البشرية', name: 'أحمد إبراهيم' }
+        { title: 'مسؤول لجنة الموارد البشرية', name: 'أحمد إبراهيم' },
+        { title: 'نائب رئيس لجنة الموارد البشرية', name: 'ريهام أشرف' }
       ]
     });
   };
@@ -709,22 +723,38 @@ export const FeedbackSystem: React.FC<FeedbackSystemProps> = ({ currentUser, ini
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:flex items-center gap-2 w-full md:w-auto shrink-0">
-          {['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader'].includes(currentUser.role) && (
+          {['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader'].includes(currentUser.role) && (
             <>
               {/* Committee Selector Dropdown */}
               <div className="flex items-center justify-between gap-1.5 bg-white/10 p-1.5 rounded-2xl border border-white/20">
                 <span className="text-[10px] text-purple-200 font-bold px-1">{isAr ? 'اللجنة:' : 'Committee:'}</span>
                 <select
                   value={committeeFilter}
-                  onChange={e => setCommitteeFilter(e.target.value)}
+                  onChange={e => {
+                    setCommitteeFilter(e.target.value);
+                    setSubCommitteeFilter('all');
+                  }}
                   className="bg-slate-900/90 text-white text-xs font-bold px-2.5 py-1 rounded-xl border border-purple-400/40 focus:outline-none cursor-pointer"
                 >
                   <option value="all">{isAr ? 'جميع اللجان' : 'All Committees'}</option>
-                  <option value="HR">لجنة HR</option>
+                  <option value="HR">{isAr ? 'الموارد البشرية (HRM)' : 'HRM Committee'}</option>
                   <option value="PR">لجنة PR</option>
                   <option value="SM">لجنة SM</option>
                   <option value="OR">لجنة OR</option>
                 </select>
+
+                {(committeeFilter === 'HR' || committeeFilter === 'HRM') && (
+                  <select
+                    value={subCommitteeFilter}
+                    onChange={e => setSubCommitteeFilter(e.target.value)}
+                    className="bg-amber-500/30 text-white text-xs font-bold px-2.5 py-1 rounded-xl border border-amber-400/50 focus:outline-none cursor-pointer animate-fadeIn"
+                  >
+                    <option value="all">{isAr ? '🏢 كل فروع HRM' : 'All HRM'}</option>
+                    <option value="HR OF PR">HR OF PR</option>
+                    <option value="HR OF SM">HR OF SM</option>
+                    <option value="HR OF OR">HR OF OR</option>
+                  </select>
+                )}
               </div>
 
               {/* Dedicated 365 Evaluation Export Buttons (PDF & Word) */}
@@ -800,15 +830,31 @@ export const FeedbackSystem: React.FC<FeedbackSystemProps> = ({ currentUser, ini
         <div className="grid grid-cols-1 sm:grid-cols-2 md:flex md:flex-wrap gap-2 w-full md:w-auto min-w-0">
           <select
             value={committeeFilter}
-            onChange={(e) => setCommitteeFilter(e.target.value)}
+            onChange={(e) => {
+              setCommitteeFilter(e.target.value);
+              setSubCommitteeFilter('all');
+            }}
             className="w-full sm:w-auto max-w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-3 py-2.5 text-xs text-slate-800 dark:text-white font-bold truncate min-w-0 focus:outline-none focus:border-purple-500"
           >
             <option value="all">{isAr ? 'جميع اللجان' : 'All Committees'}</option>
-            <option value="HR">لجنة HR</option>
+            <option value="HR">{isAr ? 'الموارد البشرية (HRM)' : 'HRM Committee'}</option>
             <option value="PR">لجنة PR</option>
             <option value="SM">لجنة SM</option>
             <option value="OR">لجنة OR</option>
           </select>
+
+          {(committeeFilter === 'HR' || committeeFilter === 'HRM') && (
+            <select
+              value={subCommitteeFilter}
+              onChange={(e) => setSubCommitteeFilter(e.target.value)}
+              className="w-full sm:w-auto max-w-full bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-2xl px-3 py-2.5 text-xs text-amber-900 dark:text-amber-200 font-bold truncate min-w-0 focus:outline-none focus:border-purple-500 animate-fadeIn"
+            >
+              <option value="all">{isAr ? '🏢 كل فروع HRM' : 'All HRM'}</option>
+              <option value="HR OF PR">HR OF PR</option>
+              <option value="HR OF SM">HR OF SM</option>
+              <option value="HR OF OR">HR OF OR</option>
+            </select>
+          )}
 
           <select
             value={roleFilter}

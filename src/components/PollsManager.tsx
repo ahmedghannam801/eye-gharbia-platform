@@ -135,8 +135,8 @@ const PollCard: React.FC<{
 export const PollsManager: React.FC<PollsManagerProps> = ({ currentUser }) => {
   const { language } = useLanguage();
   const ar = language === 'ar';
-  const canCreate = ['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader'].includes(currentUser.role);
-  const canManage = ['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator'].includes(currentUser.role);
+  const canCreate = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader'].includes(currentUser.role);
+  const canManage = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator'].includes(currentUser.role);
 
   const [tab, setTab] = useState<'polls' | 'create'>('polls');
   const [question, setQuestion] = useState('');

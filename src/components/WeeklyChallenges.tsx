@@ -24,7 +24,7 @@ interface WeeklyChallengesProps {
 export const WeeklyChallenges: React.FC<WeeklyChallengesProps> = ({ currentUser }) => {
   const { isRtl, language } = useLanguage();
   const isAr = language === 'ar';
-  const isAdminOrLeader = ['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader'].includes(currentUser.role);
+  const isAdminOrLeader = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader'].includes(currentUser.role);
 
   const [challenges, setChallenges] = useState<WeeklyChallenge[]>([]);
   const [streak, setStreak] = useState<UserStreak | null>(null);

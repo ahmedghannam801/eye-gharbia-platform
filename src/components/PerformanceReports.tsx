@@ -265,15 +265,29 @@ const ReportCard: React.FC<{ report: CommitteeReport; ar: boolean }> = ({ report
 export const PerformanceReports: React.FC<PerformanceReportsProps> = ({ currentUser }) => {
   const { language } = useLanguage();
   const ar = language === 'ar';
-  const canGenerate = ['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator'].includes(currentUser.role);
+  const canGenerate = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator'].includes(currentUser.role);
   const [selectedCommittee, setSelectedCommittee] = useState('HR');
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   const [generating, setGenerating] = useState(false);
   const [success, setSuccess] = useState('');
   const [filterCommittee, setFilterCommittee] = useState('all');
+  const [filterSubCommittee, setFilterSubCommittee] = useState('all');
 
   const reports = db.getReports();
-  const filteredReports = filterCommittee === 'all' ? reports : reports.filter(r => r.committee === filterCommittee);
+  const isHrmFilter = filterCommittee === 'HR' || filterCommittee === 'HRM';
+  const filteredReports = reports.filter(r => {
+    if (filterCommittee !== 'all') {
+      const matchComm = r.committee === filterCommittee || (isHrmFilter && (r.committee === 'HR' || r.committee === 'HRM'));
+      if (!matchComm) return false;
+    }
+    if (isHrmFilter && filterSubCommittee !== 'all') {
+      const sub = filterSubCommittee.toLowerCase();
+      const matchSub = (r.committee || '').toLowerCase().includes(sub) ||
+                       (r.linkedWorkPlans || []).some(wp => ((wp as any).department || '').toLowerCase().includes(sub) || (wp.title || '').toLowerCase().includes(sub));
+      if (!matchSub) return false;
+    }
+    return true;
+  });
 
   const handleGenerate = async () => {
     setGenerating(true);
@@ -313,7 +327,7 @@ export const PerformanceReports: React.FC<PerformanceReportsProps> = ({ currentU
               <label className="text-[10px] font-black text-slate-500 uppercase">{ar ? 'اللجنة' : 'Committee'}</label>
               <select value={selectedCommittee} onChange={e => setSelectedCommittee(e.target.value)}
                 className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-emerald-500 font-bold">
-                {COMMITTEES.map(c => <option key={c} value={c}>{c}</option>)}
+                {COMMITTEES.map(c => <option key={c} value={c}>{c === 'HR' ? (ar ? 'الموارد البشرية (HRM)' : 'HRM') : c}</option>)}
               </select>
             </div>
             <div className="space-y-1">
@@ -331,17 +345,43 @@ export const PerformanceReports: React.FC<PerformanceReportsProps> = ({ currentU
       )}
 
       {/* Filter */}
-      <div className="flex flex-wrap gap-2">
-        <button onClick={() => setFilterCommittee('all')}
-          className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${filterCommittee === 'all' ? 'bg-eye-brand text-white border-eye-brand' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'}`}>
-          {ar ? 'الكل' : 'All'} ({reports.length})
-        </button>
-        {COMMITTEES.map(c => (
-          <button key={c} onClick={() => setFilterCommittee(c)}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${filterCommittee === c ? 'bg-eye-brand text-white border-eye-brand' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'}`}>
-            {c} ({reports.filter(r => r.committee === c).length})
+      <div className="space-y-2">
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => {
+            setFilterCommittee('all');
+            setFilterSubCommittee('all');
+          }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${filterCommittee === 'all' ? 'bg-eye-brand text-white border-eye-brand' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'}`}>
+            {ar ? 'الكل' : 'All'} ({reports.length})
           </button>
-        ))}
+          {COMMITTEES.map(c => (
+            <button key={c} onClick={() => {
+              setFilterCommittee(c);
+              setFilterSubCommittee('all');
+            }}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${filterCommittee === c ? 'bg-eye-brand text-white border-eye-brand' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'}`}>
+              {c === 'HR' ? (ar ? 'الموارد البشرية (HRM)' : 'HRM') : c} ({reports.filter(r => r.committee === c).length})
+            </button>
+          ))}
+        </div>
+
+        {/* HRM Sub-Committees filter row */}
+        {(filterCommittee === 'HR' || filterCommittee === 'HRM') && (
+          <div className="flex flex-wrap items-center gap-2 p-2 bg-amber-500/10 dark:bg-amber-950/30 rounded-2xl border border-amber-300/40 dark:border-amber-700/40 animate-fadeIn">
+            <span className="text-[11px] font-black text-amber-700 dark:text-amber-300 px-1">
+              {ar ? 'فروع HRM:' : 'HRM Branches:'}
+            </span>
+            {['all', 'HR OF PR', 'HR OF SM', 'HR OF OR'].map(sub => (
+              <button
+                key={sub}
+                onClick={() => setFilterSubCommittee(sub)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer shadow-sm ${filterSubCommittee === sub ? 'bg-amber-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-amber-100 dark:hover:bg-slate-700'}`}
+              >
+                {sub === 'all' ? (ar ? 'كل الفروع' : 'All Branches') : sub}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Reports Grid */}

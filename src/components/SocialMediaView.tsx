@@ -105,7 +105,7 @@ export const SocialMediaView: React.FC = () => {
   return (
     <div className="space-y-8 p-6 text-slate-800 animate-fade-in" id="social-media-viewport" dir={isRtl ? 'rtl' : 'ltr'}>
       {/* Title Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-blue-50 to-blue-100/40 dark:from-slate-900/60 dark:to-slate-850/40 p-6 rounded-3xl border border-blue-150/40 dark:border-slate-800 shadow-sm overflow-hidden relative">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-slate-50 to-blue-50/30 dark:from-slate-900/60 dark:to-blue-950/20 p-6 rounded-3xl border border-blue-150/40 dark:border-slate-800 shadow-sm overflow-hidden relative">
         <div className="space-y-1 flex-1">
           <div className="flex items-center gap-2 text-eye-brand dark:text-eye-brand-light font-bold text-xs uppercase tracking-widest">
             <Sparkles className="w-4 h-4" />

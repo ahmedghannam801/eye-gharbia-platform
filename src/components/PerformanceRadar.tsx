@@ -14,7 +14,7 @@ const avg = (nums: number[]) => nums.length ? +(nums.reduce((a, b) => a + b, 0) 
 export const PerformanceRadar: React.FC<PerformanceRadarProps> = ({ currentUser }) => {
   const { language, isRtl } = useLanguage();
   const isAr = language === 'ar';
-  const isLeaderOrAdmin = ['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader', 'HRM'].includes(currentUser.role) || (currentUser.committee === 'HR' || !!currentUser.department?.includes('HR OF ') || !!(currentUser as any).subCommittee?.includes('HR OF '));
+  const isLeaderOrAdmin = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader', 'HRM'].includes(currentUser.role) || (currentUser.committee === 'HR' || !!currentUser.department?.includes('HR OF ') || !!(currentUser as any).subCommittee?.includes('HR OF '));
 
   const [members, setMembers] = useState<UserProfile[]>([]);
   const [memberSearchQuery, setMemberSearchQuery] = useState('');
@@ -255,7 +255,7 @@ export const PerformanceRadar: React.FC<PerformanceRadarProps> = ({ currentUser 
   return (
     <div className="p-6 space-y-6 animate-page-enter" dir={isRtl ? 'rtl' : 'ltr'}>
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-blue-50 to-indigo-50/40 dark:from-slate-900 dark:to-slate-850 p-6 rounded-3xl border border-blue-200/40 dark:border-slate-800 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-slate-50 to-blue-50/30 dark:from-slate-900 dark:to-blue-950/20 p-6 rounded-3xl border border-blue-200/40 dark:border-slate-800 shadow-sm">
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-bold text-xs uppercase tracking-widest">
             <BarChart3 className="w-4 h-4" />

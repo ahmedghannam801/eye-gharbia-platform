@@ -47,8 +47,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const hasLiveBroadcast = db.getLiveWorkshops(currentUser.committee).some(w => w.status === 'Live');
 
   const ALL_ROLES = ['Member', 'Leader', 'Super Admin', 'HRM', 'Vice', 'Coordinator', 'Deputy Coordinator'];
-  const ADMIN_PLUS = ['Leader', 'Super Admin', 'HRM', 'Vice', 'Coordinator', 'Deputy Coordinator'];
-  const TOP_ROLES = ['Super Admin', 'HRM', 'Vice', 'Coordinator', 'Deputy Coordinator'];
+  const ADMIN_PLUS = ['Leader', 'Super Admin', 'Head', 'Vice', 'HRM', 'Coordinator', 'Deputy Coordinator'];
+  const TOP_ROLES = ['Super Admin', 'Head', 'Vice', 'HRM', 'Coordinator', 'Deputy Coordinator'];
 
   // ── NAV grouped into sections ──
   const navGroups: {
@@ -63,7 +63,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'tasks',         label: language === 'ar' ? 'المهام الإدارية' : t('tasks'),         icon: FolderKanban,  roles: ALL_ROLES },
         { id: 'announcements', label: language === 'ar' ? 'الإعلانات والتعاميم' : t('announcements'), icon: Megaphone,     roles: ALL_ROLES, badge: unreadCount },
         { id: 'meetings',      label: language === 'ar' ? 'الاجتماعات' : 'Meetings',      icon: CalendarDays, roles: ALL_ROLES },
-        { id: 'excuses-freeze', label: language === 'ar' ? 'الأعذار وطلب الفريز' : 'Excuses & Freeze', icon: Clock, roles: ALL_ROLES },
+        { id: 'excuses-freeze', label: language === 'ar' ? 'الأعذار والطلبات' : 'Excuses & Requests', icon: Clock, roles: ALL_ROLES },
       ],
     },
     {
@@ -102,7 +102,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       items: [
         { id: 'rules',   label: language === 'ar' ? 'اللوائح والقوانين والإرشادات' : 'Rules & Bylaws', icon: BookOpen,  roles: ALL_ROLES },
         { id: 'social',  label: language === 'ar' ? 'السوشيال ميديا' : 'Social Media',                         icon: Share2,    roles: ALL_ROLES },
-        { id: 'settings', label: t('settings'),                                                                 icon: Settings,  roles: ['Super Admin'] },
+        { id: 'settings', label: t('settings'),                                                                 icon: Settings,  roles: ['Super Admin', 'Head', 'Vice', 'HRM'] },
       ],
     },
   ];
@@ -186,7 +186,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   />
                 </div>
                 <div className="absolute -bottom-1 -start-1 p-0.5 rounded-md bg-amber-500 text-slate-950 shadow-sm pointer-events-none border border-slate-900">
-                  {['Super Admin', 'Vice', 'Coordinator'].includes(currentUser.role) ? <Crown className="w-2.5 h-2.5" /> :
+                  {['Super Admin', 'Head', 'Vice', 'Coordinator'].includes(currentUser.role) ? <Crown className="w-2.5 h-2.5" /> :
                    currentUser.role === 'Leader' ? <Award className="w-2.5 h-2.5" /> :
                    <User className="w-2.5 h-2.5" />}
                 </div>
@@ -239,7 +239,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             const role = currentUser?.role || 'Member';
             const visibleItems = group.items.filter(item => 
               item.roles.includes(role) || 
-              role === 'Super Admin' ||
+              ['Super Admin', 'Head', 'Vice'].includes(role) ||
               (role === 'HRM' && item.roles.includes('Leader'))
             );
             if (visibleItems.length === 0) return null;

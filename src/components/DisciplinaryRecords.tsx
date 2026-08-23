@@ -14,7 +14,7 @@ interface DisciplinaryRecordsProps {
 export const DisciplinaryRecords: React.FC<DisciplinaryRecordsProps> = ({ currentUser, selectedRecordId }) => {
   const { language, isRtl, translateCommittee } = useLanguage();
   const isAr = language === 'ar';
-  const canManage = ['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader'].includes(currentUser.role);
+  const canManage = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader'].includes(currentUser.role);
 
   const [records, setRecords] = useState<DisciplinaryRecord[]>(() => db.getDisciplinaryRecords(currentUser));
   const [showIssueModal, setShowIssueModal] = useState(false);

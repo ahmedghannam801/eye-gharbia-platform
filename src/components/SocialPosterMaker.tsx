@@ -52,6 +52,7 @@ export const SocialPosterMaker: React.FC<SocialPosterMakerProps> = ({ currentUse
 
   // Filters for multi-select list
   const [committeeFilter, setCommitteeFilter] = useState<string>('all');
+  const [subCommitteeFilter, setSubCommitteeFilter] = useState<string>('all');
   const [roleFilter, setRoleFilter] = useState<'all' | 'leaders' | 'members'>('all');
 
   // Poster Customization State
@@ -87,9 +88,18 @@ export const SocialPosterMaker: React.FC<SocialPosterMakerProps> = ({ currentUse
   };
 
   // Filtered users for multi-select list
+  const isHrm = committeeFilter === 'HR' || committeeFilter === 'HRM';
   const filteredUsers = allUsers.filter(u => {
-    if (committeeFilter !== 'all' && u.committee !== committeeFilter) return false;
-    if (roleFilter === 'leaders' && !['Leader', 'Vice', 'Super Admin', 'Coordinator'].includes(u.role)) return false;
+    if (committeeFilter !== 'all') {
+      const matchComm = u.committee === committeeFilter || (isHrm && (u.committee === 'HR' || u.committee === 'HRM'));
+      if (!matchComm) return false;
+    }
+    if (isHrm && subCommitteeFilter !== 'all') {
+      const sub = subCommitteeFilter.toLowerCase();
+      const matchSub = (u.department || '').toLowerCase().includes(sub) || ((u as any).subCommittee || '').toLowerCase().includes(sub);
+      if (!matchSub) return false;
+    }
+    if (roleFilter === 'leaders' && !['Leader', 'Head', 'Vice', 'Super Admin', 'Coordinator'].includes(u.role)) return false;
     if (roleFilter === 'members' && u.role !== 'Member') return false;
     return true;
   });
@@ -696,16 +706,35 @@ export const SocialPosterMaker: React.FC<SocialPosterMakerProps> = ({ currentUse
                   <label className="text-[10px] font-bold text-slate-500 block mb-1">{isAr ? 'تصفية باللجنة:' : 'Filter Committee:'}</label>
                   <select
                     value={committeeFilter}
-                    onChange={e => setCommitteeFilter(e.target.value)}
+                    onChange={e => {
+                      setCommitteeFilter(e.target.value);
+                      setSubCommitteeFilter('all');
+                    }}
                     className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2 text-xs font-bold text-slate-900 dark:text-white"
                   >
                     <option value="all">{isAr ? 'جميع اللجان' : 'All Committees'}</option>
-                    <option value="HR">لجنة HR</option>
+                    <option value="HR">{isAr ? 'الموارد البشرية (HRM)' : 'HRM Committee'}</option>
                     <option value="PR">لجنة PR</option>
                     <option value="SM">لجنة SM</option>
                     <option value="OR">لجنة OR</option>
                   </select>
                 </div>
+
+                {(committeeFilter === 'HR' || committeeFilter === 'HRM') && (
+                  <div className="col-span-2 animate-fadeIn">
+                    <label className="text-[10px] font-bold text-amber-600 dark:text-amber-400 block mb-1">{isAr ? 'فرع HRM المستهدف:' : 'HRM Branch:'}</label>
+                    <select
+                      value={subCommitteeFilter}
+                      onChange={e => setSubCommitteeFilter(e.target.value)}
+                      className="w-full bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-xl p-2 text-xs font-bold text-amber-900 dark:text-amber-200"
+                    >
+                      <option value="all">{isAr ? '🏢 كل فروع HRM' : 'All HRM Branches'}</option>
+                      <option value="HR OF PR">HR OF PR</option>
+                      <option value="HR OF SM">HR OF SM</option>
+                      <option value="HR OF OR">HR OF OR</option>
+                    </select>
+                  </div>
+                )}
 
                 <div>
                   <label className="text-[10px] font-bold text-slate-500 block mb-1">{isAr ? 'تصفية بالدور:' : 'Filter Role:'}</label>

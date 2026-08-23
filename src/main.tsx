@@ -4,6 +4,13 @@ import App from './App.tsx';
 import './index.css';
 import { LanguageProvider } from './lib/LanguageContext.tsx';
 import { ThemeProvider } from './lib/ThemeContext.tsx';
+import { initSecureLogger } from './lib/secureLogger';
+import { initDevToolsGuard } from './lib/devtoolsGuard';
+
+// 🔒 Security: Suppress console output + block DevTools in production
+initSecureLogger();
+initDevToolsGuard();
+
 
 // Google Translate / Translation extensions crash fix
 if (typeof window !== 'undefined') {

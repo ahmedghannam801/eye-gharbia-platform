@@ -14,7 +14,7 @@ interface MeetingsProps {
   onNavigateToView?: (view: string, targetId?: string) => void;
 }
 
-const isLeaderOrAdmin = (u: UserProfile) => ['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader'].includes(u.role);
+const isLeaderOrAdmin = (u: UserProfile) => ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader'].includes(u.role);
 
 export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavigateToView }) => {
   const { language, isRtl } = useLanguage();
@@ -28,6 +28,7 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
   const [checkingMtgId, setCheckingMtgId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [showImporter, setShowImporter] = useState(false);
+  const [mobileCheckInMtg, setMobileCheckInMtg] = useState<Meeting | null>(null);
 
   // Create form state
   const [formTitle, setFormTitle] = useState('');
@@ -126,7 +127,7 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
     <div className="p-6 space-y-6 animate-fade-in" dir={isRtl ? 'rtl' : 'ltr'} id="meetings-view">
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-blue-50 to-indigo-50/40 dark:from-slate-900 dark:to-slate-850 p-6 rounded-3xl border border-blue-200/40 dark:border-slate-800 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-slate-50 to-blue-50/30 dark:from-slate-900 dark:to-blue-950/30 p-6 rounded-3xl border border-blue-200/40 dark:border-slate-800 shadow-sm">
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-bold text-xs uppercase tracking-widest">
             <CalendarDays className="w-4 h-4" />
@@ -228,7 +229,16 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
-                    {iCheckedIn && <span className="text-[9px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-black">✓ {isAr ? 'حضرت' : 'Attended'}</span>}
+                    {iCheckedIn && <span className="text-[9px] bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800/60 px-2.5 py-0.5 rounded-full font-black">✓ {isAr ? 'حضرت' : 'Attended'}</span>}
+                    {!iCheckedIn && currentUser.role === 'Member' && mtg.status === 'Open' && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setMobileCheckInMtg(mtg); setCheckInCode(''); setCheckInResult(null); setCheckingMtgId(null); }}
+                        className="text-[9px] bg-blue-600 text-white px-2.5 py-1 rounded-full font-black animate-pulse flex items-center gap-1 shrink-0"
+                      >
+                        <QrCode className="w-2.5 h-2.5" />
+                        {isAr ? 'سجّل حضورك' : 'Check-in'}
+                      </button>
+                    )}
                     {isLeaderOrAdmin(currentUser) && (
                       <button
                         onClick={(e) => { e.stopPropagation(); handleDeleteMeeting(mtg.id); }}
@@ -240,6 +250,7 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
                     )}
                     {isExpanded ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
                   </div>
+
                 </div>
 
                 {/* Expanded panel */}
@@ -270,33 +281,37 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
 
                     {/* Check-in section (Members only, meeting is Open) */}
                     {!iCheckedIn && currentUser.role === 'Member' && mtg.status === 'Open' && (
-                      <div className="bg-blue-50 dark:bg-blue-950/20 rounded-2xl p-4 border border-blue-200/40">
-                        <p className="text-xs font-bold text-blue-700 dark:text-blue-400 mb-3 flex items-center gap-1.5">
-                          <QrCode className="w-3.5 h-3.5" />
+                      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 rounded-2xl p-5 border border-blue-200/60 dark:border-blue-800/60 shadow-sm">
+                        <p className="text-sm font-bold text-blue-700 dark:text-blue-400 mb-4 flex items-center gap-2">
+                          <QrCode className="w-4 h-4" />
                           {isAr ? 'سجّل حضورك بالكود السري' : 'Check-in with secret code'}
                         </p>
-                        <div className="flex gap-2">
+                        <div className="flex flex-col gap-3">
                           <input
                             value={checkInCode}
                             onChange={e => setCheckInCode(e.target.value.toUpperCase())}
-                            placeholder={isAr ? 'أدخل الكود...' : 'Enter code...'}
+                            placeholder={isAr ? 'اكتب الكود هنا...' : 'Enter code here...'}
                             maxLength={6}
-                            className="flex-1 bg-white dark:bg-slate-900 border border-blue-200 rounded-xl px-3 py-2 text-sm font-black text-center tracking-widest focus:outline-none focus:border-eye-brand font-mono uppercase"
+                            autoCapitalize="characters"
+                            autoComplete="off"
+                            inputMode="text"
+                            className="w-full bg-white dark:bg-slate-900 border-2 border-blue-300 dark:border-blue-700 rounded-2xl px-4 py-4 text-2xl font-black text-center tracking-[0.4em] focus:outline-none focus:border-blue-500 dark:focus:border-blue-400 font-mono uppercase shadow-inner transition-colors"
                             id={`checkin-code-${mtg.id}`}
                           />
                           <button
                             onClick={() => { setCheckingMtgId(mtg.id); handleCheckIn(mtg.id); }}
-                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all"
+                            className="w-full py-4 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-2xl text-base font-black transition-all shadow-lg shadow-blue-500/30 flex items-center justify-center gap-2"
                           >
-                            {isAr ? 'تسجيل' : 'Check-in'}
+                            <CheckCircle2 className="w-5 h-5" />
+                            {isAr ? 'تسجيل الحضور ✅' : 'Submit Check-in ✅'}
                           </button>
                         </div>
                         {checkInResult && checkingMtgId === mtg.id && (
-                          <div className={`mt-2 flex items-center gap-2 text-xs font-bold ${checkInResult === 'ok' ? 'text-emerald-600' : 'text-red-500'}`}>
-                            {checkInResult === 'ok' && <><CheckCircle2 className="w-3.5 h-3.5" />{isAr ? 'تم تسجيل حضورك بنجاح! ✅' : 'Checked in successfully! ✅'}</>}
-                            {checkInResult === 'wrong_code' && <><XCircle className="w-3.5 h-3.5" />{isAr ? 'الكود غير صحيح' : 'Wrong code'}</>}
-                            {checkInResult === 'already' && <><AlertCircle className="w-3.5 h-3.5" />{isAr ? 'سبق تسجيل حضورك' : 'Already checked in'}</>}
-                            {checkInResult === 'closed' && <><Lock className="w-3.5 h-3.5" />{isAr ? 'الاجتماع مغلق' : 'Meeting is closed'}</>}
+                          <div className={`mt-3 flex items-center justify-center gap-2 text-sm font-bold py-3 rounded-xl ${checkInResult === 'ok' ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30' : 'text-red-500 bg-red-50 dark:bg-red-950/30'}`}>
+                            {checkInResult === 'ok' && <><CheckCircle2 className="w-4 h-4" />{isAr ? 'تم تسجيل حضورك بنجاح! ✅' : 'Checked in successfully! ✅'}</>}
+                            {checkInResult === 'wrong_code' && <><XCircle className="w-4 h-4" />{isAr ? 'الكود غير صحيح، حاول مجدداً' : 'Wrong code, try again'}</>}
+                            {checkInResult === 'already' && <><AlertCircle className="w-4 h-4" />{isAr ? 'سبق تسجيل حضورك في هذا الاجتماع' : 'Already checked in'}</>}
+                            {checkInResult === 'closed' && <><Lock className="w-4 h-4" />{isAr ? 'الاجتماع مغلق' : 'Meeting is closed'}</>}
                           </div>
                         )}
                       </div>
@@ -406,10 +421,28 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
                 </select>
                 <select value={formCommittee} onChange={e => setFormCommittee(e.target.value)}
                   className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold focus:outline-none focus:border-eye-brand">
-                  <option value="All">{isAr ? 'الكل' : 'All'}</option>
-                  {['HR','PR','SM','OR'].map(c => <option key={c} value={c}>{c}</option>)}
+                  <option value="All">{isAr ? 'كل اللجان' : 'All Committees'}</option>
+                  {['HR','PR','SM','OR'].map(c => <option key={c} value={c}>{c === 'HR' ? (isAr ? 'الموارد البشرية (HRM)' : 'HRM') : c}</option>)}
                 </select>
               </div>
+
+              {(formCommittee === 'HR' || formCommittee === 'HRM') && (
+                <div className="space-y-1 animate-fadeIn">
+                  <label className="text-[10px] font-bold text-amber-700 dark:text-amber-300 block">
+                    {isAr ? 'فرع HRM المستهدف:' : 'Target HRM Branch:'}
+                  </label>
+                  <select
+                    value={formDept}
+                    onChange={e => setFormDept(e.target.value)}
+                    className="w-full bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-xl px-3 py-2 text-xs font-bold text-amber-900 dark:text-amber-200 focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="All">{isAr ? 'جميع فروع إدارة HRM' : 'All HRM Branches'}</option>
+                    <option value="HR OF PR">HR OF PR (العلاقات العامة)</option>
+                    <option value="HR OF SM">HR OF SM (السوشيال ميديا)</option>
+                    <option value="HR OF OR">HR OF OR (التنظيم)</option>
+                  </select>
+                </div>
+              )}
               <input required value={formDate} onChange={e => setFormDate(e.target.value)} type="datetime-local"
                 className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-semibold focus:outline-none focus:border-eye-brand" />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -456,6 +489,101 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
           onClose={() => { setShowImporter(false); load(); }}
         />
       )}
+
+      {/* ===== FULL-SCREEN MOBILE CHECK-IN MODAL ===== */}
+      {mobileCheckInMtg && (
+        <div
+          className="fixed inset-0 z-50 flex flex-col bg-gradient-to-b from-blue-900 via-blue-800 to-indigo-900"
+          dir={isRtl ? 'rtl' : 'ltr'}
+        >
+          {/* Top bar */}
+          <div className="flex items-center justify-between px-5 pt-safe pt-6 pb-4 border-b border-white/10">
+            <button
+              onClick={() => { setMobileCheckInMtg(null); setCheckInCode(''); setCheckInResult(null); setCheckingMtgId(null); }}
+              className="flex items-center gap-1.5 text-white/70 hover:text-white text-sm font-bold"
+            >
+              <XCircle className="w-5 h-5" />
+              {isAr ? 'إغلاق' : 'Close'}
+            </button>
+            <div className="flex items-center gap-2 text-white/80 text-xs font-bold">
+              <QrCode className="w-4 h-4" />
+              {isAr ? 'تسجيل الحضور' : 'Check-in'}
+            </div>
+            <div className="w-16" />
+          </div>
+
+          {/* Body */}
+          <div className="flex-1 flex flex-col items-center justify-center px-6 gap-6">
+            {/* Meeting name */}
+            <div className="text-center space-y-2">
+              <div className="w-16 h-16 rounded-3xl bg-white/10 flex items-center justify-center mx-auto mb-2">
+                <CalendarDays className="w-8 h-8 text-white" />
+              </div>
+              <p className="text-white/60 text-xs font-bold uppercase tracking-widest">
+                {isAr ? 'اجتماع' : 'Meeting'}
+              </p>
+              <h2 className="text-white text-xl font-black leading-snug text-center px-2">
+                {mobileCheckInMtg.title}
+              </h2>
+            </div>
+
+            {/* Code input */}
+            <div className="w-full max-w-sm space-y-3">
+              <p className="text-white/70 text-xs font-bold text-center">
+                {isAr ? 'أدخل الكود السري الذي شاركه معك المسؤول' : 'Enter the secret code shared by your leader'}
+              </p>
+              <input
+                value={checkInCode}
+                onChange={e => setCheckInCode(e.target.value.toUpperCase())}
+                placeholder="● ● ● ● ● ●"
+                maxLength={6}
+                autoFocus
+                autoCapitalize="characters"
+                autoComplete="off"
+                inputMode="text"
+                className="w-full bg-white/10 border-2 border-white/30 focus:border-white rounded-3xl px-6 py-6 text-4xl font-black text-center tracking-[0.5em] text-white placeholder:text-white/20 focus:outline-none font-mono uppercase transition-colors"
+                id="mobile-checkin-code-input"
+              />
+            </div>
+
+            {/* Result feedback */}
+            {checkInResult && checkingMtgId === mobileCheckInMtg.id && (
+              <div className={`w-full max-w-sm flex items-center justify-center gap-3 py-4 px-5 rounded-2xl text-base font-bold ${
+                checkInResult === 'ok'
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/30'
+                  : 'bg-red-500/20 text-red-300 border border-red-400/30'
+              }`}>
+                {checkInResult === 'ok' && <><CheckCircle2 className="w-6 h-6 shrink-0" />{isAr ? 'تم تسجيل حضورك بنجاح! 🎉' : 'Checked in successfully! 🎉'}</>}
+                {checkInResult === 'wrong_code' && <><XCircle className="w-6 h-6 shrink-0" />{isAr ? 'الكود غير صحيح، حاول مجدداً' : 'Wrong code, try again'}</>}
+                {checkInResult === 'already' && <><AlertCircle className="w-6 h-6 shrink-0" />{isAr ? 'سبق تسجيل حضورك في هذا الاجتماع ✅' : 'Already checked in ✅'}</>}
+                {checkInResult === 'closed' && <><Lock className="w-6 h-6 shrink-0" />{isAr ? 'تسجيل الحضور مغلق الآن' : 'Check-in is closed'}</>}
+              </div>
+            )}
+
+            {/* Submit button */}
+            <button
+              onClick={() => {
+                setCheckingMtgId(mobileCheckInMtg.id);
+                const result = db.checkIn(mobileCheckInMtg.id, checkInCode, currentUser);
+                setCheckInResult(result);
+                if (result === 'ok') {
+                  setCheckInCode('');
+                  setTimeout(() => { setMobileCheckInMtg(null); setCheckInResult(null); setCheckingMtgId(null); }, 1800);
+                }
+              }}
+              disabled={checkInCode.length < 1}
+              className="w-full max-w-sm py-5 bg-white hover:bg-white/90 disabled:bg-white/20 text-blue-900 disabled:text-white/40 rounded-3xl text-xl font-black transition-all active:scale-95 shadow-2xl shadow-black/30 flex items-center justify-center gap-3"
+            >
+              <CheckCircle2 className="w-6 h-6" />
+              {isAr ? 'تسجيل الحضور' : 'Check In'}
+            </button>
+          </div>
+
+          {/* Bottom safe area spacer */}
+          <div className="h-8" />
+        </div>
+      )}
     </div>
   );
 };
+

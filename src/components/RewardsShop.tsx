@@ -1,23 +1,71 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Component, ErrorInfo, ReactNode } from 'react';
 import { db } from '../db/localDb';
 import { RewardItem, RewardPurchase, UserProfile } from '../types';
 import { useLanguage } from '../lib/LanguageContext';
-import { Gift, Coins, Check, CheckCircle2, Clock, ShieldAlert, Award } from 'lucide-react';
+import { Gift, Coins, CheckCircle2, Clock, ShieldAlert, AlertTriangle, RefreshCw } from 'lucide-react';
 
 interface RewardsShopProps {
   currentUser: UserProfile;
 }
 
-export const RewardsShop: React.FC<RewardsShopProps> = ({ currentUser }) => {
+// Inner Error Boundary for Rewards Shop
+class RewardsErrorBoundary extends Component<{ children: ReactNode; isAr: boolean; onRetry: () => void }, { hasError: boolean; errorText: string }> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false, errorText: '' };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, errorText: error?.message || 'Unknown error' };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('[RewardsErrorBoundary] Error caught:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-3xl border border-red-200 dark:border-red-950/60 shadow-lg space-y-4 my-6">
+          <div className="w-16 h-16 bg-red-100 dark:bg-red-950/40 text-red-600 rounded-2xl flex items-center justify-center mx-auto">
+            <AlertTriangle className="w-8 h-8" />
+          </div>
+          <h2 className="text-lg font-black text-slate-900 dark:text-white">
+            {this.props.isAr ? 'حدث خطأ أثناء تحميل متجر المكافآت' : 'Failed to load Rewards Store'}
+          </h2>
+          <p className="text-xs text-slate-500 max-w-md mx-auto">
+            {this.state.errorText}
+          </p>
+          <button
+            onClick={() => {
+              this.setState({ hasError: false, errorText: '' });
+              this.props.onRetry();
+            }}
+            className="px-6 py-2.5 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-700 text-white text-xs font-black rounded-xl shadow-md transition-all inline-flex items-center gap-2 cursor-pointer"
+          >
+            <RefreshCw className="w-4 h-4" />
+            <span>{this.props.isAr ? 'إعادة المحاولة' : 'Try Again'}</span>
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+const RewardsShopInner: React.FC<RewardsShopProps> = ({ currentUser }) => {
   const { language, isRtl } = useLanguage();
   const isAr = language === 'ar';
-  const isAdminOrLeader = ['Super Admin', 'Leader', 'Vice', 'Coordinator', 'Deputy Coordinator'].includes(currentUser.role);
+  const isAdminOrLeader = ['Super Admin', 'Head', 'Leader', 'Vice', 'Coordinator', 'Deputy Coordinator'].includes(currentUser?.role || '');
 
   const [rewards, setRewards] = useState<RewardItem[]>([]);
   const [purchases, setPurchases] = useState<RewardPurchase[]>([]);
   const [userPoints, setUserPoints] = useState(0);
   const [activeTab, setActiveTab] = useState<'shop' | 'purchases'>('shop');
   const [purchaseResult, setPurchaseResult] = useState<'ok' | 'no_points' | 'no_stock' | null>(null);
+
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Create Reward state
   const [showCreate, setShowCreate] = useState(false);
@@ -41,64 +89,136 @@ export const RewardsShop: React.FC<RewardsShopProps> = ({ currentUser }) => {
   const [rejectReason, setRejectReason] = useState('');
 
   const calculateUserPoints = () => {
-    const bd = db.getMemberPointsBreakdown(currentUser.id);
-    setPointsBreakdown(bd);
-    setUserPoints(bd.availablePoints);
+    try {
+      if (!currentUser?.id) return;
+      const bd = db.getMemberPointsBreakdown(currentUser.id);
+      if (bd) {
+        setPointsBreakdown(bd);
+        setUserPoints(bd.availablePoints || 0);
+      }
+    } catch (err: any) {
+      console.warn('[RewardsShop] Points calculation fallback error:', err);
+    }
   };
 
   const load = () => {
-    setRewards(db.getRewards());
-    setPurchases(db.getPurchases());
-    calculateUserPoints();
+    try {
+      setLoadError(null);
+      const r = db.getRewards() || [];
+      const p = db.getPurchases() || [];
+      setRewards(r);
+      setPurchases(p);
+      calculateUserPoints();
+    } catch (err: any) {
+      console.error('[RewardsShop] Load error:', err);
+      setLoadError(err?.message || 'Failed to load rewards data');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
     load();
-    const unsub = db.onChange(load);
+    const unsub = db.onChange(() => {
+      load();
+    });
     return () => unsub();
-  }, [currentUser.id]);
+  }, [currentUser?.id]);
 
   const handlePurchase = (rewardId: string) => {
-    const res = db.purchaseReward(rewardId, currentUser);
-    setPurchaseResult(res);
-    setTimeout(() => setPurchaseResult(null), 4000);
-    load();
+    try {
+      const res = db.purchaseReward(rewardId, currentUser);
+      setPurchaseResult(res);
+      setTimeout(() => setPurchaseResult(null), 4000);
+      load();
+    } catch (err) {
+      console.error('[RewardsShop] Purchase failed:', err);
+      setPurchaseResult('no_points');
+      setTimeout(() => setPurchaseResult(null), 4000);
+    }
   };
 
   const handleApprove = (purchaseId: string) => {
-    db.approvePurchase(purchaseId, currentUser);
-    load();
+    try {
+      db.approvePurchase(purchaseId, currentUser);
+      load();
+    } catch (err) {
+      console.error('[RewardsShop] Approve failed:', err);
+    }
   };
 
   const handleReject = (e: React.FormEvent) => {
     e.preventDefault();
     if (!rejectingPurchaseId) return;
-    db.rejectPurchase(rejectingPurchaseId, rejectReason, currentUser);
-    setRejectingPurchaseId(null);
-    setRejectReason('');
-    load();
+    try {
+      db.rejectPurchase(rejectingPurchaseId, rejectReason, currentUser);
+      setRejectingPurchaseId(null);
+      setRejectReason('');
+      load();
+    } catch (err) {
+      console.error('[RewardsShop] Reject failed:', err);
+    }
   };
 
   const handleCreateReward = (e: React.FormEvent) => {
     e.preventDefault();
-    db.createRewardItem(newTitle, newDesc, newPoints, newStock, currentUser);
-    setShowCreate(false);
-    setNewTitle('');
-    setNewDesc('');
-    setNewPoints(100);
-    setNewStock(5);
-    load();
+    try {
+      db.createRewardItem(newTitle, newDesc, newPoints, newStock, currentUser);
+      setShowCreate(false);
+      setNewTitle('');
+      setNewDesc('');
+      setNewPoints(100);
+      setNewStock(5);
+      load();
+    } catch (err) {
+      console.error('[RewardsShop] Create reward failed:', err);
+    }
   };
 
   // Filter purchases: members only see their own, leaders/admins see all
-  const visiblePurchases = isAdminOrLeader
-    ? purchases
-    : purchases.filter(p => p.memberId === currentUser.id);
+  const visiblePurchases = (purchases || []).filter(p => {
+    if (!p) return false;
+    return isAdminOrLeader ? true : p.memberId === currentUser?.id;
+  });
+
+  if (isLoading) {
+    return (
+      <div className="p-12 flex flex-col items-center justify-center space-y-4 text-center">
+        <div className="w-12 h-12 border-4 border-pink-500/30 border-t-pink-600 rounded-full animate-spin"></div>
+        <p className="text-sm font-bold text-slate-600 dark:text-slate-400">
+          {isAr ? 'جاري تحميل المتجر والرصيد...' : 'Loading rewards and points...'}
+        </p>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-3xl border border-red-200 dark:border-red-950/60 shadow-lg space-y-4 my-6">
+        <div className="w-16 h-16 bg-red-100 dark:bg-red-950/40 text-red-600 rounded-2xl flex items-center justify-center mx-auto">
+          <AlertTriangle className="w-8 h-8" />
+        </div>
+        <h2 className="text-lg font-black text-slate-900 dark:text-white">
+          {isAr ? 'تعذر تحميل المتجر' : 'Unable to load store'}
+        </h2>
+        <p className="text-xs text-slate-500 max-w-md mx-auto">
+          {loadError}
+        </p>
+        <button
+          onClick={load}
+          className="px-6 py-2.5 bg-pink-600 hover:bg-pink-700 text-white text-xs font-black rounded-xl shadow-md transition-all inline-flex items-center gap-2 cursor-pointer"
+        >
+          <RefreshCw className="w-4 h-4" />
+          <span>{isAr ? 'إعادة المحاولة' : 'Try Again'}</span>
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 sm:p-6 space-y-6 animate-fade-in" dir={isRtl ? 'rtl' : 'ltr'}>
       {/* Header Banner */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-gradient-to-r from-pink-50 via-rose-50 to-amber-50/40 dark:from-slate-900 dark:via-slate-850 dark:to-slate-900 p-6 sm:p-8 rounded-3xl border border-pink-200/50 dark:border-slate-800 shadow-md">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-gradient-to-r from-slate-50 via-pink-50/30 to-amber-50/20 dark:from-slate-900 dark:via-pink-950/20 dark:to-slate-900 p-6 sm:p-8 rounded-3xl border border-pink-200/50 dark:border-slate-800 shadow-md">
         <div className="space-y-2">
           <div className="flex items-center gap-2 text-pink-600 dark:text-pink-400 font-bold text-xs uppercase tracking-widest">
             <Gift className="w-4 h-4" />
@@ -143,7 +263,7 @@ export const RewardsShop: React.FC<RewardsShopProps> = ({ currentUser }) => {
             <span>📝</span>
             <span>{isAr ? 'تسليم المهام' : 'Tasks'}</span>
           </div>
-          <div className="text-lg font-black text-blue-600 font-mono">+{pointsBreakdown.earnedTasks}</div>
+          <div className="text-lg font-black text-blue-600 font-mono">+{pointsBreakdown?.earnedTasks || 0}</div>
         </div>
 
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3.5 shadow-sm space-y-1">
@@ -151,7 +271,7 @@ export const RewardsShop: React.FC<RewardsShopProps> = ({ currentUser }) => {
             <span>📅</span>
             <span>{isAr ? 'حضور اللقاءات' : 'Attendance'}</span>
           </div>
-          <div className="text-lg font-black text-emerald-600 font-mono">+{pointsBreakdown.earnedAttendance}</div>
+          <div className="text-lg font-black text-emerald-600 font-mono">+{pointsBreakdown?.earnedAttendance || 0}</div>
         </div>
 
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3.5 shadow-sm space-y-1">
@@ -159,7 +279,7 @@ export const RewardsShop: React.FC<RewardsShopProps> = ({ currentUser }) => {
             <span>⭐</span>
             <span>{isAr ? 'نقاط إضافية وتقييمات' : 'Bonus & Evals'}</span>
           </div>
-          <div className="text-lg font-black text-purple-600 font-mono">+{pointsBreakdown.bonusPoints + pointsBreakdown.triviaPoints + pointsBreakdown.ideasPoints}</div>
+          <div className="text-lg font-black text-purple-600 font-mono">+{(pointsBreakdown?.bonusPoints || 0) + (pointsBreakdown?.triviaPoints || 0) + (pointsBreakdown?.ideasPoints || 0)}</div>
         </div>
 
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3.5 shadow-sm space-y-1">
@@ -167,7 +287,7 @@ export const RewardsShop: React.FC<RewardsShopProps> = ({ currentUser }) => {
             <span>🛒</span>
             <span>{isAr ? 'المستبدل بالمتجر' : 'Spent in Shop'}</span>
           </div>
-          <div className="text-lg font-black text-rose-600 font-mono">-{pointsBreakdown.spentPurchases}</div>
+          <div className="text-lg font-black text-rose-600 font-mono">-{pointsBreakdown?.spentPurchases || 0}</div>
         </div>
 
         <div className="col-span-2 sm:col-span-4 lg:col-span-1 bg-gradient-to-br from-amber-500 to-orange-600 text-white rounded-2xl p-3.5 shadow-md space-y-1 flex flex-col justify-between">
@@ -175,7 +295,7 @@ export const RewardsShop: React.FC<RewardsShopProps> = ({ currentUser }) => {
             <span>🪙</span>
             <span>{isAr ? 'الصافي المتاح' : 'Net Available'}</span>
           </div>
-          <div className="text-xl font-black font-mono">{pointsBreakdown.availablePoints} pts</div>
+          <div className="text-xl font-black font-mono">{pointsBreakdown?.availablePoints || 0} pts</div>
         </div>
       </div>
 
@@ -203,9 +323,10 @@ export const RewardsShop: React.FC<RewardsShopProps> = ({ currentUser }) => {
 
       {activeTab === 'shop' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {rewards.map(reward => {
-            const canAfford = userPoints >= reward.costPoints;
-            const inStock = reward.stock > 0;
+          {(rewards || []).map(reward => {
+            if (!reward) return null;
+            const canAfford = userPoints >= (reward.costPoints || 0);
+            const inStock = (reward.stock || 0) > 0;
 
             return (
               <div key={reward.id} className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 space-y-4 shadow-sm flex flex-col justify-between hover:shadow-xl hover:border-pink-300 dark:hover:border-pink-900 transition-all">
@@ -214,8 +335,10 @@ export const RewardsShop: React.FC<RewardsShopProps> = ({ currentUser }) => {
                     <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-pink-100 to-rose-100 dark:from-pink-950/40 dark:to-rose-950/40 flex items-center justify-center text-2xl shrink-0 shadow-inner">
                       🎁
                     </div>
-                    <span className={`text-[10px] px-2.5 py-1 rounded-full font-black ${
-                      inStock ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300' : 'bg-red-100 text-red-700'
+                    <span className={`text-[10px] px-2.5 py-1 rounded-full font-black border ${
+                      inStock 
+                        ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800/60' 
+                        : 'bg-red-100 dark:bg-red-950/60 text-red-800 dark:text-red-300 border-red-300 dark:border-red-800/60'
                     }`}>
                       {inStock ? (isAr ? `متاح: ${reward.stock}` : `Stock: ${reward.stock}`) : (isAr ? 'نفذت الكمية' : 'Out of Stock')}
                     </span>
@@ -262,6 +385,12 @@ export const RewardsShop: React.FC<RewardsShopProps> = ({ currentUser }) => {
               </div>
             );
           })}
+          {(rewards || []).length === 0 && (
+            <div className="col-span-full p-16 text-center text-slate-400 text-xs flex flex-col items-center gap-2 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800">
+              <Gift className="w-10 h-10 text-pink-200 dark:text-pink-900" />
+              <p className="font-bold text-sm">{isAr ? 'لا توجد مكافآت معروضة حالياً.' : 'No rewards currently available.'}</p>
+            </div>
+          )}
         </div>
       ) : (
         /* Purchases Log */
@@ -272,76 +401,79 @@ export const RewardsShop: React.FC<RewardsShopProps> = ({ currentUser }) => {
             </span>
           </div>
           <div className="divide-y divide-slate-100 dark:divide-slate-800">
-            {visiblePurchases.map(p => (
-              <div key={p.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 sm:p-5 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                <div className="min-w-0 flex-1 space-y-1">
-                  <div className="flex items-center gap-2">
-                    <h4 className="text-sm font-black text-slate-800 dark:text-slate-200">{p.rewardTitle}</h4>
-                  </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold">
-                    {isAr ? 'العضو' : 'Member'}: <span className="font-bold text-slate-800 dark:text-slate-200">{p.memberName}</span> · {new Date(p.purchasedAt).toLocaleDateString('ar-EG')}
-                  </p>
-                  {(p as any).rejectionReason && (
-                    <p className="text-xs text-red-600 dark:text-red-400 font-bold">
-                      {isAr ? 'سبب الرفض' : 'Reason'}: {(p as any).rejectionReason}
+            {(visiblePurchases || []).map(p => {
+              if (!p) return null;
+              return (
+                <div key={p.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 sm:p-5 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-black text-slate-800 dark:text-slate-200">{p.rewardTitle}</h4>
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold">
+                      {isAr ? 'العضو' : 'Member'}: <span className="font-bold text-slate-800 dark:text-slate-200">{p.memberName}</span> · {p.purchasedAt ? new Date(p.purchasedAt).toLocaleDateString('ar-EG') : ''}
                     </p>
-                  )}
+                    {(p as any)?.rejectionReason && (
+                      <p className="text-xs text-red-600 dark:text-red-400 font-bold">
+                        {isAr ? 'سبب الرفض' : 'Reason'}: {(p as any).rejectionReason}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className="text-sm font-black text-amber-500 font-mono">-{p.costPoints} pts</span>
+                    {p.status === 'Approved' ? (
+                      <span className="text-xs bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 px-3 py-1 rounded-full font-black flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        {isAr ? 'معتمد ومستلم' : 'Approved'}
+                      </span>
+                    ) : (p.status as any) === 'Rejected' ? (
+                      <span className="text-xs bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-300 px-3 py-1 rounded-full font-black flex items-center gap-1">
+                        <ShieldAlert className="w-3.5 h-3.5" />
+                        {isAr ? 'مرفوض ومسترجع' : 'Rejected'}
+                      </span>
+                    ) : (
+                      <span className="text-xs bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 px-3 py-1 rounded-full font-black flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5" />
+                        {isAr ? 'قيد المراجعة' : 'Pending'}
+                      </span>
+                    )}
+
+                    {isAdminOrLeader && p.status === 'Pending' && (
+                      <button
+                        onClick={() => handleApprove(p.id)}
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
+                      >
+                        {isAr ? 'اعتماد' : 'Approve'}
+                      </button>
+                    )}
+                    {isAdminOrLeader && p.status === 'Pending' && (
+                      <button
+                        onClick={() => setRejectingPurchaseId(p.id)}
+                        className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
+                      >
+                        {isAr ? 'رفض واسترجاع' : 'Reject & Refund'}
+                      </button>
+                    )}
+                    {isAdminOrLeader && (
+                      <button
+                        onClick={() => {
+                          if (window.confirm(isAr ? 'هل تريد حذف هذا السجل نهائياً؟' : 'Delete this record?')) {
+                            db.deletePurchase(p.id, currentUser);
+                            load();
+                          }
+                        }}
+                        className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg transition-all text-xs cursor-pointer"
+                        title={isAr ? 'حذف السجل' : 'Delete Record'}
+                      >
+                        🗑️
+                      </button>
+                    )}
+                  </div>
                 </div>
+              );
+            })}
 
-                <div className="flex items-center gap-3 shrink-0">
-                  <span className="text-sm font-black text-amber-500 font-mono">-{p.costPoints} pts</span>
-                  {p.status === 'Approved' ? (
-                    <span className="text-xs bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 px-3 py-1 rounded-full font-black flex items-center gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      {isAr ? 'معتمد ومستلم' : 'Approved'}
-                    </span>
-                  ) : p.status === 'Rejected' ? (
-                    <span className="text-xs bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-300 px-3 py-1 rounded-full font-black flex items-center gap-1">
-                      <ShieldAlert className="w-3.5 h-3.5" />
-                      {isAr ? 'مرفوض ومسترجع' : 'Rejected'}
-                    </span>
-                  ) : (
-                    <span className="text-xs bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 px-3 py-1 rounded-full font-black flex items-center gap-1">
-                      <Clock className="w-3.5 h-3.5" />
-                      {isAr ? 'قيد المراجعة' : 'Pending'}
-                    </span>
-                  )}
-
-                  {isAdminOrLeader && p.status === 'Pending' && (
-                    <button
-                      onClick={() => handleApprove(p.id)}
-                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
-                    >
-                      {isAr ? 'اعتماد' : 'Approve'}
-                    </button>
-                  )}
-                  {isAdminOrLeader && p.status === 'Pending' && (
-                    <button
-                      onClick={() => setRejectingPurchaseId(p.id)}
-                      className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
-                    >
-                      {isAr ? 'رفض واسترجاع' : 'Reject & Refund'}
-                    </button>
-                  )}
-                  {isAdminOrLeader && (
-                    <button
-                      onClick={() => {
-                        if (window.confirm(isAr ? 'هل تريد حذف هذا السجل نهائياً؟' : 'Delete this record?')) {
-                          db.deletePurchase(p.id, currentUser);
-                          load();
-                        }
-                      }}
-                      className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg transition-all text-xs cursor-pointer"
-                      title={isAr ? 'حذف السجل' : 'Delete Record'}
-                    >
-                      🗑️
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-
-            {visiblePurchases.length === 0 && (
+            {(visiblePurchases || []).length === 0 && (
               <div className="p-16 text-center text-slate-400 text-xs flex flex-col items-center gap-2">
                 <Gift className="w-10 h-10 text-pink-200 dark:text-pink-900" />
                 <p className="font-bold text-sm">{isAr ? 'لا يوجد طلبات استبدال حتى الآن.' : 'No exchange history found.'}</p>
@@ -469,5 +601,15 @@ export const RewardsShop: React.FC<RewardsShopProps> = ({ currentUser }) => {
         </div>
       )}
     </div>
+  );
+};
+
+export const RewardsShop: React.FC<RewardsShopProps> = (props) => {
+  const { language } = useLanguage();
+  const isAr = language === 'ar';
+  return (
+    <RewardsErrorBoundary isAr={isAr} onRetry={() => {}}>
+      <RewardsShopInner {...props} />
+    </RewardsErrorBoundary>
   );
 };

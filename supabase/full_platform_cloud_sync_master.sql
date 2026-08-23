@@ -41,7 +41,9 @@ ALTER TABLE public.profiles
   ADD COLUMN IF NOT EXISTS avatar_url text,
   ADD COLUMN IF NOT EXISTS bio text,
   ADD COLUMN IF NOT EXISTS status text DEFAULT 'Active',
-  ADD COLUMN IF NOT EXISTS role text DEFAULT 'Member';
+  ADD COLUMN IF NOT EXISTS role text DEFAULT 'Member',
+  ADD COLUMN IF NOT EXISTS show_phone_to_others boolean DEFAULT true,
+  ADD COLUMN IF NOT EXISTS show_avatar_to_others boolean DEFAULT true;
 
 -- ============================================================
 -- 2. TASKS & SUBMISSIONS
@@ -212,24 +214,38 @@ ALTER TABLE public.attendance
 -- ============================================================
 CREATE TABLE IF NOT EXISTS public.excuses_freezes (
   id text PRIMARY KEY,
-  user_id uuid,
+  user_id text,
   user_name text NOT NULL,
   committee text,
   department text,
-  type text NOT NULL, -- 'Excuse' or 'Freeze'
+  request_type text, -- 'Excuse' or 'Freeze'
+  type text,
   reason text NOT NULL,
-  start_date timestamptz NOT NULL,
-  end_date timestamptz,
+  start_date text,
+  end_date text,
+  date text,
+  target_item_title text,
   status text NOT NULL DEFAULT 'Pending',
-  decision_by uuid,
+  decision_by text,
   decision_by_name text,
   decision_notes text,
+  admin_response text,
+  reviewed_by text,
+  reviewed_at timestamptz,
   created_at timestamptz DEFAULT now(),
   governorate text DEFAULT 'الغربية'
 );
 
 ALTER TABLE public.excuses_freezes
-  ADD COLUMN IF NOT EXISTS governorate text DEFAULT 'الغربية';
+  ADD COLUMN IF NOT EXISTS governorate text DEFAULT 'الغربية',
+  ADD COLUMN IF NOT EXISTS request_type text,
+  ADD COLUMN IF NOT EXISTS type text,
+  ADD COLUMN IF NOT EXISTS target_item_title text,
+  ADD COLUMN IF NOT EXISTS admin_response text,
+  ADD COLUMN IF NOT EXISTS decision_notes text,
+  ADD COLUMN IF NOT EXISTS date text,
+  ADD COLUMN IF NOT EXISTS reviewed_by text,
+  ADD COLUMN IF NOT EXISTS reviewed_at timestamptz;
 
 -- ============================================================
 -- 6. ISSUED CERTIFICATES

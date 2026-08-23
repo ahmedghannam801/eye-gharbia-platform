@@ -206,7 +206,7 @@ export const RulesAndBylaws: React.FC<{ currentUser: UserProfile }> = ({ current
   const [formSummary, setFormSummary] = useState('');
   const [formClausesText, setFormClausesText] = useState('');
 
-  const isAdminOrLeader = ['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader'].includes(currentUser.role);
+  const isAdminOrLeader = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader'].includes(currentUser.role);
 
   const saveRulesToStorage = (updated: RuleItem[]) => {
     setRules(updated);

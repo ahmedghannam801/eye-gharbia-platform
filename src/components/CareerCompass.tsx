@@ -49,7 +49,7 @@ export const CareerCompass: React.FC<CareerCompassProps> = ({ currentUser }) => 
   return (
     <div className="p-6 space-y-6 animate-fade-in" dir={isRtl ? 'rtl' : 'ltr'}>
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-teal-50 to-emerald-50/40 dark:from-slate-900 dark:to-slate-850 p-6 rounded-3xl border border-teal-200/40 dark:border-slate-800 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-slate-50 to-teal-50/30 dark:from-slate-900 dark:to-teal-950/20 p-6 rounded-3xl border border-teal-200/40 dark:border-slate-800 shadow-sm">
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-teal-600 dark:text-teal-400 font-bold text-xs uppercase tracking-widest">
             <Target className="w-4 h-4" />

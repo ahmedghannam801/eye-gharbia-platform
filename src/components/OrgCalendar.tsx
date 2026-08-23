@@ -26,6 +26,7 @@ export const OrgCalendar: React.FC<OrgCalendarProps> = ({ currentUser }) => {
 
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [selectedCommittee, setSelectedCommittee] = useState<string>('All');
+  const [selectedSubCommittee, setSelectedSubCommittee] = useState<string>('All');
   const [selectedEventType, setSelectedEventType] = useState<string>('all');
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
 
@@ -61,10 +62,19 @@ export const OrgCalendar: React.FC<OrgCalendarProps> = ({ currentUser }) => {
   };
 
   // Filter events
+  const isHrm = selectedCommittee === 'HR' || selectedCommittee === 'HRM';
   const filteredEvents = events.filter(e => {
-    const matchComm = selectedCommittee === 'All' || e.committee === 'All' || e.committee === selectedCommittee;
+    const matchComm = selectedCommittee === 'All' || e.committee === 'All' || e.committee === selectedCommittee || (isHrm && (e.committee === 'HR' || e.committee === 'HRM'));
+    if (!matchComm) return false;
+
+    if (isHrm && selectedSubCommittee !== 'All') {
+      const sub = selectedSubCommittee.toLowerCase();
+      const matchSub = (e.title || '').toLowerCase().includes(sub) || (e.description || '').toLowerCase().includes(sub);
+      if (!matchSub && e.committee !== 'All') return false;
+    }
+
     const matchType = selectedEventType === 'all' || e.eventType === selectedEventType;
-    return matchComm && matchType;
+    return matchType;
   });
 
   const getEventsForDay = (dayNumber: number) => {
@@ -110,14 +120,30 @@ export const OrgCalendar: React.FC<OrgCalendarProps> = ({ currentUser }) => {
         <div className="flex flex-wrap gap-2 relative z-10">
           <select
             value={selectedCommittee}
-            onChange={e => setSelectedCommittee(e.target.value)}
+            onChange={e => {
+              setSelectedCommittee(e.target.value);
+              setSelectedSubCommittee('All');
+            }}
             className="bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs font-bold"
           >
             <option value="All">{isAr ? 'جميع اللجان' : 'All Committees'}</option>
             {['HR', 'PR', 'SM', 'OR'].map(c => (
-              <option key={c} value={c}>{c} Committee</option>
+              <option key={c} value={c}>{c === 'HR' ? (isAr ? 'الموارد البشرية (HRM)' : 'HRM Committee') : `${c} Committee`}</option>
             ))}
           </select>
+
+          {(selectedCommittee === 'HR' || selectedCommittee === 'HRM') && (
+            <select
+              value={selectedSubCommittee}
+              onChange={e => setSelectedSubCommittee(e.target.value)}
+              className="bg-amber-900/80 border border-amber-500 text-amber-100 rounded-xl px-3 py-2 text-xs font-bold animate-fadeIn"
+            >
+              <option value="All">{isAr ? '🏢 كل فروع HRM' : 'All HRM Branches'}</option>
+              <option value="HR OF PR">HR OF PR</option>
+              <option value="HR OF SM">HR OF SM</option>
+              <option value="HR OF OR">HR OF OR</option>
+            </select>
+          )}
 
           <select
             value={selectedEventType}

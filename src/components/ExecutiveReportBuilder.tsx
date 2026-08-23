@@ -69,6 +69,7 @@ export const ExecutiveReportBuilder: React.FC<ExecutiveReportBuilderProps> = ({ 
   // Custom Weekly Report Controls State
   const [reportPeriod, setReportPeriod] = useState<'current_week' | 'last_week' | 'monthly'>('current_week');
   const [selectedCommittee, setSelectedCommittee] = useState<'All' | 'HR' | 'PR' | 'SM' | 'OR'>('All');
+  const [selectedSubCommittee, setSelectedSubCommittee] = useState<string>('All');
   const [customTitle, setCustomTitle] = useState(isAr ? 'التقرير الشامل لأداء الكيان واللجان' : 'Comprehensive Organization Performance Report');
   const [customTopic, setCustomTopic] = useState(isAr ? 'متابعة تقييم الانضباط والتسليمات الأسبوعية والورش الحية' : 'Weekly Submissions, Live Workshops & Committee Tracking');
   const [activePreset, setActivePreset] = useState<string>('comprehensive');
@@ -162,20 +163,72 @@ export const ExecutiveReportBuilder: React.FC<ExecutiveReportBuilderProps> = ({ 
   };
 
   const loadReport = () => {
-    const data = db.getExecutiveAnalyticsData(currentUser);
+    const data = db.getExecutiveAnalyticsData(currentUser, reportPeriod, selectedCommittee);
     setAnalytics(data);
   };
 
   const loadAdminData = () => {
-    setAdminUsers(db.getUsers(currentUser));
-    setAdminTasks(db.getTasks());
-    setAdminSubmissions(db.getSubmissions());
+    let allUsers = db.getUsers(currentUser);
+    let allTasks = db.getTasks();
+    let allSubs = db.getSubmissions();
+
+    if (selectedCommittee && selectedCommittee !== 'All') {
+      allUsers = allUsers.filter(u => u.committee === selectedCommittee || ((selectedCommittee === 'HR' || (selectedCommittee as string) === 'HRM') && (u.committee === 'HR' || u.committee === 'HRM')));
+      allTasks = allTasks.filter(t => t.committee === 'All' || t.committee === selectedCommittee);
+      allSubs = allSubs.filter(s => s.committee === selectedCommittee);
+
+      if ((selectedCommittee === 'HR' || (selectedCommittee as string) === 'HRM') && selectedSubCommittee !== 'All') {
+        const sub = selectedSubCommittee.toLowerCase();
+        allUsers = allUsers.filter(u => (u.department || '').toLowerCase().includes(sub) || ((u as any).subCommittee || '').toLowerCase().includes(sub));
+        allTasks = allTasks.filter(t => (t.department || '').toLowerCase().includes(sub) || (t.name || '').toLowerCase().includes(sub) || t.committee === 'All');
+        allSubs = allSubs.filter(s => (s.department || '').toLowerCase().includes(sub) || (s.memberName || '').toLowerCase().includes(sub));
+      }
+    }
+
+    const now = Date.now();
+    const oneDay = 86400000;
+    if (reportPeriod === 'current_week') {
+      const since = now - 7 * oneDay;
+      allTasks = allTasks.filter(t => !t.createdDate || new Date(t.createdDate).getTime() >= since);
+      allSubs = allSubs.filter(s => !s.submittedAt || new Date(s.submittedAt).getTime() >= since);
+    } else if (reportPeriod === 'last_week') {
+      const start = now - 14 * oneDay;
+      const end = now - 7 * oneDay;
+      allTasks = allTasks.filter(t => {
+        if (!t.createdDate) return true;
+        const time = new Date(t.createdDate).getTime();
+        return time >= start && time <= end;
+      });
+      allSubs = allSubs.filter(s => {
+        if (!s.submittedAt) return true;
+        const time = new Date(s.submittedAt).getTime();
+        return time >= start && time <= end;
+      });
+    } else if (reportPeriod === 'monthly') {
+      const since = now - 30 * oneDay;
+      allTasks = allTasks.filter(t => !t.createdDate || new Date(t.createdDate).getTime() >= since);
+      allSubs = allSubs.filter(s => !s.submittedAt || new Date(s.submittedAt).getTime() >= since);
+    }
+
+    setAdminUsers(allUsers);
+    setAdminTasks(allTasks);
+    setAdminSubmissions(allSubs);
   };
 
   useEffect(() => {
     loadReport();
     loadAdminData();
-  }, [currentUser]);
+
+    // Real-time synchronization with platform database
+    const unsubscribe = db.onChange(() => {
+      loadReport();
+      loadAdminData();
+    });
+
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
+  }, [currentUser, reportPeriod, selectedCommittee, selectedSubCommittee, adminReportType]);
 
   // Admin Reports compiled data (merged from ReportGenerator)
   const getAdminCompiledData = () => {
@@ -481,7 +534,8 @@ export const ExecutiveReportBuilder: React.FC<ExecutiveReportBuilderProps> = ({ 
       docNumber: `EYE-EXEC-${Date.now().toString().slice(-6)}`,
       bodyHtml: reportHtml,
       signatures: [
-        { title: 'مسؤول لجنة الموارد البشرية', name: 'أحمد إبراهيم' }
+        { title: isAr ? 'مسؤول لجنة الموارد البشرية' : 'HR Committee Head', name: 'أحمد إبراهيم' },
+        { title: isAr ? 'نائب رئيس لجنة الموارد البشرية' : 'HR Committee Deputy Head', name: 'ريهام أشرف' }
       ]
     });
   };
@@ -524,7 +578,7 @@ export const ExecutiveReportBuilder: React.FC<ExecutiveReportBuilderProps> = ({ 
         <div className="flex flex-wrap items-center gap-3 shrink-0">
           <button
             onClick={() => { loadReport(); loadAdminData(); }}
-            className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold transition-all border border-slate-700"
+            className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold transition-all border border-slate-700 cursor-pointer"
           >
             {isAr ? 'تحديث البيانات التلقائي' : 'Refresh Data'}
           </button>
@@ -532,7 +586,7 @@ export const ExecutiveReportBuilder: React.FC<ExecutiveReportBuilderProps> = ({ 
           <button
             onClick={() => {
               let fullBodyText = `نطاق وموضوع التقرير: ${customTopic}\n`;
-              fullBodyText += `الفترة الزمنية: ${reportPeriod === 'current_week' ? 'الأسبوع الحالي' : reportPeriod === 'last_week' ? 'الأسبوع الماضي' : 'التقييم الشهري الشامل'}  |  نطاق اللجنة: ${selectedCommittee === 'All' ? 'جميع اللجان' : `لجنة ${selectedCommittee}`}\n\n`;
+              fullBodyText += `الفترة الزمنية: ${reportPeriod === 'current_week' ? 'الأسبوع الحالي' : reportPeriod === 'last_week' ? 'الأسبوع الماضي' : reportPeriod === 'monthly' ? 'التقييم الشهري الشامل' : 'التقرير الشامل التراكمي'}  |  نطاق اللجنة: ${selectedCommittee === 'All' ? 'جميع اللجان' : `لجنة ${selectedCommittee}`}\n\n`;
 
               fullBodyText += `المؤشرات الكلية والأرقام القياسية للكيان:\n`;
               const kpis = {
@@ -610,13 +664,14 @@ export const ExecutiveReportBuilder: React.FC<ExecutiveReportBuilderProps> = ({ 
               fullBodyText += `═════════════════════════════════════════════════════\n`;
               fullBodyText += `              • الاعتماد والتوقيعات الرسمية •\n`;
               fullBodyText += `═════════════════════════════════════════════════════\n\n`;
-              fullBodyText += `مسؤول لجنة الموارد البشرية         نائب لجنة الموارد البشرية\n`;
+              fullBodyText += `مسؤول لجنة الموارد البشرية         نائب رئيس لجنة الموارد البشرية\n`;
               fullBodyText += `   أ. أحمد إبراهيم                 أ. ريهام أشرف\n`;
 
               fillAndDownloadDocxTemplate('bg_report', {
                 reportTitle: customTitle,
                 reportBody: fullBodyText,
-                hrManager: 'أحمد إبراهيم'
+                hrManager: 'أحمد إبراهيم',
+                deputy: 'ريهام أشرف'
               });
             }}
             className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-emerald-500/25 cursor-pointer"
@@ -680,7 +735,7 @@ export const ExecutiveReportBuilder: React.FC<ExecutiveReportBuilderProps> = ({ 
               <button
                 key={btn.id}
                 onClick={() => handleApplyPreset(btn.id)}
-                className={`px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                className={`px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   activePreset === btn.id
                     ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/30 scale-[1.02]'
                     : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 border border-slate-200 dark:border-slate-700'
@@ -701,11 +756,12 @@ export const ExecutiveReportBuilder: React.FC<ExecutiveReportBuilderProps> = ({ 
             <select
               value={reportPeriod}
               onChange={(e: any) => setReportPeriod(e.target.value)}
-              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-semibold focus:outline-none focus:border-indigo-500"
+              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-semibold focus:outline-none focus:border-indigo-500 cursor-pointer"
             >
               <option value="current_week">{isAr ? 'الأسبوع الحالي (Current Week)' : 'Current Week'}</option>
               <option value="last_week">{isAr ? 'الأسبوع الماضي (Last Week)' : 'Last Week'}</option>
               <option value="monthly">{isAr ? 'التقييم الشهري الشامل (Monthly)' : 'Full Monthly Report'}</option>
+              <option value="all">{isAr ? 'التقرير الشامل التراكمي (All Time)' : 'All Time Cumulative'}</option>
             </select>
           </div>
 
@@ -716,16 +772,37 @@ export const ExecutiveReportBuilder: React.FC<ExecutiveReportBuilderProps> = ({ 
             </label>
             <select
               value={selectedCommittee}
-              onChange={(e: any) => setSelectedCommittee(e.target.value)}
-              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-semibold focus:outline-none focus:border-indigo-500"
+              onChange={(e: any) => {
+                setSelectedCommittee(e.target.value);
+                setSelectedSubCommittee('All');
+              }}
+              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-semibold focus:outline-none focus:border-indigo-500 cursor-pointer"
             >
               <option value="All">{isAr ? 'جميع اللجان (All Committees)' : 'All Committees'}</option>
-              <option value="HR">{isAr ? 'لجنة الموارد البشرية (HR)' : 'HR Committee'}</option>
+              <option value="HR">{isAr ? 'لجنة الموارد البشرية (HRM)' : 'HRM Committee'}</option>
               <option value="PR">{isAr ? 'لجنة العلاقات العامة (PR)' : 'PR Committee'}</option>
               <option value="SM">{isAr ? 'لجنة السوشيال ميديا (SM)' : 'SM Committee'}</option>
               <option value="OR">{isAr ? 'لجنة التنظيم واللوجستيات (OR)' : 'OR Committee'}</option>
             </select>
           </div>
+
+          {(selectedCommittee === 'HR' || (selectedCommittee as string) === 'HRM') && (
+            <div className="space-y-1.5 animate-fadeIn">
+              <label className="text-xs font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
+                <span>🏢 فرع الموارد البشرية المحدد (HRM Branch):</span>
+              </label>
+              <select
+                value={selectedSubCommittee}
+                onChange={(e: any) => setSelectedSubCommittee(e.target.value)}
+                className="w-full bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-xl px-3 py-2.5 text-xs font-bold text-amber-900 dark:text-amber-200 focus:outline-none focus:border-amber-500 cursor-pointer"
+              >
+                <option value="All">{isAr ? 'كل فروع إدارة HRM' : 'All HRM Branches'}</option>
+                <option value="HR OF PR">HR OF PR (العلاقات العامة)</option>
+                <option value="HR OF SM">HR OF SM (السوشيال ميديا)</option>
+                <option value="HR OF OR">HR OF OR (التنظيم)</option>
+              </select>
+            </div>
+          )}
 
           {/* Main Title Input */}
           <div className="space-y-1.5">
@@ -784,7 +861,7 @@ export const ExecutiveReportBuilder: React.FC<ExecutiveReportBuilderProps> = ({ 
               <select
                 value={itemTypeInput}
                 onChange={(e: any) => setItemTypeInput(e.target.value)}
-                className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-2 text-xs font-bold text-slate-800 dark:text-slate-100"
+                className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-2 text-xs font-bold text-slate-800 dark:text-slate-100 cursor-pointer"
               >
                 <option value="highlight">{isAr ? '🌟 إنجاز متميز (Highlight)' : '🌟 Highlight'}</option>
                 <option value="decision">{isAr ? '📌 قرار إداري (Decision)' : '📌 Decision'}</option>
@@ -875,7 +952,7 @@ export const ExecutiveReportBuilder: React.FC<ExecutiveReportBuilderProps> = ({ 
               {isAr ? 'موضوع التقرير: ' : 'Focus Topic: '} {customTopic}
             </p>
             <p className="text-[11px] text-slate-400 font-bold">
-              {isAr ? `الفترة المحدد: ${reportPeriod === 'current_week' ? 'الأسبوع الحالي' : reportPeriod === 'last_week' ? 'الأسبوع الماضي' : 'التقييم الشهري الشامل'} | نطاق اللجنة: ${selectedCommittee === 'All' ? 'جميع اللجان' : `لجنة ${selectedCommittee}`}` : `Period: ${reportPeriod} | Scope: ${selectedCommittee}`}
+              {isAr ? `الفترة المحددة: ${reportPeriod === 'current_week' ? 'الأسبوع الحالي' : reportPeriod === 'last_week' ? 'الأسبوع الماضي' : reportPeriod === 'monthly' ? 'التقييم الشهري الشامل' : 'التقرير الشامل التراكمي'} | نطاق اللجنة: ${selectedCommittee === 'All' ? 'جميع اللجان' : `لجنة ${selectedCommittee}`}` : `Period: ${reportPeriod} | Scope: ${selectedCommittee}`}
             </p>
           </div>
 
@@ -1031,15 +1108,25 @@ export const ExecutiveReportBuilder: React.FC<ExecutiveReportBuilderProps> = ({ 
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-8 text-center w-full sm:w-auto">
+          <div className="flex flex-wrap items-center justify-center gap-6 sm:gap-10 text-center w-full sm:w-auto">
             {/* Signature 1: مسؤول لجنة الموارد البشرية */}
             <div className="flex flex-col items-center">
-              <span className="text-[10px] font-black text-blue-800 dark:text-blue-300 px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-950/40 border border-blue-200/50 mb-1">
+              <span className="text-[10px] font-black text-blue-800 dark:text-blue-300 px-2.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950/40 border border-blue-200/50 mb-1">
                 {isAr ? 'مسؤول لجنة الموارد البشرية' : 'HR Committee Head'}
               </span>
-              <span className="text-base font-black text-slate-900 dark:text-white" style={{ fontFamily: "'Aldhabi', 'Aref Ruqaa', 'Amiri', 'Traditional Arabic', serif", fontSize: '16px' }}>أحمد إبراهيم</span>
+              <span className="text-base font-black text-slate-900 dark:text-white" style={{ fontFamily: "'Aldhabi', 'Aref Ruqaa', 'Amiri', 'Traditional Arabic', serif", fontSize: '18px' }}>أحمد إبراهيم</span>
               <div className="w-28 h-px bg-blue-500 my-1" />
               <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400">أ. أحمد إبراهيم</span>
+            </div>
+
+            {/* Signature 2: نائب رئيس لجنة الموارد البشرية */}
+            <div className="flex flex-col items-center">
+              <span className="text-[10px] font-black text-amber-800 dark:text-amber-300 px-2.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/40 border border-amber-200/50 mb-1">
+                {isAr ? 'نائب رئيس لجنة الموارد البشرية' : 'HR Committee Deputy Head'}
+              </span>
+              <span className="text-base font-black text-slate-900 dark:text-white" style={{ fontFamily: "'Aldhabi', 'Aref Ruqaa', 'Amiri', 'Traditional Arabic', serif", fontSize: '18px' }}>ريهام أشرف</span>
+              <div className="w-28 h-px bg-amber-500 my-1" />
+              <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400">أ. ريهام أشرف</span>
             </div>
           </div>
         </div>

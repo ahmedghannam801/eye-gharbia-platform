@@ -25,7 +25,7 @@ const STATUS_CONFIG: Record<SuggestionStatus, { labelAr: string; label: string; 
 export const SuggestionBox: React.FC<SuggestionBoxProps> = ({ currentUser }) => {
   const { language } = useLanguage();
   const ar = language === 'ar';
-  const isAdmin = ['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator'].includes(currentUser.role);
+  const isAdmin = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator'].includes(currentUser.role);
   const [tab, setTab] = useState<'submit' | 'admin'>('submit');
   const [content, setContent] = useState('');
   const [category, setCategory] = useState<SuggestionCategory>('General');

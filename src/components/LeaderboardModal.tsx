@@ -15,6 +15,8 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({ isOpen, onCl
   const ar = language === 'ar';
   const [selectedCommittee, setSelectedCommittee] = useState<string>('All');
 
+  const [selectedSubCommittee, setSelectedSubCommittee] = useState<string>('All');
+
   if (!isOpen) return null;
 
   const allUsers = db.getUsers(currentUser).filter(u => u.status === 'Active');
@@ -37,16 +39,32 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({ isOpen, onCl
     };
   });
 
-  // Filter by committee if requested
-  const filtered = selectedCommittee === 'All'
-    ? scoredMembers
-    : scoredMembers.filter(m => m.user.committee && m.user.committee.includes(selectedCommittee));
+  // Filter by committee & HRM sub-committee if requested
+  const isHrmSelected = selectedCommittee === 'HRM' || selectedCommittee === 'Human Resources' || selectedCommittee === 'HR';
+
+  const filtered = scoredMembers.filter(m => {
+    if (selectedCommittee !== 'All') {
+      const matchComm = m.user.committee && (
+        m.user.committee.includes(selectedCommittee) ||
+        (isHrmSelected && (m.user.committee === 'HR' || m.user.committee === 'HRM'))
+      );
+      if (!matchComm) return false;
+    }
+
+    if (isHrmSelected && selectedSubCommittee !== 'All') {
+      const sub = selectedSubCommittee.toLowerCase();
+      const matchSub = (m.user.department || '').toLowerCase().includes(sub) ||
+                       ((m.user as any).subCommittee || '').toLowerCase().includes(sub);
+      if (!matchSub) return false;
+    }
+    return true;
+  });
 
   const sorted = [...filtered].sort((a, b) => b.points - a.points);
   const top3 = sorted.slice(0, 3);
   const others = sorted.slice(3, 10);
 
-  const committees = ['All', 'Human Resources', 'Public Relations', 'Social Media', 'Organization & Relations', 'Media'];
+  const committees = ['All', 'HRM', 'Public Relations', 'Social Media', 'Organization & Relations'];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in">
@@ -71,16 +89,39 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({ isOpen, onCl
         </div>
 
         {/* Filter Toolbar */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1">
-          {committees.map(c => (
-            <button
-              key={c}
-              onClick={() => setSelectedCommittee(c)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap ${selectedCommittee === c ? 'bg-amber-500 text-white shadow-md' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'}`}
-            >
-              {c === 'All' ? (ar ? 'كل اللجان 🌟' : 'All Committees 🌟') : c}
-            </button>
-          ))}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 overflow-x-auto pb-1">
+            {committees.map(c => (
+              <button
+                key={c}
+                onClick={() => {
+                  setSelectedCommittee(c);
+                  setSelectedSubCommittee('All');
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap ${selectedCommittee === c ? 'bg-amber-500 text-white shadow-md' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'}`}
+              >
+                {c === 'All' ? (ar ? 'كل اللجان 🌟' : 'All Committees 🌟') : c === 'HRM' ? (ar ? 'الموارد البشرية (HRM)' : 'HRM Committee') : c}
+              </button>
+            ))}
+          </div>
+
+          {/* HRM Sub-Committees Secondary Filter */}
+          {isHrmSelected && (
+            <div className="flex items-center gap-2 overflow-x-auto pt-1 pb-1 animate-fadeIn bg-amber-500/10 dark:bg-amber-950/30 p-2 rounded-2xl border border-amber-300/40 dark:border-amber-700/40">
+              <span className="text-[11px] font-black text-amber-700 dark:text-amber-300 whitespace-nowrap px-1">
+                {ar ? 'فروع HRM:' : 'HRM Branches:'}
+              </span>
+              {['All', 'HR OF PR', 'HR OF SM', 'HR OF OR'].map(sub => (
+                <button
+                  key={sub}
+                  onClick={() => setSelectedSubCommittee(sub)}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer whitespace-nowrap ${selectedSubCommittee === sub ? 'bg-amber-600 text-white shadow-sm' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-amber-100 dark:hover:bg-slate-700'}`}
+                >
+                  {sub === 'All' ? (ar ? 'كل الفروع' : 'All Branches') : sub}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Top 3 Podium */}

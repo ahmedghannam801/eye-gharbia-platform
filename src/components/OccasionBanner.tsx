@@ -95,20 +95,20 @@ export const OccasionBanner: React.FC<OccasionBannerProps> = ({ currentUser }) =
               </div>
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
-                  <span className="bg-white/20 text-white text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full tracking-wider">
+                  <span className="bg-black/30 text-white text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full tracking-wider border border-white/25 shadow-xs">
                     تهنئة رسمية من كيان EYE
                   </span>
-                  <Sparkles className="w-4 h-4 text-amber-200 animate-spin-slow" />
+                  <Sparkles className="w-4 h-4 text-amber-300 animate-spin-slow" />
                 </div>
-                <h3 className="text-lg font-black text-white">{activeOccasion.title}</h3>
-                <p className="text-xs text-amber-100/90 leading-relaxed max-w-2xl">
+                <h3 className="text-lg font-black text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]">{activeOccasion.title}</h3>
+                <p className="text-xs text-white/95 font-semibold leading-relaxed max-w-2xl drop-shadow-[0_1px_2px_rgba(0,0,0,0.7)]">
                   {activeOccasion.message}
                 </p>
               </div>
             </div>
 
             {/* Admin Manage Button */}
-            {(currentUser.role === 'Super Admin' || currentUser.role === 'HRM' || currentUser.role === 'Leader') && (
+            {(currentUser.role === 'Super Admin' || currentUser.role === 'Head' || currentUser.role === 'Vice' || currentUser.role === 'HRM' || currentUser.role === 'Leader') && (
               <button
                 onClick={() => setShowManageModal(true)}
                 className="bg-white/20 hover:bg-white/30 text-white text-xs font-bold px-3.5 py-2 rounded-xl border border-white/30 backdrop-blur-sm transition-all shrink-0 self-end md:self-center"
@@ -121,7 +121,7 @@ export const OccasionBanner: React.FC<OccasionBannerProps> = ({ currentUser }) =
       )}
 
       {/* Admin Button if no active banner but user is admin */}
-      {!activeOccasion && (currentUser.role === 'Super Admin' || currentUser.role === 'HRM') && (
+      {!activeOccasion && (currentUser.role === 'Super Admin' || currentUser.role === 'Head' || currentUser.role === 'Vice' || currentUser.role === 'HRM') && (
         <div className="flex justify-end mb-4">
           <button
             onClick={() => setShowManageModal(true)}

@@ -37,7 +37,7 @@ export const MemberOfTheMonth: React.FC<MemberOfTheMonthProps> = ({ currentUser,
   }
 
   const userGov = currentUser.governorate || 'الغربية';
-  const govUsers = db.getUsers().filter(u => u.status === 'Active' && (u.governorate === userGov || !u.governorate));
+  const govUsers = db.getUsers().filter(u => u.status === 'Active' && u.role === 'Member' && (u.governorate === userGov || !u.governorate));
   const meetings = db.getMeetings();
   const attendance = db.getAllAttendance();
   const tasks = db.getTasks();

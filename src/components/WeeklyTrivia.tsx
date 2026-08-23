@@ -11,7 +11,7 @@ interface WeeklyTriviaProps {
 export const WeeklyTrivia: React.FC<WeeklyTriviaProps> = ({ currentUser }) => {
   const { language, isRtl } = useLanguage();
   const isAr = language === 'ar';
-  const isAdmin = ['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader'].includes(currentUser.role);
+  const isAdmin = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader'].includes(currentUser.role);
 
   const [quizzes, setQuizzes] = useState<WeeklyQuiz[]>([]);
   const [submissions, setSubmissions] = useState<QuizSubmission[]>([]);

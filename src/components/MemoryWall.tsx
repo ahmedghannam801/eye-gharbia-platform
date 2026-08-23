@@ -65,7 +65,7 @@ export const MemoryWall: React.FC<MemoryWallProps> = ({ currentUser }) => {
   };
 
   const handleToggleLike = (id: string) => {
-    db.toggleMemoryLike(id, currentUser.id);
+    db.toggleMemoryLike(id, currentUser);
     loadMemories();
   };
 
@@ -78,7 +78,7 @@ export const MemoryWall: React.FC<MemoryWallProps> = ({ currentUser }) => {
 
   const filteredMemories = memories.filter(m => selectedCat === 'All' || m.category === selectedCat);
 
-  const canManage = ['Super Admin', 'Coordinator', 'Deputy Coordinator', 'Leader', 'Vice'].includes(currentUser.role);
+  const canManage = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader'].includes(currentUser.role);
 
   return (
     <div className="space-y-6 sm:space-y-8 p-3 sm:p-6 text-start" dir={language === 'ar' ? 'rtl' : 'ltr'}>

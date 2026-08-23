@@ -6,7 +6,7 @@ import {
   Search, ChevronDown, UserCheck, UserX, Crown, AlertTriangle,
   CheckCircle, XCircle, Filter, RefreshCw, Mail, Send, Edit3,
   Database, FileText, CheckSquare, Activity, Sliders, Key, X,
-  Lock, ArrowRight, Download, Sparkles, Cake
+  Lock, ArrowRight, Download, Sparkles, Cake, RotateCcw
 } from 'lucide-react';
 import { useLanguage } from '../lib/LanguageContext';
 import { getEmailQueue, retryQueuedEmails, clearEmailQueue, QueuedEmail } from '../lib/emailService';
@@ -19,19 +19,19 @@ interface SettingsPanelProps {
 }
 
 const ROLE_COLORS: Record<string, string> = {
-  'Super Admin': 'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-400',
-  'Vice': 'bg-indigo-100 text-indigo-700 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-400',
-  'Coordinator': 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-400',
-  'Deputy Coordinator': 'bg-sky-100 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-400',
-  'Leader': 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400',
-  'Member': 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300',
+  'Super Admin': 'bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-950/50 dark:text-purple-300 dark:border-purple-800/60',
+  'Vice': 'bg-indigo-100 text-indigo-800 border-indigo-300 dark:bg-indigo-950/50 dark:text-indigo-300 dark:border-indigo-800/60',
+  'Coordinator': 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-800/60',
+  'Deputy Coordinator': 'bg-sky-100 text-sky-800 border-sky-300 dark:bg-sky-950/50 dark:text-sky-300 dark:border-sky-800/60',
+  'Leader': 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800/60',
+  'Member': 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700',
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  'Active': 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400',
-  'Inactive': 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
-  'Disabled': 'bg-red-100 text-red-600 dark:bg-red-950/40 dark:text-red-400',
-  'Pending Approval': 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400',
+  'Active': 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800/60',
+  'Inactive': 'bg-slate-100 text-slate-600 border-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700',
+  'Disabled': 'bg-red-100 text-red-800 border-red-300 dark:bg-red-950/50 dark:text-red-300 dark:border-red-800/60',
+  'Pending Approval': 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800/60',
 };
 
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNavigateToView }) => {
@@ -58,6 +58,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [committeeFilter, setCommitteeFilter] = useState<string>('all');
+  const [subCommitteeFilter, setSubCommitteeFilter] = useState<string>('all');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [actionFeedback, setActionFeedback] = useState<{ msg: string; ok: boolean } | null>(null);
 
@@ -74,11 +75,31 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
   const [editCode, setEditCode] = useState('');
   const [editDob, setEditDob] = useState('');
 
+  // Lock body scroll when any modal is open so it's always locked directly in the viewport
+  useEffect(() => {
+    if (editingUser || showAddSecModal) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [editingUser, showAddSecModal]);
+
   // Logs search state
   const [logSearch, setLogSearch] = useState('');
 
-  const allUsers = db.getUsers(currentUser);
-  const logs = db.getLogs();
+  // One-time local→Supabase sync state
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncResults, setSyncResults] = useState<{ name: string; ok: boolean; msg: string }[] | null>(null);
+
+  // Refresh counter: increment to force UI re-render after data mutations
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const allUsers = useMemo(() => db.getUsers(currentUser), [refreshKey, currentUser]);
+  const logs = useMemo(() => db.getLogs(), [refreshKey]);
   const tasks = db.getTasks();
   const submissions = db.getSubmissions();
 
@@ -112,10 +133,18 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
       const matchSearch = !search || u.fullName.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase()) || (u.membershipCode || '').toLowerCase().includes(search.toLowerCase());
       const matchRole = roleFilter === 'all' || u.role === roleFilter;
       const matchStatus = statusFilter === 'all' || u.status === statusFilter;
-      const matchComm = committeeFilter === 'all' || u.committee === committeeFilter;
-      return matchSearch && matchRole && matchStatus && matchComm;
+      const isHrm = committeeFilter === 'HR' || committeeFilter === 'HRM';
+      const matchComm = committeeFilter === 'all' || u.committee === committeeFilter || (isHrm && (u.committee === 'HR' || u.committee === 'HRM'));
+      
+      let matchSub = true;
+      if (isHrm && subCommitteeFilter !== 'all') {
+        const sub = subCommitteeFilter.toLowerCase();
+        matchSub = (u.department || '').toLowerCase().includes(sub) || ((u as any).subCommittee || '').toLowerCase().includes(sub);
+      }
+
+      return matchSearch && matchRole && matchStatus && matchComm && matchSub;
     });
-  }, [allUsers, search, roleFilter, statusFilter, committeeFilter]);
+  }, [allUsers, search, roleFilter, statusFilter, committeeFilter, subCommitteeFilter]);
 
   const filteredLogs = useMemo(() => {
     if (!logSearch) return logs;
@@ -135,29 +164,50 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
       return;
     }
     const ok = db.deleteUser(userId, currentUser);
-    if (ok) showFeedback(ar ? 'تم حذف العضو بنجاح.' : 'Member removed successfully.', true);
+    if (ok) {
+      showFeedback(ar ? 'تم حذف العضو بنجاح.' : 'Member removed successfully.', true);
+      setRefreshKey(k => k + 1);
+    }
     else showFeedback(ar ? 'فشل الحذف.' : 'Delete failed.', false);
     setConfirmDeleteId(null);
   };
 
-  const handleStatusChange = (userId: string, status: UserStatus) => {
+  const handleStatusChange = async (userId: string, status: UserStatus) => {
     db.updateUserStatus(userId, status, currentUser);
+    // Explicit Supabase safety-net: ensure the status change is persisted
+    if (isSupabaseConfigured) {
+      try {
+        await supabase.from('profiles').update({ status }).eq('id', userId);
+      } catch (err) {
+        console.error('[SettingsPanel] Supabase status update failed:', err);
+      }
+    }
     showFeedback(
       ar ? `تم تغيير الحالة إلى ${status}.` : `Status changed to ${status}.`,
       true
     );
+    setRefreshKey(k => k + 1);
   };
 
-  const handleRoleChange = (userId: string, role: UserRole) => {
+  const handleRoleChange = async (userId: string, role: UserRole) => {
     if (userId === currentUser.id) {
       showFeedback(ar ? 'لا يمكنك تغيير دورك الخاص!' : 'You cannot change your own role!', false);
       return;
     }
     db.updateUserRole(userId, role, currentUser);
+    // Explicit Supabase safety-net: ensure the role change is persisted
+    if (isSupabaseConfigured) {
+      try {
+        await supabase.from('profiles').update({ role }).eq('id', userId);
+      } catch (err) {
+        console.error('[SettingsPanel] Supabase role update failed:', err);
+      }
+    }
     showFeedback(
       ar ? `تم تغيير الدور إلى ${role}.` : `Role changed to ${role}.`,
       true
     );
+    setRefreshKey(k => k + 1);
   };
 
   // Open Full Master Edit Modal for a user
@@ -176,24 +226,26 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
   };
 
   // Save Full Master Edit
-  const handleSaveMasterEdit = (e: React.FormEvent) => {
+  const handleSaveMasterEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingUser) return;
 
+    const updatedFields = {
+      fullName: editFullName,
+      email: editEmail,
+      phoneNumber: editPhone,
+      role: editRole,
+      status: editStatus,
+      committee: editCommittee,
+      department: editDepartment,
+      subCommittee: editCommittee === 'HRM' || editCommittee === 'HR' || editDepartment.startsWith('HRM') ? editSubCommittee : '',
+      membershipCode: editCode,
+      dateOfBirth: editDob,
+    };
+
     db.updateUserFullDetails(
       editingUser.id,
-      {
-        fullName: editFullName,
-        email: editEmail,
-        phoneNumber: editPhone,
-        role: editRole,
-        status: editStatus,
-        committee: editCommittee,
-        department: editDepartment,
-        subCommittee: editCommittee === 'HRM' || editCommittee === 'HR' || editDepartment.startsWith('HRM') ? editSubCommittee : '',
-        membershipCode: editCode,
-        dateOfBirth: editDob,
-      },
+      updatedFields,
       currentUser
     );
 
@@ -201,8 +253,29 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
       db.updateUserDateOfBirth(editingUser.id, editDob);
     }
 
+    // Explicit Supabase safety-net: ensure all field changes are persisted
+    if (isSupabaseConfigured) {
+      try {
+        const row: Record<string, any> = {};
+        if (updatedFields.fullName) row.full_name = updatedFields.fullName;
+        if (updatedFields.email) row.email = updatedFields.email;
+        if (updatedFields.phoneNumber) row.phone_number = updatedFields.phoneNumber;
+        if (updatedFields.role) row.role = updatedFields.role;
+        if (updatedFields.status) row.status = updatedFields.status;
+        if (updatedFields.committee) row.committee = updatedFields.committee;
+        if (updatedFields.department) row.department = updatedFields.department;
+        if (updatedFields.subCommittee !== undefined) row.sub_committee = updatedFields.subCommittee;
+        if (updatedFields.membershipCode) row.membership_code = updatedFields.membershipCode;
+        if (updatedFields.dateOfBirth) row.date_of_birth = updatedFields.dateOfBirth;
+        await supabase.from('profiles').update(row).eq('id', editingUser.id);
+      } catch (err) {
+        console.error('[SettingsPanel] Supabase master edit update failed:', err);
+      }
+    }
+
     setEditingUser(null);
     showFeedback(ar ? 'تم تحديث كافة بيانات العضو بنجاح!' : 'User full profile updated successfully!', true);
+    setRefreshKey(k => k + 1);
   };
 
   const handleSaveSettings = (e: React.FormEvent) => {
@@ -210,6 +283,58 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
     db.updateSettings(settings, currentUser);
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 1500);
+  };
+
+  // ─── One-time local → Supabase sync ───────────────────────────────────
+  const syncLocalToSupabase = async () => {
+    if (!isSupabaseConfigured) {
+      showFeedback('Supabase not configured.', false);
+      return;
+    }
+    setIsSyncing(true);
+    setSyncResults(null);
+
+    const users = db.getUsers();
+    const results: { name: string; ok: boolean; msg: string }[] = [];
+
+    for (const user of users) {
+      try {
+        const row: Record<string, any> = {};
+        if (user.role)         row.role           = user.role;
+        if (user.status)       row.status         = user.status;
+        if (user.committee)    row.committee      = user.committee;
+        if (user.department)   row.department     = user.department;
+        if (user.subCommittee !== undefined) row.sub_committee = user.subCommittee;
+        if (user.fullName)     row.full_name      = user.fullName;
+        if (user.phoneNumber)  row.phone_number   = user.phoneNumber;
+        if (user.membershipCode) row.membership_code = user.membershipCode;
+        if (user.dateOfBirth)  row.date_of_birth  = user.dateOfBirth;
+        if (user.governorate)  row.governorate    = user.governorate;
+
+        const { error } = await supabase
+          .from('profiles')
+          .update(row)
+          .eq('id', user.id);
+
+        if (error) {
+          results.push({ name: user.fullName, ok: false, msg: error.message });
+        } else {
+          results.push({ name: user.fullName, ok: true, msg: `${user.role} / ${user.committee} / ${user.status}` });
+        }
+      } catch (err: any) {
+        results.push({ name: user.fullName, ok: false, msg: err?.message || 'Unknown error' });
+      }
+    }
+
+    setSyncResults(results);
+    setIsSyncing(false);
+
+    const ok = results.filter(r => r.ok).length;
+    const fail = results.filter(r => !r.ok).length;
+    showFeedback(
+      `Sync complete: ✅ ${ok} updated, ❌ ${fail} failed out of ${users.length} members.`,
+      fail === 0
+    );
   };
 
   // Export JSON Database Backup
@@ -353,10 +478,22 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
     showFeedback(ar ? 'تم تصدير كشف الأعضاء متضمناً رقم التواصل المسجل بنجاح 📋' : 'Exported members list with registered contact numbers! 📋', true);
   };
 
+  const handleResetAllPoints = async () => {
+    if (!confirm(ar ? 'هل أنت متأكد من تصفير كافة النقاط والبونص لجميع أعضاء الكيان؟ سيتم تعيين رصيد الجميع إلى 0 نقطة.' : 'Are you sure you want to reset all points and bonuses to 0 for all members?')) return;
+    const ok = await db.resetAllUsersPoints(currentUser);
+    setRefreshKey(k => k + 1);
+    showFeedback(
+      ok
+        ? (ar ? 'تم تصفير جميع نقاط وبونص الأعضاء بنجاح! رصيد الجميع الآن 0 Pts 🎯' : 'Successfully reset all points and bonuses to 0!')
+        : (ar ? 'حدث خطأ أثناء تصفير النقاط' : 'Failed to reset points'),
+      ok
+    );
+  };
+
   const ALL_ROLES: UserRole[] = ['Member', 'Leader', 'Deputy Coordinator', 'Coordinator', 'Vice', 'Head', 'Central', 'Super Admin'];
   const ALL_STATUSES: UserStatus[] = ['Active', 'Pending Approval', 'Disabled'];
 
-  if (currentUser.role !== 'Super Admin') {
+  if (!['Super Admin', 'Head', 'Vice', 'HRM'].includes(currentUser.role)) {
     return (
       <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-3xl border border-red-200 dark:border-red-900/40 shadow-xl max-w-lg mx-auto my-12" dir={isRtl ? 'rtl' : 'ltr'}>
         <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm">
@@ -367,8 +504,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
         </h2>
         <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed mb-6">
           {ar
-            ? 'مركز التحكم الشامل وإعدادات الكيان مخصصة حصرياً لرئيس لجنة الموارد البشرية (Super Admin) فقط ولا يمكن لأي منصب آخر الاطلاع عليها.'
-            : 'The Master Control Center & System Settings are exclusively reserved for the Super Admin.'}
+            ? 'مركز التحكم الشامل وإعدادات الكيان مخصصة حصرياً للمشرفين العامين والإدارة العليا فقط.'
+            : 'The Master Control Center & System Settings are exclusively reserved for Executive Leadership (Super Admin, Head, Vice).'}
         </p>
         <button
           onClick={() => onNavigateToView?.('dashboard')}
@@ -398,13 +535,24 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
           </p>
         </div>
 
-        <button
-          onClick={handleExportDataBackup}
-          className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-400/30 rounded-2xl text-xs font-bold transition-all shadow-md shrink-0 relative z-10"
-        >
-          <Download className="w-4 h-4" />
-          <span>{ar ? 'تصدير نسخة احتياطية (JSON)' : 'Export Backup'}</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2 shrink-0 relative z-10">
+          <button
+            onClick={handleResetAllPoints}
+            className="flex items-center gap-2 px-4 py-2.5 bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-500/40 rounded-2xl text-xs font-bold transition-all shadow-md cursor-pointer"
+            title={ar ? 'تصفير كافة النقاط والبونص للأعضاء' : 'Zero out all points & bonus'}
+          >
+            <RotateCcw className="w-4 h-4" />
+            <span>{ar ? 'تصفير جميع النقاط (0 Pts) 🔄' : 'Reset All Points (0)'}</span>
+          </button>
+
+          <button
+            onClick={handleExportDataBackup}
+            className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-400/30 rounded-2xl text-xs font-bold transition-all shadow-md shrink-0 cursor-pointer"
+          >
+            <Download className="w-4 h-4" />
+            <span>{ar ? 'تصدير نسخة احتياطية (JSON)' : 'Export Backup'}</span>
+          </button>
+        </div>
       </div>
 
 
@@ -561,14 +709,30 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
 
               <select
                 value={committeeFilter}
-                onChange={e => setCommitteeFilter(e.target.value)}
+                onChange={e => {
+                  setCommitteeFilter(e.target.value);
+                  setSubCommitteeFilter('all');
+                }}
                 className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold"
               >
                 <option value="all">{ar ? 'جميع اللجان' : 'All Committees'}</option>
                 {['HR', 'PR', 'SM', 'OR'].map(c => (
-                  <option key={c} value={c}>{c} Committee</option>
+                  <option key={c} value={c}>{c === 'HR' ? (ar ? 'الموارد البشرية (HRM)' : 'HRM Committee') : `${c} Committee`}</option>
                 ))}
               </select>
+
+              {(committeeFilter === 'HR' || committeeFilter === 'HRM') && (
+                <select
+                  value={subCommitteeFilter}
+                  onChange={e => setSubCommitteeFilter(e.target.value)}
+                  className="bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-xl px-3 py-2 text-xs font-bold text-amber-900 dark:text-amber-200 animate-fadeIn"
+                >
+                  <option value="all">{ar ? '🏢 كل فروع HRM' : 'All HRM Branches'}</option>
+                  <option value="HR OF PR">HR OF PR</option>
+                  <option value="HR OF SM">HR OF SM</option>
+                  <option value="HR OF OR">HR OF OR</option>
+                </select>
+              )}
 
               <button
                 onClick={handleExportMembersCSV}
@@ -692,38 +856,107 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
 
       {/* TAB 2: MASTER COMMAND CENTER */}
       {activeTab === 'master' && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
-            <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950/50 flex items-center justify-center text-indigo-600">
-              <FileText className="w-5 h-5" />
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+              <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950/50 flex items-center justify-center text-indigo-600">
+                <FileText className="w-5 h-5" />
+              </div>
+              <h3 className="text-base font-black text-slate-900 dark:text-white">{ar ? 'إدارة مهام الكيان' : 'Tasks Overview'}</h3>
+              <p className="text-xs text-slate-500 font-medium">{ar ? `إجمالي المهام المفتوحة بالكيان: ${tasks.length} مهمة.` : `Total active tasks: ${tasks.length}`}</p>
+              <div className="pt-2 text-xs font-bold text-indigo-600">
+                <span>{ar ? 'مراقبة كافة المهام والتسليمات' : 'Monitor all task submissions'}</span>
+              </div>
             </div>
-            <h3 className="text-base font-black text-slate-900 dark:text-white">{ar ? 'إدارة مهام الكيان' : 'Tasks Overview'}</h3>
-            <p className="text-xs text-slate-500 font-medium">{ar ? `إجمالي المهام المفتوحة بالكيان: ${tasks.length} مهمة.` : `Total active tasks: ${tasks.length}`}</p>
-            <div className="pt-2 text-xs font-bold text-indigo-600">
-              <span>{ar ? 'مراقبة كافة المهام والتسليمات' : 'Monitor all task submissions'}</span>
+
+            <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center text-emerald-600">
+                <CheckSquare className="w-5 h-5" />
+              </div>
+              <h3 className="text-base font-black text-slate-900 dark:text-white">{ar ? 'سجل تسليمات المهام' : 'Submissions Control'}</h3>
+              <p className="text-xs text-slate-500 font-medium">{ar ? `إجمالي التسليمات المرفوعة: ${submissions.length} تسليم.` : `Total submissions: ${submissions.length}`}</p>
+              <div className="pt-2 text-xs font-bold text-emerald-600">
+                <span>{ar ? 'إمكانية إعادة فتح وتسليم أي مهمة' : 'Override grades and resubmissions'}</span>
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+              <div className="w-10 h-10 rounded-2xl bg-amber-50 dark:bg-amber-950/50 flex items-center justify-center text-amber-600">
+                <Shield className="w-5 h-5" />
+              </div>
+              <h3 className="text-base font-black text-slate-900 dark:text-white">{ar ? 'الأمان والصلاحيات العليا' : 'Master Security'}</h3>
+              <p className="text-xs text-slate-500 font-medium">{ar ? 'منح صلاحيات مسئول لجنة الموارد البشرية والإشراف الكامل.' : 'Full administrative access controls.'}</p>
+              <div className="pt-2 text-xs font-bold text-amber-600">
+                <span>{ar ? 'نظام تشفير وحفظ محلي آمن' : 'Secured session & local state'}</span>
+              </div>
             </div>
           </div>
 
-          <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
-            <div className="w-10 h-10 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center text-emerald-600">
-              <CheckSquare className="w-5 h-5" />
+          {/* ── One-time Local → Supabase Sync Tool ── */}
+          <div className="bg-gradient-to-br from-violet-950/80 to-indigo-950/80 border border-violet-700/40 rounded-3xl p-6 shadow-xl space-y-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <Database className="w-5 h-5 text-violet-400" />
+                  <h3 className="text-sm font-black text-white">
+                    {ar ? '🔄 مزامنة البيانات المحلية مع Supabase' : '🔄 Sync Local Data → Supabase'}
+                  </h3>
+                </div>
+                <p className="text-xs text-violet-300 font-medium leading-relaxed">
+                  {ar
+                    ? `يقرأ كل بيانات الأعضاء (${allUsers.length} عضو) من الذاكرة المحلية ويرفعها لـ Supabase — المنصب، اللجنة، الحالة، القسم، وباقي الحقول.`
+                    : `Reads all ${allUsers.length} members from local cache and pushes role, committee, department, status to Supabase.`}
+                </p>
+              </div>
+              <button
+                onClick={syncLocalToSupabase}
+                disabled={isSyncing}
+                className="shrink-0 flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-2xl text-xs font-black shadow-lg shadow-violet-900/40 transition-all"
+              >
+                <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                <span>{isSyncing ? (ar ? 'جاري المزامنة...' : 'Syncing...') : (ar ? 'ابدأ المزامنة الآن' : 'Run Sync Now')}</span>
+              </button>
             </div>
-            <h3 className="text-base font-black text-slate-900 dark:text-white">{ar ? 'سجل تسليمات المهام' : 'Submissions Control'}</h3>
-            <p className="text-xs text-slate-500 font-medium">{ar ? `إجمالي التسليمات المرفوعة: ${submissions.length} تسليم.` : `Total submissions: ${submissions.length}`}</p>
-            <div className="pt-2 text-xs font-bold text-emerald-600">
-              <span>{ar ? 'إمكانية إعادة فتح وتسليم أي مهمة' : 'Override grades and resubmissions'}</span>
-            </div>
-          </div>
 
-          <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
-            <div className="w-10 h-10 rounded-2xl bg-amber-50 dark:bg-amber-950/50 flex items-center justify-center text-amber-600">
-              <Shield className="w-5 h-5" />
-            </div>
-            <h3 className="text-base font-black text-slate-900 dark:text-white">{ar ? 'الأمان والصلاحيات العليا' : 'Master Security'}</h3>
-            <p className="text-xs text-slate-500 font-medium">{ar ? 'منح صلاحيات مسئول لجنة الموارد البشرية والإشراف الكامل.' : 'Full administrative access controls.'}</p>
-            <div className="pt-2 text-xs font-bold text-amber-600">
-              <span>{ar ? 'نظام تشفير وحفظ محلي آمن' : 'Secured session & local state'}</span>
-            </div>
+            {/* Results Table */}
+            {syncResults && (
+              <div className="space-y-3">
+                {/* Summary bar */}
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className="px-3 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-full text-xs font-black">
+                    ✅ {syncResults.filter(r => r.ok).length} {ar ? 'نجح' : 'succeeded'}
+                  </span>
+                  <span className="px-3 py-1 bg-red-500/20 text-red-300 border border-red-500/30 rounded-full text-xs font-black">
+                    ❌ {syncResults.filter(r => !r.ok).length} {ar ? 'فشل' : 'failed'}
+                  </span>
+                  <span className="px-3 py-1 bg-slate-500/20 text-slate-300 border border-slate-500/30 rounded-full text-xs font-black">
+                    👥 {syncResults.length} {ar ? 'إجمالي' : 'total'}
+                  </span>
+                </div>
+
+                {/* Per-user results */}
+                <div className="bg-black/30 rounded-2xl border border-white/10 overflow-hidden max-h-72 overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-white/10 text-slate-400 uppercase text-[10px]">
+                        <th className="py-2 px-3 text-start">{ar ? 'الحالة' : 'Status'}</th>
+                        <th className="py-2 px-3 text-start">{ar ? 'الاسم' : 'Member'}</th>
+                        <th className="py-2 px-3 text-start">{ar ? 'التفاصيل' : 'Details'}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {syncResults.map((r, i) => (
+                        <tr key={i} className={r.ok ? 'text-emerald-300' : 'text-red-400'}>
+                          <td className="py-1.5 px-3 font-bold">{r.ok ? '✅' : '❌'}</td>
+                          <td className="py-1.5 px-3 font-bold text-white">{r.name}</td>
+                          <td className="py-1.5 px-3 font-mono text-[10px] opacity-80">{r.msg}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -981,16 +1214,24 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
         </div>
       )}
 
-      {/* MODAL: ADD CUSTOM SECURITY CODE */}
+      {/* ADD SECURITY CODE MODAL */}
       {showAddSecModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4">
+        <div 
+          className="fixed inset-0 z-[99999] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, width: '100vw', height: '100vh' }}
+        >
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto relative z-10 animate-fade-in">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-              <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
-                <Key className="w-5 h-5 text-amber-500" />
-                <span>{ar ? 'إنشاء كود تحقق أمني جديد للمنصب' : 'Add Security Verification Code'}</span>
-              </h3>
-              <button onClick={() => setShowAddSecModal(false)} className="text-slate-400 hover:text-slate-600">
+              <div className="flex items-center gap-2">
+                <Shield className="w-5 h-5 text-amber-500" />
+                <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                  {ar ? 'إضافة وتخصيص كود أمان قيادي جديد' : 'Generate & Assign Security Code'}
+                </h3>
+              </div>
+              <button 
+                onClick={() => setShowAddSecModal(false)} 
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -1008,7 +1249,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                     const autoCode = generateGovernorateLeaderCode(selectedGov, db.getUsers());
                     setNewSecCodeVal(autoCode);
                   }}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white"
                 >
                   {EGYPTIAN_GOVERNORATES.map(gov => (
                     <option key={gov} value={gov}>{gov}</option>
@@ -1027,7 +1268,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                       const autoCode = generateGovernorateLeaderCode(newSecGovVal, db.getUsers());
                       setNewSecCodeVal(autoCode);
                     }}
-                    className="text-[10px] font-bold text-amber-600 dark:text-amber-400 hover:underline"
+                    className="text-[10px] font-bold text-amber-600 dark:text-amber-400 hover:underline cursor-pointer"
                   >
                     {ar ? '⚡ توليد كود جديد' : '⚡ Auto-Generate'}
                   </button>
@@ -1049,7 +1290,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                   placeholder={ar ? 'أدخل اسم الشخص المخصص له الكود' : 'Target Official Name'}
                   value={newSecNameVal}
                   onChange={(e) => setNewSecNameVal(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white"
                 />
               </div>
 
@@ -1061,7 +1302,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                   <select
                     value={newSecRoleVal}
                     onChange={(e) => setNewSecRoleVal(e.target.value as UserRole)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white"
                   >
                     {['Leader', 'Vice', 'Head', 'Coordinator', 'Deputy Coordinator', 'Central', 'HRM'].map((r) => (
                       <option key={r} value={r}>{r}</option>
@@ -1076,7 +1317,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                   <select
                     value={newSecCommVal}
                     onChange={(e) => setNewSecCommVal(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white"
                   >
                     {['HR', 'PR', 'SM', 'OR', 'None'].map((c) => (
                       <option key={c} value={c}>{c}</option>
@@ -1093,7 +1334,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                   placeholder="HRM / EPR / Content / VIP / Central"
                   value={newSecDeptVal}
                   onChange={(e) => setNewSecDeptVal(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold"
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white"
                 />
               </div>
             </div>
@@ -1102,14 +1343,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
               <button
                 type="button"
                 onClick={() => setShowAddSecModal(false)}
-                className="flex-1 py-2.5 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-500"
+                className="flex-1 py-2.5 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
               >
                 {ar ? 'إلغاء' : 'Cancel'}
               </button>
               <button
                 type="button"
                 onClick={handleSaveNewSecurityCode}
-                className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl text-xs font-black shadow-md shadow-amber-500/20"
+                className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl text-xs font-black shadow-md shadow-amber-500/20 cursor-pointer"
               >
                 {ar ? 'حفظ الكود وإضافته' : 'Save Code'}
               </button>
@@ -1120,8 +1361,11 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
 
       {/* FULL MASTER EDIT USER MODAL */}
       {editingUser && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="w-full max-w-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 md:p-8 shadow-2xl space-y-6 my-auto max-h-[90vh] overflow-y-auto">
+        <div 
+          className="fixed inset-0 z-[99999] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, width: '100vw', height: '100vh' }}
+        >
+          <div className="w-full max-w-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 md:p-8 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto relative z-10 animate-fade-in text-slate-900 dark:text-white">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <div className="space-y-1">
                 <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 dark:bg-indigo-950/50 px-2.5 py-1 rounded-full uppercase">
@@ -1131,20 +1375,23 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                   {editingUser.fullName}
                 </h3>
               </div>
-              <button onClick={() => setEditingUser(null)} className="text-slate-400 hover:text-slate-600">
+              <button 
+                onClick={() => setEditingUser(null)} 
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <form onSubmit={handleSaveMasterEdit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">{ar ? 'الاسم الكامل *' : 'Full Name *'}</label>
                   <input
                     required
                     value={editFullName}
                     onChange={e => setEditFullName(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white"
                   />
                 </div>
 
@@ -1155,7 +1402,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                     type="email"
                     value={editEmail}
                     onChange={e => setEditEmail(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white"
                   />
                 </div>
 
@@ -1164,7 +1411,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                   <input
                     value={editPhone}
                     onChange={e => setEditPhone(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white"
                   />
                 </div>
 
@@ -1173,7 +1420,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                   <input
                     value={editCode}
                     onChange={e => setEditCode(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono font-bold text-indigo-600"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-mono font-bold text-indigo-600 dark:text-indigo-400"
                   />
                 </div>
 
@@ -1183,7 +1430,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                     type="date"
                     value={editDob}
                     onChange={e => setEditDob(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white"
                   />
                 </div>
 
@@ -1192,7 +1439,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                   <select
                     value={editRole}
                     onChange={e => setEditRole(e.target.value as UserRole)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white"
                   >
                     {ALL_ROLES.map(r => (
                       <option key={r} value={r}>{r}</option>
@@ -1205,7 +1452,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                   <select
                     value={editStatus}
                     onChange={e => setEditStatus(e.target.value as UserStatus)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white"
                   >
                     {ALL_STATUSES.map(s => (
                       <option key={s} value={s}>{s}</option>
@@ -1223,7 +1470,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                       const depts = COMMITTEE_STRUCTURE[comm] || [];
                       if (depts.length > 0) setEditDepartment(depts[0]);
                     }}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white"
                   >
                     <option value="None">None</option>
                     {['HRM', 'HR', 'PR', 'SM', 'OR'].map(c => (
@@ -1237,7 +1484,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                   <select
                     value={editDepartment}
                     onChange={e => setEditDepartment(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold"
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white"
                   >
                     <option value="None">None</option>
                     {(COMMITTEE_STRUCTURE[editCommittee] || ['HRM', 'EPR', 'Content', 'Graphic Design', 'VIP']).map(d => (

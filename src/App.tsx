@@ -473,7 +473,7 @@ export default function App() {
       case 'social':
         return <SocialMediaView />;
       case 'settings':
-        if (currentUser.role !== 'Super Admin') {
+        if (!['Super Admin', 'Head', 'Vice', 'HRM'].includes(currentUser.role)) {
           return <DashboardStats currentUser={currentUser} onNavigateToView={handleNavigateToView} />;
         }
         return <SettingsPanel currentUser={currentUser} onNavigateToView={handleNavigateToView} />;

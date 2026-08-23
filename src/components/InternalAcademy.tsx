@@ -11,7 +11,7 @@ interface InternalAcademyProps {
 export const InternalAcademy: React.FC<InternalAcademyProps> = ({ currentUser }) => {
   const { language, isRtl } = useLanguage();
   const isAr = language === 'ar';
-  const isAdminOrLeader = ['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader'].includes(currentUser.role);
+  const isAdminOrLeader = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader'].includes(currentUser.role);
 
   const [courses, setCourses] = useState<AcademyCourse[]>([]);
   const [activeCategory, setActiveCategory] = useState<string>('All');
@@ -56,7 +56,7 @@ export const InternalAcademy: React.FC<InternalAcademyProps> = ({ currentUser })
   return (
     <div className="p-6 space-y-6 animate-fade-in" dir={isRtl ? 'rtl' : 'ltr'}>
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-emerald-50 to-teal-50/40 dark:from-slate-900 dark:to-slate-850 p-6 rounded-3xl border border-emerald-200/40 dark:border-slate-800 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-slate-50 to-emerald-50/30 dark:from-slate-900 dark:to-emerald-950/20 p-6 rounded-3xl border border-emerald-200/40 dark:border-slate-800 shadow-sm">
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-bold text-xs uppercase tracking-widest">
             <BookOpen className="w-4 h-4" />
@@ -119,7 +119,7 @@ export const InternalAcademy: React.FC<InternalAcademyProps> = ({ currentUser })
             <div key={course.id} className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-5 space-y-4 shadow-sm flex flex-col justify-between hover:shadow-md transition-all">
               <div className="space-y-3">
                 <div className="flex justify-between items-center gap-2">
-                  <span className="text-[9px] font-black bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 px-2 py-0.5 rounded-full uppercase">
+                  <span className="text-[9px] font-black bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 px-2.5 py-0.5 rounded-full uppercase">
                     {course.category}
                   </span>
                   <span className="text-[9px] text-slate-400 font-bold">

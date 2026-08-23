@@ -80,6 +80,36 @@ Deno.serve(async (req) => {
     membershipCode,
   } = body || {};
 
+  // 1) Verify caller authentication & admin role
+  const authHeader = req.headers.get('Authorization') ?? '';
+  const jwt = authHeader.replace(/^Bearer\s+/i, '');
+  if (!jwt) {
+    return json({ ok: false, error: 'Missing or invalid Authorization header' }, 401);
+  }
+
+
+  const { data: callerAuth, error: callerErr } = await admin.auth.getUser(jwt);
+  if (callerErr || !callerAuth?.user) {
+    return json({ ok: false, error: 'Invalid or expired session' }, 401);
+  }
+
+  const { data: callerProfile, error: profileErr } = await admin
+    .from('profiles')
+    .select('role')
+    .eq('id', callerAuth.user.id)
+    .single();
+
+  const adminRoles = ['Super Admin', 'Leader', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Head', 'Central'];
+  if (profileErr || !callerProfile || !adminRoles.includes(callerProfile.role)) {
+    return json({ ok: false, error: 'Forbidden: Only administrators can create member accounts.' }, 403);
+  }
+
+  // Only Super Admin can assign Super Admin role
+  if (role === 'Super Admin' && callerProfile.role !== 'Super Admin') {
+    return json({ ok: false, error: 'Forbidden: Only Super Admin can create Super Admin accounts.' }, 403);
+  }
+
+  // 2) Validate input fields
   if (!email || !password || !fullName) {
     return json(
       { ok: false, error: 'email, password, and fullName are required' },
@@ -92,6 +122,7 @@ Deno.serve(async (req) => {
       400
     );
   }
+
 
   // 1) Create the auth user (Supabase Auth)
   const { data: created, error: createErr } = await admin.auth.admin.createUser({

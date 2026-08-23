@@ -13,6 +13,16 @@ interface OfficialLetterheadOptions {
   watermark?: boolean;
 }
 
+const escapeHtml = (str?: string): string => {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+};
+
 export const printDedicatedOfficialDocument = (options: OfficialLetterheadOptions) => {
   const printWindow = window.open('', '_blank', 'width=900,height=1000');
   if (!printWindow) {
@@ -20,20 +30,22 @@ export const printDedicatedOfficialDocument = (options: OfficialLetterheadOption
     return;
   }
 
-  const todayStr = options.date || new Date().toLocaleDateString('ar-EG', {
+  const todayStr = escapeHtml(options.date || new Date().toLocaleDateString('ar-EG', {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
-  });
+  }));
 
-  const docNo = options.docNumber || `EYE-DOC-${Date.now().toString().slice(-6)}`;
+  const docNo = escapeHtml(options.docNumber || `EYE-DOC-${Date.now().toString().slice(-6)}`);
+  const safeTitle = escapeHtml(options.title);
 
   const signaturesHtml = (options.signatures || [
     { title: 'مسؤول لجنة الموارد البشرية', name: 'أحمد إبراهيم' },
+    { title: 'نائب رئيس لجنة الموارد البشرية', name: 'ريهام أشرف' },
   ]).map(s => `
-    <div class="sig-tile" style="text-align: center; background: #f8fafc; border: 1px solid #cbd5e1; padding: 10px 8px; border-radius: 10px;">
-      <div style="font-size: 10px; font-weight: 800; color: #1b4cd3; margin-bottom: 4px;">${s.title}</div>
-      <div style="font-size: 16px; font-weight: 900; color: #0f172a; margin-top: 10px; font-family: 'Aldhabi', 'Aref Ruqaa', 'Amiri', 'Traditional Arabic', serif;">أ. ${s.name}</div>
+    <div class="sig-tile" style="text-align: center; background: #f8fafc; border: 1px solid #cbd5e1; padding: 10px 14px; border-radius: 10px; min-width: 140px;">
+      <div style="font-size: 10px; font-weight: 800; color: #1b4cd3; margin-bottom: 4px;">${escapeHtml(s.title)}</div>
+      <div style="font-size: 16px; font-weight: 900; color: #0f172a; margin-top: 10px; font-family: 'Aldhabi', 'Aref Ruqaa', 'Amiri', 'Traditional Arabic', serif;">أ. ${escapeHtml(s.name)}</div>
       <div style="font-size: 8px; color: #64748b; margin-top: 2px;">(توقيع واعتماد رسمي)</div>
     </div>
   `).join('');
@@ -43,7 +55,8 @@ export const printDedicatedOfficialDocument = (options: OfficialLetterheadOption
     <html dir="rtl" lang="ar">
     <head>
       <meta charset="utf-8">
-      <title>${options.title} — كيان المصريون الشباب EYE</title>
+      <title>${safeTitle} — كيان المصريون الشباب EYE</title>
+
       <style>
         @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap');
         

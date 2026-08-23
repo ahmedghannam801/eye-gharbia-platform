@@ -524,20 +524,38 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
       return;
     }
 
+    // Strict extension validation & sanitization (prevent path traversal / executable uploads)
+    const rawExt = uploadFile.name.split('.').pop()?.toLowerCase() || '';
+    const cleanExt = rawExt.replace(/[^a-z0-9]/g, '');
+    const forbiddenExts = ['exe', 'bat', 'cmd', 'sh', 'php', 'phtml', 'html', 'htm', 'js', 'vbs', 'scr', 'ps1', 'cgi', 'pl', 'jar', 'apk', 'com'];
+    if (!cleanExt || forbiddenExts.includes(cleanExt)) {
+      setUploadError(language === 'ar' ? 'صيغة الملف غير مسموح بها لأسباب أمنية.' : 'File type is blocked for security reasons.');
+      return;
+    }
+
+    const taskAllowedTypes = selectedTask.allowedFileTypes || [];
+    if (taskAllowedTypes.length > 0 && !taskAllowedTypes.includes('all') && !taskAllowedTypes.includes('*')) {
+      const isAllowed = taskAllowedTypes.some(t => t.toLowerCase() === cleanExt || t.toLowerCase() === `.${cleanExt}`);
+      if (!isAllowed) {
+        setUploadError(language === 'ar' ? `يرجى رفع ملف بصيغة مدعومة: ${taskAllowedTypes.join(', ')}` : `Please upload an allowed file format: ${taskAllowedTypes.join(', ')}`);
+        return;
+      }
+    }
+
     setIsUploading(true);
     setUploadProgress(20);
 
     try {
       // ── Step 1: Upload file to Supabase Storage ──────────────────────────
       let fileUrl = '';
-      const fileExt = uploadFile.name.split('.').pop();
-      const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
+      const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${cleanExt}`;
       const filePath = `submissions/${currentUser.id}/${fileName}`;
 
       setUploadProgress(40);
       const { error: uploadErr } = await supabase.storage
         .from('task-submissions')
         .upload(filePath, uploadFile);
+
 
       if (uploadErr) {
         console.error('[TaskBoard] Storage upload error:', uploadErr.message);
@@ -775,9 +793,20 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
 
   // Filtered task list calculation
   const filteredTasksList = (tasks || []).filter(task => {
-    if (!task) return false;
-    if (filterCommittee !== 'All' && task.committee !== filterCommittee) return false;
-    if (filterDepartment !== 'All' && task.department !== filterDepartment) return false;
+    if (filterCommittee !== 'All') {
+      const isHrm = filterCommittee === 'HR' || filterCommittee === 'HRM';
+      const matchComm = task.committee === filterCommittee || (isHrm && (task.committee === 'HR' || task.committee === 'HRM'));
+      if (!matchComm) return false;
+    }
+    if ((filterCommittee === 'HR' || filterCommittee === 'HRM') && filterDepartment !== 'All') {
+      const targetSub = filterDepartment.toLowerCase();
+      const matchHrm = (task.department || '').toLowerCase().includes(targetSub) ||
+                       (task.description || '').toLowerCase().includes(targetSub) ||
+                       (task.name || '').toLowerCase().includes(targetSub);
+      if (!matchHrm) return false;
+    } else if (filterDepartment !== 'All' && task.department !== filterDepartment) {
+      return false;
+    }
     if (filterPriority !== 'All' && task.priority !== filterPriority) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -1675,12 +1704,28 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
         <div className="flex flex-wrap items-center gap-2">
           <select
             value={filterCommittee}
-            onChange={(e) => setFilterCommittee(e.target.value)}
+            onChange={(e) => {
+              setFilterCommittee(e.target.value);
+              setFilterDepartment('All');
+            }}
             className="bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200"
           >
             <option value="All">{language === 'ar' ? 'كل اللجان' : 'All Committees'}</option>
-            {Object.keys(COMMITTEE_STRUCTURE).map(c => <option key={c} value={c}>{translateCommittee(c)}</option>)}
+            {Object.keys(COMMITTEE_STRUCTURE).map(c => <option key={c} value={c}>{c === 'HR' ? (language === 'ar' ? 'الموارد البشرية (HRM)' : 'HRM Committee') : translateCommittee(c)}</option>)}
           </select>
+
+          {(filterCommittee === 'HR' || filterCommittee === 'HRM') && (
+            <select
+              value={filterDepartment}
+              onChange={(e) => setFilterDepartment(e.target.value)}
+              className="bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-xl px-3 py-2 text-xs font-bold text-amber-900 dark:text-amber-200 animate-fadeIn shadow-sm"
+            >
+              <option value="All">{language === 'ar' ? '🏢 كل فروع HRM' : 'All HRM Branches'}</option>
+              <option value="HR OF PR">HR OF PR</option>
+              <option value="HR OF SM">HR OF SM</option>
+              <option value="HR OF OR">HR OF OR</option>
+            </select>
+          )}
 
           <select
             value={filterPriority}

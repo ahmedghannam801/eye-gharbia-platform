@@ -42,3 +42,4 @@ Thumbs.db
 
 # Deployment
 .vercel
+supabase/.temp/

@@ -35,7 +35,7 @@ const progressColor = (pct: number) =>
 export const WorkPlansOKR: React.FC<WorkPlansProps> = ({ currentUser }) => {
   const { language, isRtl } = useLanguage();
   const isAr = language === 'ar';
-  const canCreate = ['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader'].includes(currentUser.role);
+  const canCreate = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader'].includes(currentUser.role);
 
   const [plans, setPlans] = useState<WorkPlan[]>([]);
   const [expandedPlan, setExpandedPlan] = useState<string | null>(null);
@@ -110,7 +110,7 @@ export const WorkPlansOKR: React.FC<WorkPlansProps> = ({ currentUser }) => {
     <div className="p-6 space-y-6 animate-fade-in" dir={isRtl ? 'rtl' : 'ltr'} id="work-plans-view">
 
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-teal-50 to-cyan-50/40 dark:from-slate-900 dark:to-slate-850 p-6 rounded-3xl border border-teal-200/40 dark:border-slate-800 shadow-sm overflow-hidden">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-slate-50 to-teal-50/30 dark:from-slate-900 dark:to-teal-950/20 p-6 rounded-3xl border border-teal-200/40 dark:border-slate-800 shadow-sm overflow-hidden">
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-teal-600 dark:text-teal-400 font-bold text-xs uppercase tracking-widest">
             <Target className="w-4 h-4" />
@@ -310,15 +310,22 @@ export const WorkPlansOKR: React.FC<WorkPlansProps> = ({ currentUser }) => {
                 placeholder={isAr ? 'الهدف الرئيسي للخطة' : 'Main objective'}
                 className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-semibold focus:outline-none focus:border-teal-500 resize-none" />
               <div className="grid grid-cols-3 gap-2">
-                <select value={formCommittee} onChange={e => setFormCommittee(e.target.value)}
+                <select value={formCommittee} onChange={e => {
+                  setFormCommittee(e.target.value);
+                  setFormDept('All');
+                }}
                   className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-2 text-xs font-bold focus:outline-none focus:border-teal-500">
                   <option value="All">All</option>
-                  {['HR','PR','SM','OR'].map(c => <option key={c} value={c}>{c}</option>)}
+                  {['HR','PR','SM','OR'].map(c => <option key={c} value={c}>{c === 'HR' ? (isAr ? 'الموارد البشرية (HRM)' : 'HRM') : c}</option>)}
                 </select>
                 <select value={formDept} onChange={e => setFormDept(e.target.value)}
                   className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-2 text-xs font-bold focus:outline-none focus:border-teal-500">
                   <option value="All">All Depts</option>
-                  {(COMMITTEE_STRUCTURE[formCommittee] || []).map(d => <option key={d} value={d}>{d}</option>)}
+                  {formCommittee === 'HR' || formCommittee === 'HRM' ? (
+                    ['HR OF PR', 'HR OF SM', 'HR OF OR'].map(d => <option key={d} value={d}>{d}</option>)
+                  ) : (
+                    (COMMITTEE_STRUCTURE[formCommittee] || []).map(d => <option key={d} value={d}>{d}</option>)
+                  )}
                 </select>
                 <input type="month" value={formMonth} onChange={e => setFormMonth(e.target.value)}
                   className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-2 text-xs font-semibold focus:outline-none focus:border-teal-500" />

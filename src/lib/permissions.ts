@@ -4,19 +4,35 @@ import { UserProfile, MonthlyPerformance } from '../types';
  * Role-Based Access Control (RBAC) & Committee Permission Engine
  * 
  * Rules:
- * 1. HRM / Super Admin: Highest administrative role. Full unrestricted access to all committees,
- *    members, evaluations, tasks, reports, edit & delete capabilities, and statistics.
- * 2. HR Leader: Scoped strictly to their assigned committee (e.g. OR, HR, PR, SM, Media, etc.).
- *    Can only view, evaluate, track attendance for, add notes to, and manage members belonging to their OWN committee.
+ * 1. Super Admin / Head (رئيس) / Vice (نائب) / HRM: Highest administrative tier.
+ *    Full unrestricted access to all committees, members, evaluations, tasks, reports,
+ *    settings, edit & delete capabilities, and statistics.
+ * 2. HR Leader: Scoped strictly to their assigned committee.
  * 3. Member: Scoped to their own data and general public committee resources.
  */
+
+export const ADMIN_ROLES = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM', 'Central'];
+export const LEADERSHIP_ROLES = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM', 'Central'];
+
+export const isLeadershipRole = (role?: string): boolean => {
+  if (!role) return false;
+  return LEADERSHIP_ROLES.includes(role);
+};
+
+/**
+ * Returns true if user has top-level administrative permissions (Super Admin, Head, Vice, Coordinator, Deputy Coordinator, HRM, or Central)
+ */
+export const isAdminUser = (user: Partial<UserProfile> | null | undefined): boolean => {
+  if (!user || !user.role) return false;
+  return ADMIN_ROLES.includes(user.role) || isHRVice(user) || isCentralHR(user);
+};
 
 /**
  * Normalizes committee names for comparison (handles department mappings like 'HRM - HR OF OR' -> 'OR')
  */
 export const getEffectiveCommittee = (user: Partial<UserProfile> | null | undefined): string => {
   if (!user) return 'None';
-  if (user.role === 'Super Admin') return 'All';
+  if (user.role === 'Super Admin' || user.role === 'Head' || user.role === 'Vice') return 'All';
 
   const dept = (user.department || '').toUpperCase();
   const subComm = ((user as any).subCommittee || '').toUpperCase();
@@ -51,19 +67,18 @@ export const isCentralHR = (user: Partial<UserProfile> | null | undefined): bool
 };
 
 /**
- * Returns true if the user has HRM / Super Admin / HR Vice / Central HR administrative privileges
+ * Returns true if the user has HRM / Super Admin / Head / Vice administrative privileges
  */
 export const isHRM = (user: Partial<UserProfile> | null | undefined): boolean => {
-  if (!user) return false;
-  return user.role === 'Super Admin' || user.role === 'HRM' || isHRVice(user) || isCentralHR(user);
+  return isAdminUser(user);
 };
 
 /**
- * Returns true if the user is a Leader, Central official, or Coordinator for a given committee (or HRM/HR Vice)
+ * Returns true if the user is a Leader, Central official, or Coordinator for a given committee (or Admin tier)
  */
 export const isCommitteeLeader = (user: UserProfile | null | undefined, committee?: string): boolean => {
   if (!user) return false;
-  if (isHRM(user)) return true;
+  if (isAdminUser(user)) return true;
 
   const isLeaderRole = user.role === 'Leader' || user.role === 'Head' || user.role === 'Vice' || user.role === 'Coordinator' || user.role === 'Deputy Coordinator' || user.role === 'Central';
   if (!isLeaderRole) return false;
@@ -77,8 +92,8 @@ export const isCommitteeLeader = (user: UserProfile | null | undefined, committe
  * Checks if current user can view a target member profile
  */
 export const canViewMember = (currentUser: UserProfile | null | undefined, targetMember: UserProfile): boolean => {
-  if (!currentUser) return false;
-  if (currentUser.role === 'Super Admin') return true;
+  if (!currentUser || !targetMember) return false;
+  if (isAdminUser(currentUser)) return true;
   if (currentUser.id === targetMember.id) return true;
 
   const currentUserComm = getEffectiveCommittee(currentUser);
@@ -98,8 +113,8 @@ export const canViewMember = (currentUser: UserProfile | null | undefined, targe
  * Checks if current user can edit or manage a target member profile
  */
 export const canManageMember = (currentUser: UserProfile | null | undefined, targetMember: UserProfile): boolean => {
-  if (!currentUser) return false;
-  if (currentUser.role === 'Super Admin') return true;
+  if (!currentUser || !targetMember) return false;
+  if (isAdminUser(currentUser)) return true;
 
   const currentUserComm = getEffectiveCommittee(currentUser);
   const targetComm = getEffectiveCommittee(targetMember);
@@ -116,16 +131,12 @@ export const canManageMember = (currentUser: UserProfile | null | undefined, tar
 
 /**
  * Checks if current user can evaluate a target member
- * Rules:
- * 1. Super Admin and General HRM Leader evaluate all members ("لكل الناس").
- * 2. HRM Sub-branch Leaders (HR OF OR, HR OF SM, HR OF PR) evaluate members of THEIR committee ("أعضاء لجمتهم الفرعية").
- * 3. Committee Leaders (PR, OR, SM) evaluate members of their committee.
- * 4. Non-HR Vices cannot evaluate members.
  */
 export const canEvaluateMember = (currentUser: UserProfile | null | undefined, targetMember: UserProfile): boolean => {
-  if (!currentUser) return false;
+  if (!currentUser || !targetMember) return false;
   if (currentUser.id === targetMember.id) return false; // cannot self-evaluate
-  if (currentUser.role === 'Super Admin') return true;
+  if (isLeadershipRole(targetMember.role)) return false; // Leadership roles are NOT subject to member evaluations
+  if (isAdminUser(currentUser)) return true;
 
   const dept = (currentUser.department || '').toUpperCase();
   const subComm = ((currentUser as any).subCommittee || '').toUpperCase();
@@ -158,18 +169,20 @@ export const canEvaluateMember = (currentUser: UserProfile | null | undefined, t
  */
 export const filterMembersByPermission = (currentUser: UserProfile | null | undefined, members: UserProfile[]): UserProfile[] => {
   if (!currentUser) return [];
-  if (currentUser.role === 'Super Admin') return members;
+  const safeMembers = members || [];
+  if (isAdminUser(currentUser)) return safeMembers;
 
   const dept = (currentUser.department || '').toUpperCase();
   const subComm = ((currentUser as any).subCommittee || '').toUpperCase();
   const isSubHRM = dept.includes('HR OF ') || subComm.includes('HR OF ');
 
-  if (currentUser.role === 'HRM' && !isSubHRM) return members;
+  if (currentUser.role === 'HRM' && !isSubHRM) return safeMembers;
 
   const userComm = getEffectiveCommittee(currentUser);
-  if (userComm === 'All') return members;
+  if (userComm === 'All') return safeMembers;
 
-  return members.filter(m => {
+  return safeMembers.filter(m => {
+    if (!m) return false;
     if (m.id === currentUser.id) return true;
     const targetComm = getEffectiveCommittee(m);
     if (targetComm === userComm || m.committee === currentUser.committee) return true;
@@ -192,11 +205,13 @@ export const filterEvaluationsByPermission = <T extends { memberId?: string; com
   membersMap?: Map<string, UserProfile>
 ): T[] => {
   if (!currentUser) return [];
-  if (isHRM(currentUser)) return evaluations;
+  const safeEvals = evaluations || [];
+  if (isAdminUser(currentUser)) return safeEvals;
 
   const userComm = getEffectiveCommittee(currentUser);
 
-  return evaluations.filter(ev => {
+  return safeEvals.filter(ev => {
+    if (!ev) return false;
     if (ev.memberId && membersMap) {
       const member = membersMap.get(ev.memberId);
       if (member) {

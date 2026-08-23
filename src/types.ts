@@ -1002,6 +1002,21 @@ export interface FreezeRequest {
   createdAt: string;
 }
 
+export interface CommitteeChangeRequest {
+  id: string;
+  memberId: string;
+  memberName: string;
+  governorate?: string;
+  currentCommittee: string;
+  targetCommittee: string;
+  currentDepartment?: string;
+  targetDepartment?: string;
+  reason: string;
+  status: RequestStatus;
+  adminResponse?: string;
+  createdAt: string;
+}
+
 // ─── Disciplinary Record ─────────────────────────────────────────────────────
 export type DisciplinaryType = 'lft_nazar' | 'inzar';
 
@@ -1041,3 +1056,4 @@ export interface IssuedPosterRecord {
   createdAt: string;
   governorate?: string;
 }
+

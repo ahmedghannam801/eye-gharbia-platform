@@ -119,7 +119,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
                 </div>
               </div>
               <span className="px-2 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 font-bold text-[8px] uppercase tracking-wider border border-emerald-100 dark:border-emerald-900/35 font-mono">
-                {['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator'].includes(u.role) ? (language === 'ar' ? 'أدمن' : 'Admin') : u.role === 'Leader' ? (language === 'ar' ? 'قائد' : 'Leader') : (language === 'ar' ? 'عضو' : 'Member')}
+                {['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator'].includes(u.role) ? (language === 'ar' ? 'أدمن' : 'Admin') : u.role === 'Leader' ? (language === 'ar' ? 'قائد' : 'Leader') : (language === 'ar' ? 'عضو' : 'Member')}
               </span>
             </div>
           ))}
@@ -365,8 +365,8 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
                 <span className="truncate">{language === 'ar' ? `منصة العمل الموحدة لكيان EYE ${userGovWelcomeAr}` : `EYE ${userGovEn} Secretariat Platform`}</span>
               </div>
 
-              {/* Quick Governorate Switcher for Super Admin Only */}
-              {currentUser.role === 'Super Admin' && (
+              {/* Quick Governorate Switcher for Executive Leadership */}
+              {['Super Admin', 'Head', 'Vice'].includes(currentUser.role) && (
                 <div className="inline-flex items-center gap-1.5 bg-amber-500/15 dark:bg-amber-400/10 border border-amber-500/30 dark:border-amber-400/30 px-2.5 py-1 rounded-lg text-amber-800 dark:text-amber-300 text-[11px] font-bold shadow-2xs">
                   <MapPin className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
                   <span>{language === 'ar' ? 'التبديل للمحافظة:' : 'Branch:'}</span>
@@ -390,7 +390,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
             </h1>
 
             <p className="text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-200 max-w-2xl leading-relaxed">
-              {['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator'].includes(currentUser.role) && (language === 'ar' ? 'نظرة عامة على المنصة، مراجعة طلبات الانضمام المعلقة، والتحليلات الأساسية.' : 'Workspace overview, pending admissions audit, and telemetry.')}
+              {['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator'].includes(currentUser.role) && (language === 'ar' ? 'نظرة عامة على المنصة، مراجعة طلبات الانضمام المعلقة، والتحليلات الأساسية.' : 'Workspace overview, pending admissions audit, and telemetry.')}
               {currentUser.role === 'Leader' && (
                 currentUser.committee === 'HR'
                   ? (language === 'ar' ? 'متابعة وتقييم المهام والملفات لجميع اللجان الأخرى.' : 'Monitoring and evaluating tasks and submissions for all other committees.')
@@ -423,7 +423,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
 
           {/* Action CTAs (Fluid Mobile Buttons) */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 w-full sm:w-auto shrink-0">
-            {['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator'].includes(currentUser.role) && (
+            {['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator'].includes(currentUser.role) && (
               <>
                 <button
                   onClick={() => setShowImportModal(true)}
@@ -501,9 +501,9 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
       </div>
 
       {/* ========================================== */}
-      {/* 1. SUPER ADMIN METRICS PANEL & ACTION HUB */}
+      {/* 1. EXECUTIVE LEADERSHIP METRICS PANEL & ACTION HUB */}
       {/* ========================================== */}
-      {['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator'].includes(currentUser.role) && (
+      {['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator'].includes(currentUser.role) && (
         <div className="space-y-6 animate-fade-in">
           {/* Time Period Filter Pills */}
           <div className="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs">

@@ -53,6 +53,7 @@ import {
   UserStreak,
   CalendarEvent,
   DisciplinaryRecord,
+  CommitteeChangeRequest,
   MemoryPost,
   IssuedPosterRecord,
   getUserRoleTitle,
@@ -131,6 +132,7 @@ const userFromRow = (r: any): UserProfile => {
     lftNazarCount: override.lftNazarCount !== undefined ? override.lftNazarCount : (r.lft_nazar_count ?? 0),
     inzarCount: override.inzarCount !== undefined ? override.inzarCount : (r.inzar_count ?? 0),
     governorate: override.governorate !== undefined ? override.governorate : (r.governorate || 'الغربية'),
+    bonusPoints: override.bonusPoints !== undefined ? override.bonusPoints : (r.bonus_points ?? 0),
   };
 };
 
@@ -359,16 +361,31 @@ const excuseFromRow = (r: any): ExcuseRequest => ({
 
 const freezeFromRow = (r: any): FreezeRequest => ({
   id: r.id,
-  memberId: r.user_id || r.member_id,
-  memberName: r.user_name || r.member_name,
+  memberId: r.user_id || r.member_id || '',
+  memberName: r.user_name || r.member_name || 'عضو',
   committee: r.committee || 'None',
   department: r.department || 'None',
-  startDate: r.start_date || r.created_at,
-  endDate: r.end_date || r.created_at,
+  startDate: r.start_date ? String(r.start_date).slice(0, 10) : (r.startDate || new Date().toISOString().slice(0, 10)),
+  endDate: r.end_date ? String(r.end_date).slice(0, 10) : (r.endDate || new Date().toISOString().slice(0, 10)),
   reason: r.reason || '',
   status: r.status || 'Pending',
-  adminResponse: r.admin_response || undefined,
-  createdAt: r.created_at,
+  adminResponse: r.admin_response || r.decision_notes || undefined,
+  createdAt: r.created_at || new Date().toISOString(),
+});
+
+const committeeChangeFromRow = (r: any): CommitteeChangeRequest => ({
+  id: r.id,
+  memberId: r.user_id || r.member_id || '',
+  memberName: r.user_name || r.member_name || 'عضو',
+  governorate: r.governorate || 'الغربية',
+  currentCommittee: r.committee || r.current_committee || 'None',
+  targetCommittee: r.type || r.target_committee || 'HR',
+  currentDepartment: r.department || r.current_department || 'None',
+  targetDepartment: r.target_item_title || r.target_department || 'None',
+  reason: r.reason || '',
+  status: r.status || 'Pending',
+  adminResponse: r.admin_response || r.decision_notes || undefined,
+  createdAt: r.created_at || new Date().toISOString(),
 });
 
 const leaderFeedbackFromRow = (r: any): LeaderFeedback => ({
@@ -672,29 +689,39 @@ class SupabaseDatabase {
       }
     };
 
-    const [users, tasks, submissions, announcements, notifications, logs, certificates, meetings, attendance, workPlans, ideas, evaluations, leaderFeedbacks, workshops, excusesFreezes, settings, disciplinaryRecords, memoryWall, occasions, issuedPosters] =
-      await Promise.all([
-        safeFetch(supabase.from('profiles').select('*').order('joined_date', { ascending: false })),
-        safeFetch(supabase.from('tasks').select('*').order('created_date', { ascending: false })),
-        safeFetch(supabase.from('submissions').select('*').order('submitted_at', { ascending: false })),
-        safeFetch(supabase.from('announcements').select('*').order('created_date', { ascending: false })),
-        safeFetch(supabase.from('notifications').select('*').order('created_at', { ascending: false })),
-        safeFetch(supabase.from('activity_logs').select('*').order('timestamp', { ascending: false })),
-        safeFetch(supabase.from('issued_certificates').select('*').order('issued_at', { ascending: false })),
-        safeFetch(supabase.from('meetings').select('*').order('created_at', { ascending: false })),
-        safeFetch(supabase.from('attendance').select('*')),
-        safeFetch(supabase.from('work_plans').select('*').order('created_at', { ascending: false })),
-        safeFetch(supabase.from('volunteer_ideas').select('*').order('created_at', { ascending: false })),
-        safeFetch(supabase.from('member_evaluations').select('*').order('created_at', { ascending: false })),
-        safeFetch(supabase.from('leader_feedbacks').select('*').order('submitted_at', { ascending: false })),
-        safeFetch(supabase.from('live_workshops').select('*').order('created_at', { ascending: false })),
-        safeFetch(supabase.from('excuses_freezes').select('*').order('created_at', { ascending: false })),
-        safeFetch(supabase.from('org_settings').select('*').eq('id', 1).maybeSingle()),
-        safeFetch(supabase.from('disciplinary_records').select('*').order('issued_at', { ascending: false })),
-        safeFetch(supabase.from('memory_wall').select('*').order('created_at', { ascending: false })),
-        safeFetch(supabase.from('occasions').select('*').order('created_at', { ascending: false })),
-        safeFetch(supabase.from('issued_posters').select('*').order('created_at', { ascending: false })),
-      ]);
+    const [
+      users, tasks, submissions, announcements, notifications, logs, certificates,
+      meetings, attendance, workPlans, ideas, evaluations, leaderFeedbacks,
+      workshops, excusesFreezes, settings, disciplinaryRecords, memoryWall,
+      occasions, issuedPosters, academyCourses, rewardItems, rewardPurchases,
+      weeklyQuizzes, weeklyChallenges
+    ] = await Promise.all([
+      safeFetch(supabase.from('profiles').select('*').order('joined_date', { ascending: false })),
+      safeFetch(supabase.from('tasks').select('*').order('created_date', { ascending: false })),
+      safeFetch(supabase.from('submissions').select('*').order('submitted_at', { ascending: false })),
+      safeFetch(supabase.from('announcements').select('*').order('created_date', { ascending: false })),
+      safeFetch(supabase.from('notifications').select('*').order('created_at', { ascending: false })),
+      safeFetch(supabase.from('activity_logs').select('*').order('timestamp', { ascending: false })),
+      safeFetch(supabase.from('issued_certificates').select('*').order('issued_at', { ascending: false })),
+      safeFetch(supabase.from('meetings').select('*').order('created_at', { ascending: false })),
+      safeFetch(supabase.from('attendance').select('*')),
+      safeFetch(supabase.from('work_plans').select('*').order('created_at', { ascending: false })),
+      safeFetch(supabase.from('volunteer_ideas').select('*').order('created_at', { ascending: false })),
+      safeFetch(supabase.from('member_evaluations').select('*').order('created_at', { ascending: false })),
+      safeFetch(supabase.from('leader_feedbacks').select('*').order('submitted_at', { ascending: false })),
+      safeFetch(supabase.from('live_workshops').select('*').order('created_at', { ascending: false })),
+      safeFetch(supabase.from('excuses_freezes').select('*').order('created_at', { ascending: false })),
+      safeFetch(supabase.from('org_settings').select('*').eq('id', 1).maybeSingle()),
+      safeFetch(supabase.from('disciplinary_records').select('*').order('issued_at', { ascending: false })),
+      safeFetch(supabase.from('memory_wall').select('*').order('created_at', { ascending: false })),
+      safeFetch(supabase.from('occasions').select('*').order('created_at', { ascending: false })),
+      safeFetch(supabase.from('issued_posters').select('*').order('created_at', { ascending: false })),
+      safeFetch(supabase.from('academy_courses').select('*').order('created_at', { ascending: false })),
+      safeFetch(supabase.from('reward_items').select('*').order('created_at', { ascending: false })),
+      safeFetch(supabase.from('reward_purchases').select('*').order('purchased_at', { ascending: false })),
+      safeFetch(supabase.from('weekly_quizzes').select('*').order('created_at', { ascending: false })),
+      safeFetch(supabase.from('weekly_challenges').select('*').order('created_at', { ascending: false })),
+    ]);
 
     const getDeletedIds = (key: string): string[] => {
       try { return JSON.parse(localStorage.getItem(key) || '[]'); } catch { return []; }
@@ -720,19 +747,35 @@ class SupabaseDatabase {
     const deletedPurchaseIds = getDeletedIds('eye_deleted_purchase_ids');
     const deletedTemplateIds = getDeletedIds('eye_deleted_template_ids');
     const deletedOccasionIds = getDeletedIds('eye_deleted_occasion_ids');
+    const deletedAcademyCourseIds = getDeletedIds('eye_deleted_academy_course_ids');
+    const deletedQuizIds = getDeletedIds('eye_deleted_quiz_ids');
+    const deletedWeeklyChallengeIds = getDeletedIds('eye_deleted_weekly_challenge_ids');
 
     const mergeById = <T extends { id: string }>(remote: T[], local: T[], deletedIds: string[] = []): T[] => {
       const delSet = new Set(deletedIds);
       const validRemote = remote.filter((r) => !delSet.has(r.id));
       const validLocal = local.filter((l) => !delSet.has(l.id));
       const localMap = new Map(validLocal.map(l => [l.id, l]));
+      const remoteIdSet = new Set(validRemote.map(r => r.id));
 
       const mergedRemote = validRemote.map(r => {
         const localItem = localMap.get(r.id);
         if (!localItem) return r;
+
+        // Preserve local finalized approval/rejection state if remote is still pending (e.g. in-flight or offline sync)
+        const localStatus = (localItem as any).status;
+        const remoteStatus = (r as any).status;
+        const preserveLocalStatus = (localStatus === 'Approved' || localStatus === 'Rejected') && remoteStatus === 'Pending';
+        const finalStatus = preserveLocalStatus ? localStatus : (remoteStatus || localStatus);
+        const finalAdminResponse = (localItem as any).adminResponse && !(r as any).adminResponse
+          ? (localItem as any).adminResponse
+          : ((r as any).adminResponse || (localItem as any).adminResponse);
+
         return {
           ...localItem,
           ...r,
+          ...(finalStatus !== undefined ? { status: finalStatus } : {}),
+          ...(finalAdminResponse !== undefined ? { adminResponse: finalAdminResponse } : {}),
           ...(Array.isArray((localItem as any).assignedMemberIds) && (localItem as any).assignedMemberIds.length > 0 && (!Array.isArray((r as any).assignedMemberIds) || (r as any).assignedMemberIds.length === 0)
             ? { assignedMemberIds: (localItem as any).assignedMemberIds }
             : {}),
@@ -745,11 +788,8 @@ class SupabaseDatabase {
         };
       });
 
-      // ONLY keep local items if they were created offline and have not yet synced
-      // Never resurrect items that were removed or deleted from Supabase!
-      const pendingLocal = validLocal.filter(l => {
-        return (l as any)._pendingOffline === true || (typeof l.id === 'string' && l.id.startsWith('offline-'));
-      });
+      // Keep all valid local items that do not exist yet on remote (e.g. created locally / offline)
+      const pendingLocal = validLocal.filter(l => !remoteIdSet.has(l.id));
 
       return [...mergedRemote, ...pendingLocal];
     };
@@ -870,13 +910,15 @@ class SupabaseDatabase {
       const localEvaluations = this._ls<MemberEvaluation>('eye_member_evaluations');
       this.cache.evaluations = localEvaluations.filter(e => !deletedEvalIds.includes(e.id));
     }
-    if (leaderFeedbacks.data && leaderFeedbacks.data.length > 0) {
+    if (leaderFeedbacks && leaderFeedbacks.data) {
       this.cache.leaderFeedbacks = leaderFeedbacks.data.map(leaderFeedbackFromRow).filter(f => !deletedFeedbackIds.includes(f.id));
+      this._lsSave('eye_leader_feedback', this.cache.leaderFeedbacks);
     } else {
       this.cache.leaderFeedbacks = this._ls<LeaderFeedback>('eye_leader_feedback').filter(f => !deletedFeedbackIds.includes(f.id));
     }
-    if (workshops.data && workshops.data.length > 0) {
+    if (workshops && workshops.data) {
       this.cache.workshops = workshops.data.map(workshopFromRow).filter(w => !deletedWorkshopIds.includes(w.id));
+      this._lsSave('eye_live_workshops', this.cache.workshops);
     } else {
       this.cache.workshops = this._ls<LiveWorkshop>('eye_live_workshops').filter(w => !deletedWorkshopIds.includes(w.id));
     }
@@ -892,7 +934,7 @@ class SupabaseDatabase {
     }
 
     // Merge memory posts from Supabase cloud
-    if (memoryWall && memoryWall.data && memoryWall.data.length > 0) {
+    if (memoryWall && memoryWall.data) {
       const remoteMemories: MemoryPost[] = memoryWall.data.map(r => ({
         id: r.id,
         authorId: r.author_id,
@@ -908,7 +950,7 @@ class SupabaseDatabase {
       }));
       const localMemories = this.getMemoryPosts();
       const mergedMemories = mergeById(remoteMemories, localMemories, deletedMemoryIds);
-      localStorage.setItem('eye_memory_posts', JSON.stringify(mergedMemories));
+      this._lsSave('eye_memory_posts', mergedMemories);
     } else {
       const rawMemory = this._ls<any>('eye_memory_posts');
       if (rawMemory.length > 0) {
@@ -916,16 +958,99 @@ class SupabaseDatabase {
       }
     }
 
-    // Filter out permanently deleted rewards
-    const rawRewards = this._ls<any>('eye_rewards');
-    if (rawRewards.length > 0) {
-      localStorage.setItem('eye_rewards', JSON.stringify(rawRewards.filter((r: any) => !deletedRewardIds.includes(r.id))));
+    // Academy Courses Cloud Sync
+    if (academyCourses && academyCourses.data) {
+      const remoteCourses: AcademyCourse[] = academyCourses.data.map(r => ({
+        id: r.id,
+        title: r.title,
+        description: r.description || '',
+        category: r.category || 'General',
+        committee: r.committee || 'All',
+        readsCount: r.reads_count || 0,
+        completedBy: Array.isArray(r.completed_by) ? r.completed_by : [],
+      }));
+      const localCourses = this._ls<AcademyCourse>('eye_academy_courses');
+      const mergedCourses = mergeById(remoteCourses, localCourses, deletedAcademyCourseIds);
+      this._lsSave('eye_academy_courses', mergedCourses);
+    } else {
+      const rawCourses = this._ls<any>('eye_academy_courses');
+      if (rawCourses.length > 0) {
+        localStorage.setItem('eye_academy_courses', JSON.stringify(rawCourses.filter((c: any) => !deletedAcademyCourseIds.includes(c.id))));
+      }
     }
 
-    // Filter out permanently deleted purchases
-    const rawPurchases = this._ls<any>('eye_purchases');
-    if (rawPurchases.length > 0) {
-      localStorage.setItem('eye_purchases', JSON.stringify(rawPurchases.filter((p: any) => !deletedPurchaseIds.includes(p.id))));
+    // Rewards Items Cloud Sync
+    if (rewardItems && rewardItems.data) {
+      const remoteRewards: RewardItem[] = rewardItems.data.map(r => ({
+        id: r.id,
+        title: r.title,
+        description: r.description || '',
+        costPoints: r.cost_points || 100,
+        stock: r.stock ?? 10,
+        badgeReward: r.badge_reward,
+      }));
+      const localRewards = this._ls<RewardItem>('eye_rewards');
+      const mergedRewards = mergeById(remoteRewards, localRewards, deletedRewardIds);
+      this._lsSave('eye_rewards', mergedRewards);
+    } else {
+      const rawRewards = this._ls<any>('eye_rewards');
+      if (rawRewards.length > 0) {
+        localStorage.setItem('eye_rewards', JSON.stringify(rawRewards.filter((r: any) => !deletedRewardIds.includes(r.id))));
+      }
+    }
+
+    // Reward Purchases Cloud Sync
+    if (rewardPurchases && rewardPurchases.data) {
+      const remotePurchases: RewardPurchase[] = rewardPurchases.data.map(r => ({
+        id: r.id,
+        rewardId: r.reward_id || '',
+        rewardTitle: r.reward_title || '',
+        costPoints: r.cost_points || 0,
+        memberId: r.member_id || r.user_id || '',
+        memberName: r.member_name || '',
+        purchasedAt: r.purchased_at || new Date().toISOString(),
+        status: r.status || 'Approved',
+        rejectionReason: r.rejection_reason,
+      }));
+      const localPurchases = this._ls<RewardPurchase>('eye_reward_purchases');
+      const mergedPurchases = mergeById(remotePurchases, localPurchases, deletedPurchaseIds);
+      this._lsSave('eye_reward_purchases', mergedPurchases);
+    } else {
+      const rawPurchases = this._ls<any>('eye_purchases');
+      if (rawPurchases.length > 0) {
+        localStorage.setItem('eye_purchases', JSON.stringify(rawPurchases.filter((p: any) => !deletedPurchaseIds.includes(p.id))));
+      }
+    }
+
+    // Weekly Quizzes Cloud Sync
+    if (weeklyQuizzes && weeklyQuizzes.data) {
+      const remoteQuizzes: WeeklyQuiz[] = weeklyQuizzes.data.map(r => ({
+        id: r.id,
+        question: r.question,
+        options: Array.isArray(r.options) ? r.options : [],
+        correctAnswerIndex: r.correct_answer_index ?? 0,
+        pointsReward: r.points_reward ?? 50,
+        status: r.status || 'Active',
+      }));
+      const localQuizzes = this._ls<WeeklyQuiz>('eye_weekly_quizzes');
+      const mergedQuizzes = mergeById(remoteQuizzes, localQuizzes, deletedQuizIds);
+      this._lsSave('eye_weekly_quizzes', mergedQuizzes);
+    }
+
+    // Weekly Challenges Cloud Sync
+    if (weeklyChallenges && weeklyChallenges.data) {
+      const remoteChallenges: WeeklyChallenge[] = weeklyChallenges.data.map(r => ({
+        id: r.id,
+        title: r.title,
+        description: r.description || '',
+        targetCount: r.target_count || 1,
+        pointsReward: r.points || r.points_reward || 50,
+        badgeReward: r.badge_reward,
+        claimedUserIds: Array.isArray(r.claimed_user_ids) ? r.claimed_user_ids : [],
+      }));
+      const localChallenges = this._ls<WeeklyChallenge>('eye_weekly_challenges');
+      const mergedChallenges = mergeById(remoteChallenges, localChallenges, deletedWeeklyChallengeIds);
+      this._lsSave('eye_weekly_challenges', mergedChallenges);
     }
 
     // Filter out permanently deleted templates
@@ -935,7 +1060,7 @@ class SupabaseDatabase {
     }
 
     // Filter and merge occasions from Supabase cloud
-    if (occasions && occasions.data && occasions.data.length > 0) {
+    if (occasions && occasions.data) {
       const remoteOccasions: OccasionGreeting[] = occasions.data.map(r => ({
         id: r.id,
         title: r.title,
@@ -962,7 +1087,7 @@ class SupabaseDatabase {
     }
 
     // Filter and merge issued posters from Supabase cloud
-    if (issuedPosters && issuedPosters.data && issuedPosters.data.length > 0) {
+    if (issuedPosters && issuedPosters.data) {
       const remotePosters: IssuedPosterRecord[] = issuedPosters.data.map(r => ({
         id: r.id,
         memberId: r.member_id,
@@ -983,20 +1108,36 @@ class SupabaseDatabase {
       this._lsSave('eye_issued_posters', mergedPosters);
     }
 
-    if (excusesFreezes.data) {
+    if (excusesFreezes && excusesFreezes.data) {
+      const isCommitteeChange = (r: any) => {
+        const reqType = (r.request_type || r.type || '').toLowerCase();
+        return reqType === 'committeechange' || reqType === 'committee_change' || reqType === 'تغيير لجنة' || reqType === 'نقل لجنة';
+      };
+      const isFreeze = (r: any) => {
+        const reqType = (r.request_type || r.type || '').toLowerCase();
+        return reqType === 'freeze' || reqType === 'تجميد' || reqType === 'فريز';
+      };
+
       const remoteExcuses = excusesFreezes.data
-        .filter(r => (r.request_type || '').toLowerCase() === 'excuse')
+        .filter(r => !isCommitteeChange(r) && !isFreeze(r))
         .map(excuseFromRow);
-      const localExcuses = this.getExcuseRequests();
+      const localExcuses = this._ls<ExcuseRequest>('eye_excuse_requests');
       const mergedExcuses = mergeById(remoteExcuses, localExcuses, deletedExcuseIds);
       this._lsSave('eye_excuse_requests', mergedExcuses);
 
       const remoteFreezes = excusesFreezes.data
-        .filter(r => (r.request_type || '').toLowerCase() === 'freeze')
+        .filter(isFreeze)
         .map(freezeFromRow);
-      const localFreezes = this.getFreezeRequests();
+      const localFreezes = this._ls<FreezeRequest>('eye_freeze_requests');
       const mergedFreezes = mergeById(remoteFreezes, localFreezes, deletedFreezeIds);
       this._lsSave('eye_freeze_requests', mergedFreezes);
+
+      const remoteCommitteeChanges = excusesFreezes.data
+        .filter(isCommitteeChange)
+        .map(committeeChangeFromRow);
+      const localCommitteeChanges = this._ls<CommitteeChangeRequest>('eye_committee_requests');
+      const mergedCommitteeChanges = mergeById(remoteCommitteeChanges, localCommitteeChanges, []);
+      this._lsSave('eye_committee_requests', mergedCommitteeChanges);
     }
 
     if (settings.data) this.cache.settings = settingsFromRow(settings.data);
@@ -1090,6 +1231,7 @@ class SupabaseDatabase {
         .on('postgres_changes', { event: '*', schema: 'public', table: 'memory_wall' },           () => { this.refreshAll(); })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'occasions' },             () => { this.refreshAll(); })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'issued_posters' },        () => { this.refreshAll(); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'academy_courses' },       () => { this.refreshAll(); })
         .subscribe();
 
       console.debug('Full-platform real-time subscriptions established successfully');
@@ -2123,6 +2265,76 @@ class SupabaseDatabase {
     } catch {}
     this.notify();
     return 10; // all 10 seeded codes are now available
+  }
+
+  async updateUserBonusPoints(userId: string, points: number, actor?: UserProfile): Promise<void> {
+    const idx = this.cache.users.findIndex(u => u.id === userId);
+    if (idx !== -1) {
+      this.cache.users[idx] = { ...this.cache.users[idx], bonusPoints: points };
+      this._lsSave('eye_users', this.cache.users);
+      saveProfileOverride(userId, { bonusPoints: points });
+      if (this.cache.currentUser?.id === userId) {
+        this.cache.currentUser = { ...this.cache.currentUser, bonusPoints: points };
+      }
+      this.notify();
+
+      if (isSupabaseConfigured && supabase) {
+        await supabase.from('profiles').update({ bonus_points: points }).eq('id', userId);
+      }
+
+      if (actor) {
+        this.logActivity(
+          actor.id,
+          actor.fullName,
+          actor.role,
+          'Bonus Points Updated',
+          `Set bonus points for ${this.cache.users[idx].fullName} to ${points} pts.`
+        );
+      }
+    }
+  }
+
+  async resetAllUsersPoints(actor: UserProfile): Promise<boolean> {
+    try {
+      // 1. Zero out bonusPoints and points on all cached users
+      this.cache.users = this.cache.users.map(u => ({
+        ...u,
+        bonusPoints: 0,
+      }));
+      this._lsSave('eye_users', this.cache.users);
+
+      // 2. Clear local storage overrides for bonus points
+      try {
+        const overrides = JSON.parse(localStorage.getItem('eye_profile_overrides') || '{}');
+        for (const k of Object.keys(overrides)) {
+          if (overrides[k]) {
+            overrides[k].bonusPoints = 0;
+          }
+        }
+        localStorage.setItem('eye_profile_overrides', JSON.stringify(overrides));
+      } catch (e) {}
+
+      // 3. Clear quiz submissions, streak data and challenge claims
+      localStorage.removeItem('eye_quiz_submissions');
+      localStorage.removeItem('eye_user_streaks');
+      const challenges = this.getWeeklyChallenges().map(c => ({ ...c, claimedUserIds: [] }));
+      this._lsSave('eye_weekly_challenges', challenges);
+
+      // 4. Update Supabase profiles table
+      if (isSupabaseConfigured && supabase) {
+        await Promise.allSettled([
+          supabase.from('profiles').update({ bonus_points: 0 }).neq('id', '00000000-0000-0000-0000-000000000000'),
+          supabase.from('weekly_challenges').update({ claimed_user_ids: [] }).neq('id', '0'),
+        ]);
+      }
+
+      this.notify();
+      this.logActivity(actor.id, actor.fullName, actor.role, 'Points Reset', 'Reset and zeroed out all member points and bonuses across the entity.');
+      return true;
+    } catch (err) {
+      console.error('[resetAllUsersPoints Error]:', err);
+      return false;
+    }
   }
 
   async importUsers(usersToImport: Partial<UserProfile>[], updater: UserProfile): Promise<number> {
@@ -3975,25 +4187,31 @@ class SupabaseDatabase {
     return idea;
   }
 
-  toggleUpvoteIdea(ideaId: string, userId: string): void {
+  toggleUpvoteIdea(ideaId: string, userOrUserId: string | UserProfile): void {
+    const userId = typeof userOrUserId === 'string' ? userOrUserId : userOrUserId.id;
     const all = this.getIdeas().map(i => {
       if (i.id !== ideaId) return i;
-      const upvotes = i.upvotes.includes(userId)
-        ? i.upvotes.filter(id => id !== userId)
-        : [...i.upvotes, userId];
+      const upvotes = (i.upvotes || []).includes(userId)
+        ? (i.upvotes || []).filter(id => id !== userId)
+        : [...(i.upvotes || []), userId];
       return { ...i, upvotes };
     });
     this._lsSave('eye_ideas', all);
     this.notify();
   }
 
-  addCommentToIdea(ideaId: string, userName: string, comment: string): void {
+  toggleIdeaVote(ideaId: string, userOrUserId: string | UserProfile): void {
+    this.toggleUpvoteIdea(ideaId, userOrUserId);
+  }
+
+  addCommentToIdea(ideaId: string, userOrUserName: string | UserProfile, comment: string): void {
+    const userName = typeof userOrUserName === 'string' ? userOrUserName : userOrUserName.fullName;
     const all = this.getIdeas().map(i => {
       if (i.id !== ideaId) return i;
       return {
         ...i,
         comments: [
-          ...i.comments,
+          ...(i.comments || []),
           {
             id: 'c-' + Math.random().toString(36).slice(2),
             userName,
@@ -4084,48 +4302,8 @@ class SupabaseDatabase {
   // ═══════════════════════════════════════════════════
   getRewards(): RewardItem[] {
     const items = this._ls<RewardItem>('eye_rewards');
-    if (items.length === 0) {
-      const defaultRewards: RewardItem[] = [
-        {
-          id: 'reward-cert-gold',
-          title: 'شهادة شكر وتقدير ذهبية معتمدة 🌟',
-          description: 'شهادة شكر وتقدير إدارية رسمية معتمدة من إدارة الكيان وموثقة برقم قيد وسجل رسمي.',
-          costPoints: 150,
-          stock: 20,
-        },
-        {
-          id: 'reward-badge-vip',
-          title: 'وسام التميز القيادي VIP 👑',
-          description: 'شعار العضو المتميز يظهر بجانب اسمك في لوحة الشرف وملفك الشخصي طوال الشهر.',
-          costPoints: 200,
-          stock: 15,
-        },
-        {
-          id: 'reward-mentorship',
-          title: 'جلسة استشارية وتوجيه مهني فردي 🚀',
-          description: 'جلسة تدريبية وتوجيه مهني فردي (1-on-1) مع أحد قادة ومستشاري الكيان لتطوير مسارك.',
-          costPoints: 250,
-          stock: 8,
-        },
-        {
-          id: 'reward-spotlight',
-          title: 'تسليط الضوء ونشر إنجازك على منصات الكيان 📢',
-          description: 'بوستر تقديري خاص ونشر إنجازك في صفحة الكيان الرسمية ومجموعات التواصل.',
-          costPoints: 180,
-          stock: 12,
-        },
-        {
-          id: 'reward-idea-feature',
-          title: 'تبني فكرة تطوعية وتمويل تنفيذها 💡',
-          description: 'اعتماد فكرتك المقترحة في بنك الأفكار كخطة عمل رئيسية وتوفير الدعم لتنفيذها.',
-          costPoints: 300,
-          stock: 5,
-        },
-      ];
-      this._lsSave('eye_rewards', defaultRewards);
-      return defaultRewards;
-    }
-    return items;
+    const deletedIds: string[] = JSON.parse(localStorage.getItem('eye_deleted_reward_ids') || '[]');
+    return items.filter(r => !deletedIds.includes(r.id));
   }
 
   getMemberPointsBreakdown(userId: string): {
@@ -4157,18 +4335,18 @@ class SupabaseDatabase {
     }
 
     // 2. Attendance Points (Meetings & Live Workshops)
-    const attendance = this.getAttendance().filter(a => a.memberId === userId || (a as any).userId === userId);
+    const attendance = this.getAllAttendance().filter(a => a.memberId === userId || (a as any).userId === userId);
     const meetings = this.getMeetings();
     let earnedAttendance = 0;
     for (const att of attendance) {
       const m = meetings.find(x => x.id === att.meetingId);
-      const isOnline = m?.type === 'online' || m?.location?.toLowerCase().includes('online') || m?.location?.includes('زووم') || m?.location?.includes('zoom');
+      const isOnline = (m?.type as string) === 'Online' || (m?.type as string) === 'online' || m?.location?.toLowerCase().includes('online') || m?.location?.includes('زووم') || m?.location?.includes('zoom');
       earnedAttendance += isOnline ? 5 : 10;
     }
 
     // 3. User Bonus Points & Base Profile Points
-    const user = this.getUserById(userId);
-    const bonusPoints = (user?.bonusPoints || 0) + (user?.points || 0);
+    const user = this.getUsers().find(u => u.id === userId);
+    const bonusPoints = (user?.bonusPoints || 0) + ((user as any)?.points || 0);
 
     // 4. Trivia, Quizzes & Challenges
     const quizzes = this._ls<any>('eye_weekly_quizzes');
@@ -4182,13 +4360,13 @@ class SupabaseDatabase {
     }
 
     // 5. Volunteer Ideas
-    const ideas = this.getVolunteerIdeas().filter(i => i.authorId === userId || (i as any).userId === userId);
+    const ideas = this.getIdeas().filter(i => i.createdBy === userId || (i as any).userId === userId);
     const ideasPoints = ideas.length * 10;
 
     const totalEarned = earnedTasks + earnedAttendance + bonusPoints + triviaPoints + ideasPoints;
 
     // 6. Deduct purchases that are Approved or Pending (Active hold)
-    const purchases = this.getPurchases().filter(p => (p.memberId === userId || (p as any).userId === userId) && p.status !== 'Rejected');
+    const purchases = this.getPurchases().filter(p => (p.memberId === userId || (p as any).userId === userId) && (p.status as string) !== 'Rejected');
     const spentPurchases = purchases.reduce((acc, p) => acc + (p.costPoints || 0), 0);
 
     const availablePoints = Math.max(0, totalEarned - spentPurchases);
@@ -5266,35 +5444,14 @@ class SupabaseDatabase {
   // LIVE WORKSHOPS & INTERACTIVE STREAM
   // ═══════════════════════════════════════════════════
   getLiveWorkshops(userCommittee?: string): LiveWorkshop[] {
-    let workshops = this._ls<LiveWorkshop>('eye_live_workshops');
-    const isInit = localStorage.getItem('eye_init_live_workshops');
-    if (!isInit) {
-      localStorage.setItem('eye_init_live_workshops', 'true');
-      const defaultWorkshop: LiveWorkshop = {
-        id: 'ws-seed-1',
-        title: 'الورشة التفاعلية الحية: التخطيط التكتيكي وإدارة المشاريع 🔴',
-        description: 'ورشة عمل وتدريب مباشر تفاعلي لشرح آليات إدارة الفرق والتخطيط الشهري في الكيان مع فتح باب الأسئلة المباشرة.',
-        streamType: 'youtube_live',
-        streamUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-        committee: 'All',
-        department: 'All',
-        status: 'Ended',
-        scheduledAt: new Date().toISOString(),
-        pointsReward: 60,
-        createdBy: 'admin-seed',
-        createdByName: 'إدارة الكيان',
-        createdAt: new Date().toISOString(),
-        attendeesCount: 14,
-        attendeeIds: [],
-      };
-      this._lsSave('eye_live_workshops', [defaultWorkshop]);
-      workshops = [defaultWorkshop];
-    }
+    const workshops = this._ls<LiveWorkshop>('eye_live_workshops');
+    const deletedIds: string[] = JSON.parse(localStorage.getItem('eye_deleted_workshop_ids') || '[]');
+    const filtered = workshops.filter(w => !deletedIds.includes(w.id));
 
     if (userCommittee && userCommittee !== 'None') {
-      return workshops.filter(w => w.committee === 'All' || w.committee === userCommittee);
+      return filtered.filter(w => w.committee === 'All' || w.committee === userCommittee);
     }
-    return workshops;
+    return filtered;
   }
 
   createLiveWorkshop(
@@ -5313,8 +5470,40 @@ class SupabaseDatabase {
     const all = this.getLiveWorkshops();
     this._lsSave('eye_live_workshops', [newWorkshop, ...all]);
     this.notify();
+
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('live_workshops').insert({
+        id: newWorkshop.id,
+        title: newWorkshop.title,
+        description: newWorkshop.description,
+        stream_type: newWorkshop.streamType,
+        stream_url: newWorkshop.streamUrl,
+        committee: newWorkshop.committee,
+        department: newWorkshop.department,
+        status: newWorkshop.status,
+        scheduled_at: newWorkshop.scheduledAt,
+        points_reward: newWorkshop.pointsReward,
+        created_by: actor.id,
+        created_by_name: actor.fullName,
+        created_at: newWorkshop.createdAt,
+        governorate: actor.governorate || 'الغربية',
+      }).then();
+    }
+
     this.logActivity(actor.id, actor.fullName, actor.role, 'Live Workshop Created', `Created live workshop: "${newWorkshop.title}"`);
     return newWorkshop;
+  }
+
+  async deleteLiveWorkshop(workshopId: string, actor: UserProfile): Promise<void> {
+    this.recordDeletedId('eye_deleted_workshop_ids', workshopId);
+    const workshops = this.getLiveWorkshops().filter(w => w.id !== workshopId);
+    this.cache.workshops = workshops;
+    this._lsSave('eye_live_workshops', workshops);
+    this.notify();
+    if (isSupabaseConfigured && supabase) {
+      await supabase.from('live_workshops').delete().eq('id', workshopId);
+    }
+    this.logActivity(actor.id, actor.fullName, actor.role, 'Live Workshop Deleted', `Deleted live workshop ${workshopId}`);
   }
 
   updateWorkshopStatus(workshopId: string, status: WorkshopStatus, actor: UserProfile): void {
@@ -5324,6 +5513,11 @@ class SupabaseDatabase {
     });
     this._lsSave('eye_live_workshops', workshops);
     this.notify();
+
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('live_workshops').update({ status }).eq('id', workshopId).then();
+    }
+
     this.logActivity(actor.id, actor.fullName, actor.role, 'Live Workshop Status Changed', `Set status of workshop ${workshopId} to ${status}`);
   }
 
@@ -5378,7 +5572,7 @@ class SupabaseDatabase {
   // ═══════════════════════════════════════════════════
   // EXECUTIVE SMART REPORT ANALYTICS
   // ═══════════════════════════════════════════════════
-  getExecutiveAnalyticsData(actor: UserProfile): ExecutiveAnalyticsData {
+  getExecutiveAnalyticsData(actor: UserProfile, _period?: string, _committee?: string): ExecutiveAnalyticsData {
     const users = this.getUsers();
     const tasks = this.getTasks();
     const subs = this.getSubmissions();
@@ -5558,42 +5752,8 @@ class SupabaseDatabase {
   // WEEKLY CHALLENGES & STREAKS
   // ═══════════════════════════════════════════════════
   getWeeklyChallenges(): WeeklyChallenge[] {
-    let list = this._ls<WeeklyChallenge>('eye_weekly_challenges');
+    const list = this._ls<WeeklyChallenge>('eye_weekly_challenges');
     const deletedIds: string[] = JSON.parse(localStorage.getItem('eye_deleted_weekly_challenge_ids') || '[]');
-
-    const isInit = localStorage.getItem('eye_init_weekly_challenges');
-    if (!isInit) {
-      localStorage.setItem('eye_init_weekly_challenges', 'true');
-      const seeds: WeeklyChallenge[] = [
-        {
-          id: 'wchall-1',
-          title: '🔥 سلسلة النشاط الأسبوعي',
-          description: 'قم بتسجيل الدخول والتفاعل مع الكيان لمدة 5 أيام متتالية هذا الأسبوع.',
-          targetCount: 5,
-          pointsReward: 50,
-          claimedUserIds: [],
-        },
-        {
-          id: 'wchall-2',
-          title: '📝 بطل الملخصات التدريبية',
-          description: 'شاهد فيديو تدريبي إجباري وقدم ملخصك المعتمَد من القائد.',
-          targetCount: 1,
-          pointsReward: 40,
-          badgeReward: 'task_crusher',
-          claimedUserIds: [],
-        },
-        {
-          id: 'wchall-3',
-          title: '🔴 الحاضر الذهبي بالورش',
-          description: 'احضر ورشة عمل واحدة على الأقل عبر البث المباشر وسجّل حضورك.',
-          targetCount: 1,
-          pointsReward: 60,
-          claimedUserIds: [],
-        }
-      ];
-      this._lsSave('eye_weekly_challenges', seeds);
-      list = seeds;
-    }
     return list.filter(c => !deletedIds.includes(c.id));
   }
 
@@ -5618,6 +5778,21 @@ class SupabaseDatabase {
     const updated = [newChall, ...list];
     this._lsSave('eye_weekly_challenges', updated);
     this.notify();
+
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('weekly_challenges').insert({
+        id: newChall.id,
+        title: newChall.title,
+        description: newChall.description,
+        target_count: newChall.targetCount,
+        points: newChall.pointsReward,
+        badge_reward: newChall.badgeReward || null,
+        claimed_user_ids: newChall.claimedUserIds,
+        created_at: new Date().toISOString(),
+        governorate: actor?.governorate || 'الغربية',
+      }).then();
+    }
+
     if (actor) {
       this.logActivity(actor.id, actor.fullName, actor.role, 'Challenge Created', `Created weekly challenge "${title}"`);
     }
@@ -5625,14 +5800,15 @@ class SupabaseDatabase {
   }
 
   deleteWeeklyChallenge(id: string, actor?: UserProfile): void {
-    const deletedIds: string[] = JSON.parse(localStorage.getItem('eye_deleted_weekly_challenge_ids') || '[]');
-    if (!deletedIds.includes(id)) {
-      deletedIds.push(id);
-      localStorage.setItem('eye_deleted_weekly_challenge_ids', JSON.stringify(deletedIds));
-    }
+    this.recordDeletedId('eye_deleted_weekly_challenge_ids', id);
     const rawList = this._ls<WeeklyChallenge>('eye_weekly_challenges');
     this._lsSave('eye_weekly_challenges', rawList.filter(c => c.id !== id));
     this.notify();
+
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('weekly_challenges').delete().eq('id', id).then();
+    }
+
     if (actor) {
       this.logActivity(actor.id, actor.fullName, actor.role, 'Challenge Deleted', `Deleted weekly challenge ${id}`);
     }
@@ -5670,6 +5846,10 @@ class SupabaseDatabase {
     const currentBonus = user.bonusPoints || 0;
     this.updateUserBonusPoints(user.id, currentBonus + chall.pointsReward);
 
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('weekly_challenges').update({ claimed_user_ids: [...chall.claimedUserIds, user.id] }).eq('id', challengeId).then();
+    }
+
     this.addNotification(
       user.id,
       '🎉 تم تحصيل مكافأة التحدي الأسبوعي!',
@@ -5685,35 +5865,8 @@ class SupabaseDatabase {
   // INTERNAL ACADEMY & TRAINING LIBRARY
   // ═══════════════════════════════════════════════════
   getCourses(): AcademyCourse[] {
-    let list = this._ls<AcademyCourse>('eye_academy_courses');
+    const list = this._ls<AcademyCourse>('eye_academy_courses');
     const deletedIds: string[] = JSON.parse(localStorage.getItem('eye_deleted_academy_course_ids') || '[]');
-
-    const isInit = localStorage.getItem('eye_init_academy_courses');
-    if (!isInit) {
-      localStorage.setItem('eye_init_academy_courses', 'true');
-      const seeds: AcademyCourse[] = [
-        {
-          id: 'course-1',
-          title: 'دليل مهارات القيادة وإدارة فرق العمل 📘',
-          description: 'دليل شامل يغطي أساسيات التواصل التنفيذي وتفويض المهام وبناء روح الفريق.',
-          category: 'Management',
-          committee: 'All',
-          readsCount: 14,
-          completedBy: [],
-        },
-        {
-          id: 'course-2',
-          title: 'أساسيات الهوية البصرية والتصميم الكياني 🎨',
-          description: 'تعرّف على لوائح التصميم والألوان المعتمدة وشعار الكيان.',
-          category: 'Design',
-          committee: 'SM',
-          readsCount: 22,
-          completedBy: [],
-        },
-      ];
-      this._lsSave('eye_academy_courses', seeds);
-      list = seeds;
-    }
     return list.filter(c => !deletedIds.includes(c.id));
   }
 
@@ -5731,21 +5884,36 @@ class SupabaseDatabase {
     const updated = [newCourse, ...list];
     this._lsSave('eye_academy_courses', updated);
     this.notify();
+
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('academy_courses').insert({
+        id: newCourse.id,
+        title: newCourse.title,
+        description: newCourse.description,
+        category: newCourse.category,
+        committee: newCourse.committee,
+        reads_count: newCourse.readsCount,
+        completed_by: newCourse.completedBy,
+        governorate: actor.governorate || 'الغربية',
+      }).then();
+    }
+
     this.logActivity(actor.id, actor.fullName, actor.role, 'Course Created', `Added academy course "${title}"`);
     return newCourse;
   }
 
-  deleteCourse(id: string, actor: UserProfile): void {
-    const deletedIds: string[] = JSON.parse(localStorage.getItem('eye_deleted_academy_course_ids') || '[]');
-    if (!deletedIds.includes(id)) {
-      deletedIds.push(id);
-      localStorage.setItem('eye_deleted_academy_course_ids', JSON.stringify(deletedIds));
-    }
+  async deleteCourse(id: string, actor: UserProfile): Promise<void> {
+    this.recordDeletedId('eye_deleted_academy_course_ids', id);
     const rawList1 = this._ls<AcademyCourse>('eye_academy_courses');
     const rawList2 = this._ls<AcademyCourse>('eye_courses');
     this._lsSave('eye_academy_courses', rawList1.filter(c => c.id !== id));
     this._lsSave('eye_courses', rawList2.filter(c => c.id !== id));
     this.notify();
+
+    if (isSupabaseConfigured && supabase) {
+      await supabase.from('academy_courses').delete().eq('id', id);
+    }
+
     this.logActivity(actor.id, actor.fullName, actor.role, 'Course Deleted', `Deleted academy course ${id}`);
   }
 
@@ -5762,6 +5930,10 @@ class SupabaseDatabase {
     }
     this._lsSave('eye_academy_courses', list);
 
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('academy_courses').update({ reads_count: course.readsCount, completed_by: course.completedBy }).eq('id', courseId).then();
+    }
+
     if (updatedPoints) {
       const user = this.cache.users.find(u => u.id === userId);
       if (user) {
@@ -5776,31 +5948,8 @@ class SupabaseDatabase {
   // WEEKLY TRIVIA / QUIZZES
   // ═══════════════════════════════════════════════════
   getQuizzes(): WeeklyQuiz[] {
-    let list = this._ls<WeeklyQuiz>('eye_weekly_quizzes');
+    const list = this._ls<WeeklyQuiz>('eye_weekly_quizzes');
     const deletedIds: string[] = JSON.parse(localStorage.getItem('eye_deleted_quiz_ids') || '[]');
-
-    const isInit = localStorage.getItem('eye_init_weekly_quizzes');
-    if (!isInit) {
-      localStorage.setItem('eye_init_weekly_quizzes', 'true');
-      const seeds: WeeklyQuiz[] = [
-        {
-          id: 'quiz-1',
-          question: 'ما هي الركيزة الأساسية للتميز والتأثير الإيجابي في كيان EYE؟ 🌟',
-          options: [
-            'العمل الجماعي والمسؤولية والالتزام',
-            'التسرع في إنجاز المهام فردياً',
-            'تجنب التواصل مع قيادات الكيان',
-            'الاعتماد فقط على التقارير الروتينية'
-          ],
-          correctAnswerIndex: 0,
-          pointsReward: 30,
-          status: 'Active',
-          createdAt: new Date().toISOString(),
-        }
-      ];
-      this._lsSave('eye_weekly_quizzes', seeds);
-      list = seeds;
-    }
     return list.filter(q => !deletedIds.includes(q.id));
   }
 
@@ -5818,21 +5967,36 @@ class SupabaseDatabase {
     const updated = [newQuiz, ...list];
     this._lsSave('eye_weekly_quizzes', updated);
     this.notify();
+
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('weekly_quizzes').insert({
+        id: newQuiz.id,
+        question: newQuiz.question,
+        options: newQuiz.options,
+        correct_answer_index: newQuiz.correctAnswerIndex,
+        points_reward: newQuiz.pointsReward,
+        status: newQuiz.status,
+        created_at: newQuiz.createdAt,
+        governorate: actor.governorate || 'الغربية',
+      }).then();
+    }
+
     this.logActivity(actor.id, actor.fullName, actor.role, 'Quiz Created', `Created trivia quiz: "${question}"`);
     return newQuiz;
   }
 
   deleteQuiz(id: string, actor: UserProfile): void {
-    const deletedIds: string[] = JSON.parse(localStorage.getItem('eye_deleted_quiz_ids') || '[]');
-    if (!deletedIds.includes(id)) {
-      deletedIds.push(id);
-      localStorage.setItem('eye_deleted_quiz_ids', JSON.stringify(deletedIds));
-    }
+    this.recordDeletedId('eye_deleted_quiz_ids', id);
     const rawList1 = this._ls<WeeklyQuiz>('eye_weekly_quizzes');
     const rawList2 = this._ls<WeeklyQuiz>('eye_quizzes');
     this._lsSave('eye_weekly_quizzes', rawList1.filter(q => q.id !== id));
     this._lsSave('eye_quizzes', rawList2.filter(q => q.id !== id));
     this.notify();
+
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('weekly_quizzes').delete().eq('id', id).then();
+    }
+
     this.logActivity(actor.id, actor.fullName, actor.role, 'Quiz Deleted', `Deleted trivia quiz ${id}`);
   }
 
@@ -5945,18 +6109,8 @@ class SupabaseDatabase {
   }
 
   // ═══════════════════════════════════════════════════
-  // MASTER DELETE & CREATE HELPER METHODS
+  // TEMPLATES & HUBS
   // ═══════════════════════════════════════════════════
-  deleteLiveWorkshop(id: string, actor: UserProfile): void {
-    this.recordDeletedId('eye_deleted_workshop_ids', id);
-    const list = this.getLiveWorkshops().filter(w => w.id !== id);
-    this._lsSave('eye_live_workshops', list);
-    this.notify();
-    if (isSupabaseConfigured && supabase) {
-      supabase.from('live_workshops').delete().eq('id', id).then();
-    }
-    this.logActivity(actor.id, actor.fullName, actor.role, 'Live Workshop Deleted', `Deleted workshop ${id}`);
-  }
 
 
 
@@ -6493,7 +6647,7 @@ class SupabaseDatabase {
   getExcuseRequests(currentUser?: UserProfile): ExcuseRequest[] {
     const list: ExcuseRequest[] = this._ls<ExcuseRequest>('eye_excuse_requests') || [];
     const activeGov = this.getTargetGovernorate(currentUser);
-    if (activeGov === 'All' || activeGov === 'المركزية') {
+    if (activeGov === 'All' || activeGov === 'المركزية' || currentUser?.role === 'Super Admin') {
       return list;
     }
     const govUserIds = new Set(
@@ -6507,8 +6661,9 @@ class SupabaseDatabase {
   clearAllExcuseAndFreezeRequests(actor: UserProfile): void {
     this._lsSave('eye_excuse_requests', []);
     this._lsSave('eye_freeze_requests', []);
+    this._lsSave('eye_committee_requests', []);
     this.notify();
-    this.logActivity(actor.id, actor.fullName, actor.role, 'Excuses & Freezes Cleared', 'Cleared all excuses and freeze requests.');
+    this.logActivity(actor.id, actor.fullName, actor.role, 'Excuses & Freezes Cleared', 'Cleared all excuses, freeze requests, and committee change requests.');
   }
 
   createExcuseRequest(req: Omit<ExcuseRequest, 'id' | 'createdAt' | 'status'>, actor: UserProfile): ExcuseRequest {
@@ -6518,43 +6673,46 @@ class SupabaseDatabase {
       status: 'Pending',
       createdAt: new Date().toISOString(),
     };
-    const list = this.getExcuseRequests();
-    const updated = [newReq, ...list];
+    const list = this._ls<ExcuseRequest>('eye_excuse_requests') || [];
+    const updated = [newReq, ...list.filter(r => r.id !== newReq.id)];
     this._lsSave('eye_excuse_requests', updated);
     this.notify();
 
     (async () => {
       try {
         if (!isSupabaseConfigured || !supabase) return;
-        const { error } = await supabase.from('excuses_freezes').insert({
+        const { error } = await supabase.from('excuses_freezes').upsert({
           id: newReq.id,
           user_id: req.memberId,
           user_name: req.memberName,
-          governorate: actor.governorate,
+          governorate: actor.governorate || 'الغربية',
           committee: req.committee,
           department: req.department,
           request_type: 'Excuse',
-          type: req.type,
+          type: req.type || 'Excuse',
           reason: req.reason,
           target_item_title: req.targetTitle || null,
           date: req.date,
+          start_date: req.date,
           status: 'Pending',
           created_at: newReq.createdAt,
-        });
+        }, { onConflict: 'id' });
         if (error) console.warn('[Supabase Excuse Insert Warn]:', error.message || error);
       } catch (err) {
         console.error('[Supabase Excuse Insert Error]:', err);
       }
     })();
 
-    // Notify Super Admin, Vice, Coordinators, HRM, and Committee Leaders
+    // Notify Super Admin, Vice, Coordinators, HRM, Head, Central, and Committee Leaders
     const receivers = this.getUsers().filter(
       (u) =>
-        (['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM'].includes(u.role) ||
-          (u.role === 'Leader' && u.committee === req.committee)) &&
+        (['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM', 'Head', 'Central'].includes(u.role) ||
+          u.department === 'HRM' ||
+          u.committee === 'HR' ||
+          (u.role === 'Leader' && (u.committee === req.committee || u.committee === 'All'))) &&
         u.status === 'Active'
     );
-    const receiverIds = receivers.map((r) => r.id);
+    const receiverIds = Array.from(new Set(receivers.map((r) => r.id)));
     const safeReason = (req.reason || '').slice(0, 40);
     this.addNotificationsBulk(
       receiverIds,
@@ -6570,17 +6728,29 @@ class SupabaseDatabase {
 
   async updateExcuseStatus(id: string, status: 'Approved' | 'Rejected', adminResponse: string, actor: UserProfile): Promise<void> {
     try {
-      const list = this.getExcuseRequests();
+      const list = this._ls<ExcuseRequest>('eye_excuse_requests') || [];
       const target = list.find((r) => r.id === id);
       if (target) {
-        const isExecutive = ['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM'].includes(actor.role);
+        const isExecutive =
+          ['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM', 'Head', 'Central', 'Leader'].includes(actor.role) ||
+          actor.department === 'HRM' ||
+          actor.committee === 'HR';
         if (!isExecutive) {
-          console.warn('Unauthorized: Only Super Admin / HEAD HR & Vice can approve/reject excuse requests.');
+          console.warn('Unauthorized: Only Leaders / Super Admin / HEAD HR & Vice can approve/reject excuse requests.');
           return;
         }
 
         target.status = status;
         target.adminResponse = adminResponse;
+
+        // Also update any matching duplicate records in local list
+        list.forEach((r) => {
+          if (r.id === id || (r.memberId === target.memberId && r.date === target.date)) {
+            r.status = status;
+            r.adminResponse = adminResponse;
+          }
+        });
+
         this._lsSave('eye_excuse_requests', list);
         this.addNotification(
           target.memberId,
@@ -6592,15 +6762,54 @@ class SupabaseDatabase {
         this.notify();
 
         if (isSupabaseConfigured && supabase) {
-          await supabase
-            .from('excuses_freezes')
-            .update({
-              status,
-              admin_response: adminResponse,
-              reviewed_by: actor.fullName,
-              reviewed_at: new Date().toISOString(),
-            })
-            .eq('id', id);
+          const reviewedAt = new Date().toISOString();
+          const updatePayload: any = {
+            id: target.id,
+            user_id: target.memberId,
+            user_name: target.memberName,
+            governorate: actor.governorate || 'الغربية',
+            committee: target.committee,
+            department: target.department,
+            request_type: 'Excuse',
+            type: target.type || 'Excuse',
+            reason: target.reason,
+            target_item_title: target.targetTitle || null,
+            date: target.date,
+            start_date: target.date,
+            status,
+            admin_response: adminResponse || null,
+            decision_notes: adminResponse || null,
+            reviewed_by: actor.fullName,
+            reviewed_at: reviewedAt,
+          };
+
+          const res = await supabase.from('excuses_freezes').update({
+            status,
+            admin_response: adminResponse || null,
+            decision_notes: adminResponse || null,
+            reviewed_by: actor.fullName,
+            reviewed_at: reviewedAt,
+          }).eq('id', id).select();
+
+          if (!res.data || res.data.length === 0) {
+            const { error: upsertErr } = await supabase
+              .from('excuses_freezes')
+              .upsert(updatePayload, { onConflict: 'id' });
+
+            if (upsertErr) {
+              await supabase
+                .from('excuses_freezes')
+                .update({
+                  status,
+                  admin_response: adminResponse || null,
+                  decision_notes: adminResponse || null,
+                  reviewed_by: actor.fullName,
+                  reviewed_at: reviewedAt,
+                })
+                .eq('user_id', target.memberId)
+                .eq('date', target.date);
+            }
+          }
         }
 
         this.logActivity(actor.id, actor.fullName, actor.role, 'Excuse Status Updated', `Updated excuse ${id} to ${status}`);
@@ -6611,17 +6820,17 @@ class SupabaseDatabase {
   }
 
   getFreezeRequests(currentUser?: UserProfile): FreezeRequest[] {
-    const list: FreezeRequest[] = this._ls<FreezeRequest>('eye_freeze_requests') || [];
+    let list: FreezeRequest[] = this._ls<FreezeRequest>('eye_freeze_requests') || [];
     const activeGov = this.getTargetGovernorate(currentUser);
-    if (activeGov === 'All' || activeGov === 'المركزية') {
+    if (activeGov === 'All' || activeGov === 'المركزية' || currentUser?.role === 'Super Admin') {
       return list;
     }
     const govUserIds = new Set(
       this.cache.users
-        .filter(u => (u.governorate?.trim() || 'الغربية') === activeGov)
-        .map(u => u.id)
+        .filter((u) => (u.governorate?.trim() || 'الغربية') === activeGov)
+        .map((u) => u.id)
     );
-    return list.filter(r => !r.memberId || govUserIds.has(r.memberId));
+    return list.filter((r) => !r.memberId || govUserIds.has(r.memberId));
   }
 
   createFreezeRequest(req: Omit<FreezeRequest, 'id' | 'createdAt' | 'status'>, actor: UserProfile): FreezeRequest {
@@ -6631,42 +6840,45 @@ class SupabaseDatabase {
       status: 'Pending',
       createdAt: new Date().toISOString(),
     };
-    const list = this.getFreezeRequests();
-    const updated = [newReq, ...list];
+    const list = this._ls<FreezeRequest>('eye_freeze_requests') || [];
+    const updated = [newReq, ...list.filter(r => r.id !== newReq.id)];
     this._lsSave('eye_freeze_requests', updated);
     this.notify();
 
     (async () => {
       try {
         if (!isSupabaseConfigured || !supabase) return;
-        const { error } = await supabase.from('excuses_freezes').insert({
+        const { error } = await supabase.from('excuses_freezes').upsert({
           id: newReq.id,
           user_id: req.memberId,
           user_name: req.memberName,
-          governorate: actor.governorate,
+          governorate: actor.governorate || 'الغربية',
           committee: req.committee,
           department: req.department,
           request_type: 'Freeze',
+          type: 'Freeze',
           reason: req.reason,
           start_date: req.startDate,
           end_date: req.endDate,
           status: 'Pending',
           created_at: newReq.createdAt,
-        });
+        }, { onConflict: 'id' });
         if (error) console.warn('[Supabase Freeze Insert Warn]:', error.message || error);
       } catch (err) {
         console.error('[Supabase Freeze Insert Error]:', err);
       }
     })();
 
-    // Notify Super Admin, Vice, Coordinators, HRM, and Committee Leaders
+    // Notify Super Admin, Vice, Coordinators, HRM, Head, Central, and Committee Leaders
     const receivers = this.getUsers().filter(
       (u) =>
-        (['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM'].includes(u.role) ||
-          (u.role === 'Leader' && u.committee === req.committee)) &&
+        (['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM', 'Head', 'Central'].includes(u.role) ||
+          u.department === 'HRM' ||
+          u.committee === 'HR' ||
+          (u.role === 'Leader' && (u.committee === req.committee || u.committee === 'All'))) &&
         u.status === 'Active'
     );
-    const receiverIds = receivers.map((r) => r.id);
+    const receiverIds = Array.from(new Set(receivers.map((r) => r.id)));
     const safeReason = (req.reason || '').slice(0, 40);
     this.addNotificationsBulk(
       receiverIds,
@@ -6682,17 +6894,29 @@ class SupabaseDatabase {
 
   async updateFreezeStatus(id: string, status: 'Approved' | 'Rejected', adminResponse: string, actor: UserProfile): Promise<void> {
     try {
-      const list = this.getFreezeRequests();
-      const target = list.find(r => r.id === id);
+      const list = this._ls<FreezeRequest>('eye_freeze_requests') || [];
+      const target = list.find((r) => r.id === id);
       if (target) {
-        const isExecutive = ['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM'].includes(actor.role);
+        const isExecutive =
+          ['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM', 'Head', 'Central', 'Leader'].includes(actor.role) ||
+          actor.department === 'HRM' ||
+          actor.committee === 'HR';
         if (!isExecutive) {
-          console.warn('Unauthorized: Only Super Admin / HEAD HR & Vice can approve/reject freeze requests.');
+          console.warn('Unauthorized: Only Leaders / Super Admin / HEAD HR & Vice can approve/reject freeze requests.');
           return;
         }
 
         target.status = status;
         target.adminResponse = adminResponse;
+
+        // Also update any matching duplicate records in the list
+        list.forEach((r) => {
+          if (r.id === id || (r.memberId === target.memberId && r.startDate === target.startDate && r.endDate === target.endDate)) {
+            r.status = status;
+            r.adminResponse = adminResponse;
+          }
+        });
+
         this._lsSave('eye_freeze_requests', list);
         this.addNotification(
           target.memberId,
@@ -6704,17 +6928,252 @@ class SupabaseDatabase {
         this.notify();
 
         if (isSupabaseConfigured && supabase) {
-          await supabase.from('excuses_freezes').update({
+          const reviewedAt = new Date().toISOString();
+          const updatePayload: any = {
+            id: target.id,
+            user_id: target.memberId,
+            user_name: target.memberName,
+            governorate: actor.governorate || 'الغربية',
+            committee: target.committee,
+            department: target.department,
+            request_type: 'Freeze',
+            type: 'Freeze',
+            reason: target.reason,
+            start_date: target.startDate,
+            end_date: target.endDate,
             status,
+            decision_notes: adminResponse || null,
+            admin_response: adminResponse || null,
             reviewed_by: actor.fullName,
-            reviewed_at: new Date().toISOString(),
-          }).eq('id', id);
+            reviewed_at: reviewedAt,
+          };
+
+          // 1. Update by ID
+          const res = await supabase.from('excuses_freezes').update({
+            status,
+            decision_notes: adminResponse || null,
+            admin_response: adminResponse || null,
+            reviewed_by: actor.fullName,
+            reviewed_at: reviewedAt,
+          }).eq('id', id).select();
+
+          // 2. If row did not exist or update matched 0 rows, perform guaranteed upsert
+          if (!res.data || res.data.length === 0) {
+            const { error: upsertErr } = await supabase
+              .from('excuses_freezes')
+              .upsert(updatePayload, { onConflict: 'id' });
+
+            if (upsertErr) {
+              await supabase
+                .from('excuses_freezes')
+                .update({
+                  status,
+                  decision_notes: adminResponse || null,
+                  admin_response: adminResponse || null,
+                  reviewed_by: actor.fullName,
+                  reviewed_at: reviewedAt,
+                })
+                .eq('user_id', target.memberId)
+                .eq('start_date', target.startDate);
+            }
+          }
         }
 
         this.logActivity(actor.id, actor.fullName, actor.role, 'Freeze Status Updated', `Updated freeze request ${id} to ${status}`);
       }
     } catch (err) {
       console.error('[updateFreezeStatus Error]:', err);
+    }
+  }
+
+  // ─── COMMITTEE CHANGE REQUESTS SYSTEM ───
+  getCommitteeChangeRequests(_currentUser?: UserProfile): CommitteeChangeRequest[] {
+    return this._ls<CommitteeChangeRequest>('eye_committee_requests') || [];
+  }
+
+  createCommitteeChangeRequest(
+    req: Omit<CommitteeChangeRequest, 'id' | 'createdAt' | 'status'>,
+    actor: UserProfile
+  ): CommitteeChangeRequest {
+    const newReq: CommitteeChangeRequest = {
+      ...req,
+      id: 'comm-' + Math.random().toString(36).slice(2, 9),
+      status: 'Pending',
+      createdAt: new Date().toISOString(),
+    };
+    const list = this._ls<CommitteeChangeRequest>('eye_committee_requests') || [];
+    const updated = [newReq, ...list.filter(r => r.id !== newReq.id)];
+    this._lsSave('eye_committee_requests', updated);
+    this.notify();
+
+    (async () => {
+      try {
+        if (!isSupabaseConfigured || !supabase) return;
+        const { error } = await supabase.from('excuses_freezes').upsert({
+          id: newReq.id,
+          user_id: req.memberId,
+          user_name: req.memberName,
+          governorate: actor.governorate || 'الغربية',
+          committee: req.currentCommittee,
+          department: req.currentDepartment || null,
+          request_type: 'CommitteeChange',
+          type: req.targetCommittee,
+          target_item_title: req.targetDepartment || null,
+          reason: req.reason,
+          date: new Date().toISOString().slice(0, 10),
+          status: 'Pending',
+          created_at: newReq.createdAt,
+        }, { onConflict: 'id' });
+        if (error) console.warn('[Supabase Committee Change Insert Warn]:', error.message || error);
+      } catch (err) {
+        console.error('[Supabase Committee Change Insert Error]:', err);
+      }
+    })();
+
+    // Notify Super Admin, Vice, Coordinators, HRM, Head, Central, and Committee Leaders (both current and target committee)
+    const receivers = this.getUsers().filter(
+      (u) =>
+        (['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM', 'Head', 'Central'].includes(u.role) ||
+          u.department === 'HRM' ||
+          u.committee === 'HR' ||
+          (u.role === 'Leader' && (u.committee === req.currentCommittee || u.committee === req.targetCommittee || u.committee === 'All'))) &&
+        u.status === 'Active'
+    );
+    const receiverIds = Array.from(new Set(receivers.map((r) => r.id)));
+    const safeReason = (req.reason || '').slice(0, 50);
+    this.addNotificationsBulk(
+      receiverIds,
+      '🔄 طلب تغيير لجنة جديد',
+      `طلب العضو ${actor.fullName} الانتقال من لجنة (${req.currentCommittee}) إلى لجنة (${req.targetCommittee}). السبب: ${safeReason}...`,
+      'info',
+      newReq.id
+    );
+
+    this.logActivity(
+      actor.id,
+      actor.fullName,
+      actor.role,
+      'Committee Change Requested',
+      `Requested transfer from ${req.currentCommittee} to ${req.targetCommittee}: ${safeReason}`
+    );
+    return newReq;
+  }
+
+  async updateCommitteeChangeRequestStatus(
+    id: string,
+    status: 'Approved' | 'Rejected',
+    adminResponse: string,
+    actor: UserProfile
+  ): Promise<void> {
+    try {
+      const list = this._ls<CommitteeChangeRequest>('eye_committee_requests') || [];
+      const target = list.find((r) => r.id === id);
+      if (target) {
+        const isExecutive =
+          ['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM', 'Head', 'Central', 'Leader'].includes(actor.role) ||
+          actor.department === 'HRM' ||
+          actor.committee === 'HR';
+        if (!isExecutive) {
+          console.warn('Unauthorized: Only Leaders / Super Admin / HR leaders can approve/reject committee change requests.');
+          return;
+        }
+
+        target.status = status;
+        target.adminResponse = adminResponse;
+
+        list.forEach((r) => {
+          if (r.id === id || (r.memberId === target.memberId && r.targetCommittee === target.targetCommittee)) {
+            r.status = status;
+            r.adminResponse = adminResponse;
+          }
+        });
+
+        this._lsSave('eye_committee_requests', list);
+
+        // If Approved, officially update the member's committee and department in the database!
+        if (status === 'Approved') {
+          const targetMember = this.getUsers().find((u) => u.id === target.memberId);
+          if (targetMember) {
+            this.updateProfile(
+              target.memberId,
+              {
+                committee: target.targetCommittee,
+                department: target.targetDepartment || 'None',
+              },
+              actor
+            );
+          }
+        }
+
+        this.addNotification(
+          target.memberId,
+          status === 'Approved' ? '🎉 تمت الموافقة على طلب نقل اللجنة' : '❌ تم رفض طلب نقل اللجنة',
+          `رد الإدارة والقادة على طلب نقلك إلى لجنة (${target.targetCommittee}): ${adminResponse || (status === 'Approved' ? 'تمت الموافقة وتحديث لجنتك بنجاح!' : 'تم رفض الطلب.')}`,
+          status === 'Approved' ? 'success' : 'warning',
+          target.id
+        );
+        this.notify();
+
+        if (isSupabaseConfigured && supabase) {
+          const reviewedAt = new Date().toISOString();
+          const updatePayload: any = {
+            id: target.id,
+            user_id: target.memberId,
+            user_name: target.memberName,
+            governorate: actor.governorate || 'الغربية',
+            committee: target.currentCommittee,
+            department: target.currentDepartment || null,
+            request_type: 'CommitteeChange',
+            type: target.targetCommittee,
+            target_item_title: target.targetDepartment || null,
+            reason: target.reason,
+            date: new Date().toISOString().slice(0, 10),
+            status,
+            decision_notes: adminResponse || null,
+            admin_response: adminResponse || null,
+            reviewed_by: actor.fullName,
+            reviewed_at: reviewedAt,
+          };
+
+          const res = await supabase.from('excuses_freezes').update({
+            status,
+            decision_notes: adminResponse || null,
+            admin_response: adminResponse || null,
+            reviewed_by: actor.fullName,
+            reviewed_at: reviewedAt,
+          }).eq('id', id).select();
+
+          if (!res.data || res.data.length === 0) {
+            const { error: upsertErr } = await supabase
+              .from('excuses_freezes')
+              .upsert(updatePayload, { onConflict: 'id' });
+
+            if (upsertErr) {
+              await supabase
+                .from('excuses_freezes')
+                .update({
+                  status,
+                  decision_notes: adminResponse || null,
+                  admin_response: adminResponse || null,
+                  reviewed_by: actor.fullName,
+                  reviewed_at: reviewedAt,
+                })
+                .eq('user_id', target.memberId)
+                .eq('request_type', 'CommitteeChange');
+            }
+          }
+        }
+
+        this.logActivity(
+          actor.id,
+          actor.fullName,
+          actor.role,
+          'Committee Change Status Updated',
+          `Updated committee change request ${id} for ${target.memberName} to ${status}`
+        );
+      }
+    } catch (err) {
+      console.error('[updateCommitteeChangeRequestStatus Error]:', err);
     }
   }
   // ─── Disciplinary Records ────────────────────────────────────────────────
@@ -6858,7 +7317,8 @@ class SupabaseDatabase {
   }
 
   // ─── Announcement Reactions ──────────────────────────────────────────────
-  toggleAnnouncementReaction(announcementId: string, emoji: string, userId: string): void {
+  toggleAnnouncementReaction(announcementId: string, emoji: string, userOrUserId: string | UserProfile): void {
+    const userId = typeof userOrUserId === 'string' ? userOrUserId : userOrUserId.id;
     const target = this.cache.announcements.find(a => a.id === announcementId);
     if (!target) return;
 
@@ -6923,7 +7383,8 @@ class SupabaseDatabase {
     return full;
   }
 
-  toggleMemoryLike(postId: string, userId: string): void {
+  toggleMemoryLike(postId: string, userOrUserId: string | UserProfile): void {
+    const userId = typeof userOrUserId === 'string' ? userOrUserId : userOrUserId.id;
     const list = this.getMemoryPosts();
     const target = list.find(m => m.id === postId);
     if (!target) return;
@@ -7119,34 +7580,6 @@ class SupabaseDatabase {
         }
       });
     });
-  }
-
-  async updateUserBonusPoints(userId: string, bonusPoints: number, actor?: UserProfile): Promise<void> {
-    try {
-      const users = this.getUsers();
-      const targetUser = users.find(u => u.id === userId);
-      if (targetUser) {
-        targetUser.bonusPoints = bonusPoints;
-        this._lsSave('eye_users', users);
-        this.notify();
-
-        if (isSupabaseConfigured && supabase) {
-          await supabase.from('profiles').update({ bonus_points: bonusPoints }).eq('id', userId);
-        }
-
-        if (actor) {
-          this.logActivity(
-            actor.id,
-            actor.fullName,
-            actor.role,
-            'Bonus Points Updated',
-            `Set bonus points for ${targetUser.fullName} to ${bonusPoints} pts.`
-          );
-        }
-      }
-    } catch (err) {
-      console.error('[updateUserBonusPoints Error]:', err);
-    }
   }
 }
 

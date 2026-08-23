@@ -430,8 +430,8 @@ const CertPreview: React.FC<{ cert: IssuedCertificate; onPrint: () => void; tran
 export const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ currentUser }) => {
   const { language } = useLanguage();
   const ar = language === 'ar';
-  const canIssue = ['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader', 'HRM'].includes(currentUser.role);
-  const canApprove = ['Super Admin', 'Vice', 'HRM'].includes(currentUser.role);
+  const canIssue = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader', 'HRM'].includes(currentUser.role);
+  const canApprove = ['Super Admin', 'Head', 'Vice', 'HRM'].includes(currentUser.role);
   const [tab, setTab] = useState<'issue' | 'my' | 'all' | 'pending'>(canIssue ? 'issue' : 'my');
   const [selectedRecipient, setSelectedRecipient] = useState('');
   const [certType, setCertType] = useState<CertificateType>('appreciation');

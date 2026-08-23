@@ -13,7 +13,7 @@ interface IdeaBankProps {
 export const IdeaBank: React.FC<IdeaBankProps> = ({ currentUser, onNavigateToView }) => {
   const { language, isRtl } = useLanguage();
   const isAr = language === 'ar';
-  const isAdminOrLeader = ['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader'].includes(currentUser.role);
+  const isAdminOrLeader = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader'].includes(currentUser.role);
   const [viewTab, setViewTab] = useState<'ideas' | 'suggestions'>('ideas');
 
   const [ideas, setIdeas] = useState<VolunteerIdea[]>([]);
@@ -81,14 +81,14 @@ export const IdeaBank: React.FC<IdeaBankProps> = ({ currentUser, onNavigateToVie
   const handleCommentSubmit = (ideaId: string, e: React.FormEvent) => {
     e.preventDefault();
     if (!newCommentText.trim()) return;
-    db.addCommentToIdea(ideaId, currentUser.fullName, newCommentText);
+    db.addCommentToIdea(ideaId, currentUser, newCommentText);
     setNewCommentText('');
   };
 
   return (
     <div className="p-6 space-y-6 animate-fade-in" dir={isRtl ? 'rtl' : 'ltr'}>
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-amber-50 to-orange-50/40 dark:from-slate-900 dark:to-slate-850 p-6 rounded-3xl border border-amber-200/40 dark:border-slate-800 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-slate-50 to-amber-50/30 dark:from-slate-900 dark:to-amber-950/20 p-6 rounded-3xl border border-amber-200/40 dark:border-slate-800 shadow-sm">
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 font-bold text-xs uppercase tracking-widest">
             <Lightbulb className="w-4 h-4" />
@@ -145,11 +145,13 @@ export const IdeaBank: React.FC<IdeaBankProps> = ({ currentUser, onNavigateToVie
             <div key={idea.id} className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-5 space-y-4 shadow-sm flex flex-col justify-between">
               <div className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[10px] font-black bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full uppercase">
+                  <span className="text-[10px] font-black bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-800/60 px-2.5 py-0.5 rounded-full uppercase">
                     {idea.committee} Committee
                   </span>
-                  <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${
-                    idea.status === 'Converted' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'
+                  <span className={`text-[9px] font-black px-2.5 py-0.5 rounded-full border ${
+                    idea.status === 'Converted'
+                      ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border-blue-300 dark:border-blue-800/60'
+                      : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700'
                   }`}>
                     {idea.status}
                   </span>
@@ -182,7 +184,7 @@ export const IdeaBank: React.FC<IdeaBankProps> = ({ currentUser, onNavigateToVie
                 {/* Engagement actions */}
                 <div className="flex gap-2">
                   <button
-                    onClick={() => db.toggleUpvoteIdea(idea.id, currentUser.id)}
+                    onClick={() => db.toggleUpvoteIdea(idea.id, currentUser)}
                     className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-bold transition-all border ${
                       upvoted
                         ? 'bg-amber-500 border-amber-500 text-white'
@@ -275,7 +277,7 @@ export const IdeaBank: React.FC<IdeaBankProps> = ({ currentUser, onNavigateToVie
                 className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold focus:outline-none"
               >
                 {['HR','PR','SM','OR'].map(c => (
-                  <option key={c} value={c}>{c} Committee</option>
+                  <option key={c} value={c}>{c === 'HR' ? (isAr ? 'الموارد البشرية (HRM)' : 'HRM Committee') : `${c} Committee`}</option>
                 ))}
               </select>
               <div className="flex items-center justify-between pt-1">

@@ -126,7 +126,7 @@ const getNotifDestination = (
 
   // 17) New registration request (admins only)
   if (text.includes('registration') || text.includes('تسجيل') || text.includes('انضمام')) {
-    if (['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader', 'HRM'].includes(role)) {
+    if (['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader', 'HRM'].includes(role)) {
       return { view: 'settings' };
     }
     return { view: 'profile' };
@@ -569,8 +569,8 @@ export const Header: React.FC<HeaderProps> = ({
           <span>{language === 'ar' ? 'En' : 'عربي'}</span>
         </button>
 
-        {/* Governorate Switcher Badge (Super Admin Only) */}
-        {currentUser.role === 'Super Admin' && (
+        {/* Governorate Switcher Badge (Super Admin / Executive Leadership) */}
+        {['Super Admin', 'Head', 'Vice'].includes(currentUser.role) && (
           <div className="hidden md:flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-amber-500/10 dark:bg-amber-400/10 border border-amber-500/30 dark:border-amber-400/30 text-amber-800 dark:text-amber-300 text-xs font-bold transition-all">
             <MapPin className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
             <select
@@ -888,7 +888,7 @@ export const Header: React.FC<HeaderProps> = ({
       )}
 
       {/* Floating Toast Notification Stack */}
-      <div className={`fixed z-[100] max-w-sm w-full flex flex-col gap-3 pointer-events-none top-4 md:top-6 ${isRtl ? 'left-4 md:left-6' : 'right-4 md:right-6'}`} style={{ zIndex: 9999 }}>
+      <div className={`fixed z-[100] max-w-sm w-full flex flex-col gap-3 pointer-events-none top-20 ${isRtl ? 'left-4 md:left-6' : 'right-4 md:right-6'}`} style={{ zIndex: 9999 }}>
         {toasts.map(toast => {
           const localized = translateNotification(toast.title, toast.message, language);
           return (
@@ -904,22 +904,22 @@ export const Header: React.FC<HeaderProps> = ({
                 const dest = getNotifDestination(toast, currentUser.role);
                 onNavigateToView(dest.view, dest.targetId);
               }}
-              className={`pointer-events-auto w-full bg-white dark:bg-slate-900 border border-slate-100 rounded-2xl shadow-2xl p-4 flex gap-3 cursor-pointer hover:shadow-xl transition-all duration-300 transform translate-y-0 ${isRtl ? 'animate-slide-in-left' : 'animate-slide-in-right'} ${getNotifBg(toast.type)}`}
+              className={`pointer-events-auto w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl p-4 flex gap-3 cursor-pointer hover:shadow-xl transition-all duration-300 transform translate-y-0 ${isRtl ? 'animate-slide-in-left' : 'animate-slide-in-right'} ${getNotifBg(toast.type)}`}
             >
-              <div className="mt-0.5 shrink-0 bg-white/80 p-1.5 rounded-lg shadow-sm border border-slate-100 flex items-center justify-center h-8 w-8">{getNotifIcon(toast.type)}</div>
+              <div className="mt-0.5 shrink-0 bg-slate-100 dark:bg-slate-800 p-1.5 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 flex items-center justify-center h-8 w-8">{getNotifIcon(toast.type)}</div>
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-black text-slate-900 flex items-center justify-between">
+                <p className="text-xs font-black text-slate-900 dark:text-white flex items-center justify-between">
                   <span className="truncate">{localized.title}</span>
                   <span className="w-1.5 h-1.5 rounded-full bg-eye-brand shrink-0" />
                 </p>
-                <p className="text-[10px] text-slate-600 leading-relaxed mt-1 font-semibold line-clamp-2">{localized.message}</p>
+                <p className="text-[11px] text-slate-700 dark:text-slate-200 leading-relaxed mt-1 font-semibold line-clamp-2">{localized.message}</p>
               </div>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   setToasts(prev => prev.filter(t => t.id !== toast.id));
                 }}
-                className="text-slate-400 hover:text-slate-600 shrink-0 self-start p-1 hover:bg-slate-100 rounded-lg transition-colors"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 shrink-0 self-start p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
               </button>

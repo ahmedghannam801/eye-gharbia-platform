@@ -58,6 +58,29 @@ const calculatePoints = (userSubs: Submission[], tasks: Task[]): number => {
   return pts;
 };
 
+const COMMITTEE_DEPTS_MAP: Record<string, string[]> = {
+  HR: ['HRM', 'HRS', 'HRIS', 'HRD', 'HR OF PR', 'HR OF SM', 'HR OF OR'],
+  PR: ['EPR', 'IPR', 'FR', 'CR', 'IR'],
+  SM: ['Content Writing', 'Graphic Design', 'Photography', 'Video Editing', 'Media Coverage'],
+  OR: ['VIP', 'Protocol', 'Planning', 'Event Management', 'Coordination'],
+};
+
+const getAvailableDepts = (committee: string, allUsersList: UserProfile[]): string[] => {
+  const predefined = committee === 'all'
+    ? Array.from(new Set(Object.values(COMMITTEE_DEPTS_MAP).flat()))
+    : (COMMITTEE_DEPTS_MAP[committee] || []);
+
+  const dynamicDepts = new Set<string>(predefined);
+  allUsersList.forEach(u => {
+    if (committee === 'all' || u.committee === committee) {
+      if (u.department && u.department !== 'None') dynamicDepts.add(u.department);
+      if ((u as any).subCommittee) dynamicDepts.add((u as any).subCommittee);
+    }
+  });
+
+  return Array.from(dynamicDepts);
+};
+
 /* ============================================================ */
 /* All Members Evaluations View Component                       */
 /* ============================================================ */
@@ -70,6 +93,7 @@ const AllMembersEvaluationsView: React.FC<{
 
   const [searchQuery, setSearchQuery] = useState('');
   const [committeeFilter, setCommitteeFilter] = useState('all');
+  const [departmentFilter, setDepartmentFilter] = useState('all');
   const [roleFilter, setRoleFilter] = useState<'all' | 'leaders' | 'members' | 'executive'>('all');
   const [sortOrder, setSortOrder] = useState<'rating_desc' | 'rating_asc' | 'evals_desc' | 'name'>('rating_desc');
 
@@ -81,7 +105,7 @@ const AllMembersEvaluationsView: React.FC<{
   const [evalFeedback, setEvalFeedback] = useState('');
   const [evalSuccessMsg, setEvalSuccessMsg] = useState(false);
 
-  const isEvaluator = ['Super Admin', 'Coordinator', 'Deputy Coordinator', 'Leader', 'Vice'].includes(currentUser.role);
+  const isEvaluator = ['Super Admin', 'Head', 'Coordinator', 'Deputy Coordinator', 'Leader', 'Vice'].includes(currentUser.role);
   // Fetch EVERY single user in the entity without permission stripping
   const allUsers = db.getUsers().filter(u => u.status === 'Active');
   const allEvaluations = db.getMemberEvaluations();
@@ -122,16 +146,27 @@ const AllMembersEvaluationsView: React.FC<{
     });
   }, [allUsers, allEvaluations]);
 
-  // Filter and sort members — Excludes Vice, Coordinators, and Super Admin from evaluation targets
+  const availableDepts = useMemo(() => {
+    return getAvailableDepts(committeeFilter, allUsers);
+  }, [committeeFilter, allUsers]);
+
+  // Filter and sort members — Excludes Leadership (Super Admin, Head, Vice, Coordinator, Deputy Coordinator, HRM, Central) from evaluation targets
   const filteredMembers = useMemo(() => {
     return memberEvaluationsData.filter(item => {
-      // Exclude Executive Officers (Vice, Coordinator, Deputy Coordinator, Super Admin) from being rating targets
-      const isTargetable = item.user.role === 'Leader' || item.user.role === 'Member';
+      // Exclude Executive Leadership from being rating targets (Leadership has no evaluations)
+      const isTargetable = (item.user.role === 'Member' || item.user.role === 'Leader') &&
+        !['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM', 'Central'].includes(item.user.role);
       if (!isTargetable) return false;
 
       const matchesSearch = item.user.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
                             item.user.membershipCode.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesCommittee = committeeFilter === 'all' || item.user.committee === committeeFilter;
+      const isHrm = committeeFilter === 'HR' || committeeFilter === 'HRM';
+      const matchesCommittee = committeeFilter === 'all' || item.user.committee === committeeFilter || (isHrm && (item.user.committee === 'HR' || item.user.committee === 'HRM'));
+      const matchesDept = departmentFilter === 'all' ||
+        item.user.department === departmentFilter ||
+        (item.user as any).subCommittee === departmentFilter ||
+        (item.user.department && item.user.department.toLowerCase().includes(departmentFilter.toLowerCase())) ||
+        ((item.user as any).subCommittee && (item.user as any).subCommittee.toLowerCase().includes(departmentFilter.toLowerCase()));
 
       let matchesRole = true;
       if (roleFilter === 'leaders') {
@@ -140,7 +175,7 @@ const AllMembersEvaluationsView: React.FC<{
         matchesRole = item.user.role === 'Member';
       }
 
-      return matchesSearch && matchesCommittee && matchesRole;
+      return matchesSearch && matchesCommittee && matchesDept && matchesRole;
     }).sort((a, b) => {
       if (sortOrder === 'rating_desc') return b.overallAvg - a.overallAvg;
       if (sortOrder === 'rating_asc') return a.overallAvg - b.overallAvg;
@@ -148,7 +183,7 @@ const AllMembersEvaluationsView: React.FC<{
       if (sortOrder === 'name') return a.user.fullName.localeCompare(b.user.fullName, 'ar');
       return 0;
     });
-  }, [memberEvaluationsData, searchQuery, committeeFilter, roleFilter, sortOrder]);
+  }, [memberEvaluationsData, searchQuery, committeeFilter, departmentFilter, roleFilter, sortOrder]);
 
   const totalEvalsCount = allEvaluations.length;
   const evaluatedCount = memberEvaluationsData.filter(m => m.evalsCount > 0).length;
@@ -251,15 +286,31 @@ const AllMembersEvaluationsView: React.FC<{
         <div className="grid grid-cols-1 sm:grid-cols-3 md:flex md:flex-wrap gap-2 w-full md:w-auto min-w-0">
           <select
             value={committeeFilter}
-            onChange={(e) => setCommitteeFilter(e.target.value)}
+            onChange={(e) => {
+              setCommitteeFilter(e.target.value);
+              setDepartmentFilter('all');
+            }}
             className="w-full sm:w-auto max-w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-3 py-2.5 text-xs text-slate-800 dark:text-white font-bold truncate min-w-0 focus:outline-none focus:border-amber-500"
           >
-            <option value="all">{isAr ? 'جميع اللجان' : 'All Committees'}</option>
-            <option value="HR">لجنة HR</option>
-            <option value="PR">لجنة PR</option>
-            <option value="SM">لجنة SM</option>
-            <option value="OR">لجنة OR</option>
+            <option value="all">{isAr ? '🏛️ جميع اللجان' : 'All Committees'}</option>
+            <option value="HR">{isAr ? 'الموارد البشرية (HRM)' : 'HRM Committee'}</option>
+            <option value="PR">{isAr ? 'العلاقات العامة (PR)' : 'PR Committee'}</option>
+            <option value="SM">{isAr ? 'السوشيال ميديا (SM)' : 'SM Committee'}</option>
+            <option value="OR">{isAr ? 'العلاقات التنظيمية (OR)' : 'OR Committee'}</option>
           </select>
+
+          {(committeeFilter === 'HR' || committeeFilter === 'HRM') && (
+            <select
+              value={departmentFilter}
+              onChange={(e) => setDepartmentFilter(e.target.value)}
+              className="w-full sm:w-auto max-w-full bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-2xl px-3 py-2.5 text-xs text-amber-900 dark:text-amber-200 font-bold truncate min-w-0 focus:outline-none focus:border-amber-500 animate-fadeIn"
+            >
+              <option value="all">{isAr ? '🏢 كل فروع HRM' : 'All HRM'}</option>
+              <option value="HR OF PR">HR OF PR</option>
+              <option value="HR OF SM">HR OF SM</option>
+              <option value="HR OF OR">HR OF OR</option>
+            </select>
+          )}
 
           <select
             value={roleFilter}
@@ -385,11 +436,14 @@ const AllMembersEvaluationsView: React.FC<{
                   const target = u;
                   if (evaluator.id === target.id) return null;
 
-                  const isExecOrVice = ['Super Admin', 'Coordinator', 'Deputy Coordinator', 'Vice'].includes(evaluator.role);
-                  const isLeader = evaluator.role === 'Leader';
-                  const targetIsLeaderOrAbove = ['Leader', 'Vice', 'Super Admin', 'Coordinator', 'Deputy Coordinator'].includes(target.role);
+                  const isLeadershipTarget = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM', 'Central'].includes(target.role);
+                  if (isLeadershipTarget) return null; // Leadership roles have no evaluations
 
-                  const canRate = isExecOrVice || (isLeader && !targetIsLeaderOrAbove);
+                  const isExecOrVice = ['Super Admin', 'Head', 'Coordinator', 'Deputy Coordinator', 'Vice', 'HRM', 'Central'].includes(evaluator.role);
+                  const isLeader = evaluator.role === 'Leader';
+                  const targetIsLeader = target.role === 'Leader';
+
+                  const canRate = isExecOrVice || (isLeader && !targetIsLeader);
                   if (!canRate) return null;
 
                   return (
@@ -397,7 +451,7 @@ const AllMembersEvaluationsView: React.FC<{
                       onClick={() => setEvalTargetUser(u)}
                       className="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer flex items-center gap-1"
                     >
-                      <span>⭐ {isAr ? `تقييم ${targetIsLeaderOrAbove ? 'القائد' : 'العضو'} الآن` : 'Rate Person'}</span>
+                      <span>⭐ {isAr ? `تقييم ${targetIsLeader ? 'القائد' : 'العضو'} الآن` : 'Rate Person'}</span>
                     </button>
                   );
                 })()}
@@ -534,17 +588,48 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ currentUser, onNavigat
   const { language, isRtl, translateCommittee } = useLanguage();
   const [activeTab, setActiveTab] = useState<'ranks' | 'evaluations' | 'badges'>('ranks');
   const [roleCategoryFilter, setRoleCategoryFilter] = useState<'members' | 'leaders'>('members');
+  const [rankCommitteeFilter, setRankCommitteeFilter] = useState<string>('all');
+  const [rankDeptFilter, setRankDeptFilter] = useState<string>('all');
+  const [rankSearchQuery, setRankSearchQuery] = useState<string>('');
   const [seasonFilter, setSeasonFilter] = useState<'all' | 'current_month' | 'last_month' | 'last_3_months' | 'last_4_months' | 'last_6_months' | 'current_year'>('all');
   const [comparePeerId, setComparePeerId] = useState<string>('');
   const [isGoogleSheetsModalOpen, setIsGoogleSheetsModalOpen] = useState(false);
 
-  const users = db.getUsers(currentUser).filter(u => {
-    if (u.status !== 'Active') return false;
-    if (roleCategoryFilter === 'leaders') {
-      return ['Leader', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Super Admin', 'HRM'].includes(u.role);
-    }
-    return u.role === 'Member';
-  });
+  const allActiveUsers = useMemo(() => db.getUsers(currentUser).filter(u => u.status === 'Active'), [currentUser]);
+  const availableRankDepts = useMemo(() => {
+    return getAvailableDepts(rankCommitteeFilter, allActiveUsers);
+  }, [rankCommitteeFilter, allActiveUsers]);
+
+  const users = useMemo(() => {
+    return allActiveUsers.filter(u => {
+      if (roleCategoryFilter === 'leaders') {
+        if (u.role !== 'Leader') return false;
+      } else {
+        if (u.role !== 'Member') return false;
+      }
+
+      if (rankCommitteeFilter !== 'all' && u.committee !== rankCommitteeFilter) {
+        return false;
+      }
+
+      if (rankDeptFilter !== 'all') {
+        const matchDept = u.department === rankDeptFilter ||
+          (u as any).subCommittee === rankDeptFilter ||
+          (u.department && u.department.toLowerCase().includes(rankDeptFilter.toLowerCase())) ||
+          ((u as any).subCommittee && (u as any).subCommittee.toLowerCase().includes(rankDeptFilter.toLowerCase()));
+        if (!matchDept) return false;
+      }
+
+      if (rankSearchQuery.trim()) {
+        const q = rankSearchQuery.toLowerCase().trim();
+        const matchSearch = u.fullName.toLowerCase().includes(q) || (u.membershipCode && u.membershipCode.toLowerCase().includes(q));
+        if (!matchSearch) return false;
+      }
+
+      return true;
+    });
+  }, [allActiveUsers, roleCategoryFilter, rankCommitteeFilter, rankDeptFilter, rankSearchQuery]);
+
   const submissions = db.getSubmissions();
   const tasks = db.getTasks();
 
@@ -622,7 +707,7 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ currentUser, onNavigat
     if (rank === 1) return 'from-yellow-500/20 to-amber-400/10 border-yellow-400/30';
     if (rank === 2) return 'from-slate-400/20 to-slate-300/10 border-slate-300/30';
     if (rank === 3) return 'from-amber-700/20 to-amber-600/10 border-amber-600/30';
-    return 'from-slate-50 to-white border-slate-200 dark:from-slate-900 dark:to-slate-850 dark:border-slate-800';
+    return 'from-slate-50 to-white border-slate-200 dark:from-slate-800 dark:to-slate-900 dark:border-slate-700';
   };
 
   const getGradeColor = (pts: number) => {
@@ -636,7 +721,7 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ currentUser, onNavigat
     <div className="space-y-8 p-6 animate-fade-in" dir={isRtl ? 'rtl' : 'ltr'} id="leaderboard-viewport">
 
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-yellow-50 to-amber-50/40 dark:from-slate-900/60 dark:to-slate-850/40 p-6 rounded-3xl border border-yellow-200/40 dark:border-slate-800 shadow-sm">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-slate-50 to-amber-50/30 dark:from-slate-900/60 dark:to-amber-950/20 p-6 rounded-3xl border border-amber-200/40 dark:border-slate-800 shadow-sm">
         <div className="space-y-1">
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
             {language === 'ar' ? 'لوحة التنافسية وسجل التقييمات 🏆' : 'Points & Performance Board 🏆'}
@@ -646,7 +731,7 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ currentUser, onNavigat
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3 text-xs font-bold">
-          {['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader'].includes(currentUser.role) && (
+          {['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader'].includes(currentUser.role) && (
             <button
               onClick={() => setIsGoogleSheetsModalOpen(true)}
               className="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black rounded-2xl shadow-md transition-all cursor-pointer flex items-center gap-2 border border-emerald-400/30"
@@ -708,7 +793,7 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ currentUser, onNavigat
       {/* Category Toggle: Members vs Leaders & Season Filter Selector */}
       <div className="space-y-3">
         {/* Category Role Switcher (Members vs Leaders) */}
-        <div className="flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-blue-50/70 to-indigo-50/70 dark:from-slate-900 dark:to-slate-850 p-4 rounded-2xl border border-blue-200/50 dark:border-slate-800 shadow-xs">
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-slate-50/70 to-blue-50/30 dark:from-slate-900 dark:to-blue-950/20 p-4 rounded-2xl border border-blue-200/50 dark:border-slate-800 shadow-xs">
           <div className="flex items-center gap-2">
             <Trophy className="w-5 h-5 text-amber-500" />
             <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-100">
@@ -746,6 +831,65 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ currentUser, onNavigat
                 {roleCategoryFilter === 'leaders' ? users.length : ''}
               </span>
             </button>
+          </div>
+        </div>
+
+        {/* Committee & Sub-Committee / Department Filter Bar */}
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
+          <div className="relative w-full md:w-72 min-w-0">
+            <Search className="absolute start-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              value={rankSearchQuery}
+              onChange={(e) => setRankSearchQuery(e.target.value)}
+              placeholder={language === 'ar' ? 'بحث بالاسم أو كود العضوية...' : 'Search by name or code...'}
+              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl ps-10 pe-3 py-2 text-xs text-slate-800 dark:text-white font-bold focus:outline-none focus:border-amber-500"
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Committee Filter */}
+            <select
+              value={rankCommitteeFilter}
+              onChange={(e) => {
+                setRankCommitteeFilter(e.target.value);
+                setRankDeptFilter('all');
+              }}
+              className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-800 dark:text-white font-bold focus:outline-none focus:border-amber-500 cursor-pointer"
+            >
+              <option value="all">{language === 'ar' ? '🏛️ جميع اللجان' : 'All Committees'}</option>
+              <option value="HR">{language === 'ar' ? 'الموارد البشرية (HR)' : 'HR Committee'}</option>
+              <option value="PR">{language === 'ar' ? 'العلاقات العامة (PR)' : 'PR Committee'}</option>
+              <option value="SM">{language === 'ar' ? 'السوشيال ميديا (SM)' : 'SM Committee'}</option>
+              <option value="OR">{language === 'ar' ? 'العلاقات التنظيمية (OR)' : 'OR Committee'}</option>
+            </select>
+
+            {/* Sub-committee / Department Filter */}
+            <select
+              value={rankDeptFilter}
+              onChange={(e) => setRankDeptFilter(e.target.value)}
+              className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-800 dark:text-white font-bold focus:outline-none focus:border-amber-500 cursor-pointer"
+            >
+              <option value="all">{language === 'ar' ? '📂 جميع الأقسام واللجان الفرعية' : 'All Sub-Committees / Depts'}</option>
+              {availableRankDepts.map(dept => (
+                <option key={dept} value={dept}>{dept}</option>
+              ))}
+            </select>
+
+            {(rankCommitteeFilter !== 'all' || rankDeptFilter !== 'all' || rankSearchQuery.trim()) && (
+              <button
+                onClick={() => {
+                  setRankCommitteeFilter('all');
+                  setRankDeptFilter('all');
+                  setRankSearchQuery('');
+                }}
+                className="px-3 py-2 rounded-xl bg-red-50 hover:bg-red-100 dark:bg-red-950/30 dark:hover:bg-red-900/40 text-red-600 dark:text-red-400 text-xs font-bold transition-all cursor-pointer flex items-center gap-1 border border-red-200 dark:border-red-800/40"
+                title={language === 'ar' ? 'إلغاء التصفية' : 'Reset Filters'}
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>{language === 'ar' ? 'إلغاء الفلتر' : 'Reset'}</span>
+              </button>
+            )}
           </div>
         </div>
 

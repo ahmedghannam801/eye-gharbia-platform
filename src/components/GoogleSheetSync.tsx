@@ -37,23 +37,35 @@ export const GoogleSheetSyncModal: React.FC<{
 
   const allUsers = db.getUsers().filter(u => u.status === 'Active');
 
-  // Convert standard Google Sheet URL to direct CSV export URL
+  // Convert standard Google Sheet URL to direct CSV export URL with strict domain validation (SSRF defense)
   const getCsvExportUrl = (rawUrl: string): string => {
-    let url = rawUrl.trim();
+    const url = rawUrl.trim();
     if (!url) return '';
-    if (url.includes('/export?format=csv') || url.includes('/pub?output=csv')) return url;
 
-    // Match Google Sheet ID from standard URL: /spreadsheets/d/{SHEET_ID}/
-    const match = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-    if (match && match[1]) {
-      const sheetId = match[1];
-      // Check if there is a gid parameter
-      const gidMatch = url.match(/[?&]gid=([0-9]+)/);
-      const gidParam = gidMatch && gidMatch[1] ? `&gid=${gidMatch[1]}` : '';
-      return `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv${gidParam}`;
+    try {
+      const parsed = new URL(url);
+      const isGoogleDomain = parsed.hostname === 'docs.google.com' || parsed.hostname === 'google.com' || parsed.hostname.endsWith('.google.com');
+      if (!isGoogleDomain) {
+        throw new Error(isAr ? 'يجب أن يكون الرابط من نطاق Google Sheets المعتمد (docs.google.com)' : 'URL must be a valid Google Sheets domain (docs.google.com)');
+      }
+
+      if (url.includes('/export?format=csv') || url.includes('/pub?output=csv')) return url;
+
+      // Match Google Sheet ID from standard URL: /spreadsheets/d/{SHEET_ID}/
+      const match = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+      if (match && match[1]) {
+        const sheetId = match[1];
+        // Check if there is a gid parameter
+        const gidMatch = url.match(/[?&]gid=([0-9]+)/);
+        const gidParam = gidMatch && gidMatch[1] ? `&gid=${gidMatch[1]}` : '';
+        return `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv${gidParam}`;
+      }
+      return url;
+    } catch (err: any) {
+      throw new Error(err.message || (isAr ? 'رابط غير صالح' : 'Invalid URL'));
     }
-    return url;
   };
+
 
   // Helper to parse CSV string into headers and rows
   const parseCsvText = (csvText: string): ParsedRow[] => {
