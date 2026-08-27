@@ -490,7 +490,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
     );
   };
 
-  const ALL_ROLES: UserRole[] = ['Member', 'Leader', 'Deputy Coordinator', 'Coordinator', 'Vice', 'Head', 'Central', 'Super Admin'];
+  const ALL_ROLES: UserRole[] = ['Member', 'Leader', 'Deputy Coordinator', 'Coordinator', 'Vice', 'Head', 'Super Admin'];
   const ALL_STATUSES: UserStatus[] = ['Active', 'Pending Approval', 'Disabled'];
 
   if (!['Super Admin', 'Head', 'Vice', 'HRM'].includes(currentUser.role)) {
@@ -1125,7 +1125,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                 <option value="Coordinator">Coordinator (منسق)</option>
                 <option value="Deputy Coordinator">Deputy Coordinator (نائب منسق)</option>
                 <option value="Head">Head (رئيس لجنة)</option>
-                <option value="Central">Central (مسؤول مركزية)</option>
                 <option value="HRM">HRM (مسؤول موارد بشرية)</option>
                 <option value="Leader">Leader (قائد لجنة)</option>
               </select>
@@ -1239,22 +1238,11 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
             <div className="space-y-3">
               <div>
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                  {ar ? 'المحافظة التابع لها الكود الأمني *' : 'Governorate *'}
+                  {ar ? 'المحافظة التابع لها الكود الأمني' : 'Governorate'}
                 </label>
-                <select
-                  value={newSecGovVal}
-                  onChange={(e) => {
-                    const selectedGov = e.target.value;
-                    setNewSecGovVal(selectedGov);
-                    const autoCode = generateGovernorateLeaderCode(selectedGov, db.getUsers());
-                    setNewSecCodeVal(autoCode);
-                  }}
-                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white"
-                >
-                  {EGYPTIAN_GOVERNORATES.map(gov => (
-                    <option key={gov} value={gov}>{gov}</option>
-                  ))}
-                </select>
+                <div className="w-full bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-black text-emerald-700 dark:text-emerald-400">
+                  {ar ? 'محافظة الغربية (GHB)' : 'Gharbia Governorate (GHB)'}
+                </div>
               </div>
 
               <div>
@@ -1265,7 +1253,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                   <button
                     type="button"
                     onClick={() => {
-                      const autoCode = generateGovernorateLeaderCode(newSecGovVal, db.getUsers());
+                      const autoCode = generateGovernorateLeaderCode('الغربية', db.getUsers());
                       setNewSecCodeVal(autoCode);
                     }}
                     className="text-[10px] font-bold text-amber-600 dark:text-amber-400 hover:underline cursor-pointer"
@@ -1275,8 +1263,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                 </div>
                 <input
                   required
-                  placeholder="EYE-CAI-LDR-101"
-                  value={newSecCodeVal || generateGovernorateLeaderCode(newSecGovVal, db.getUsers())}
+                  placeholder="EYE-GHB-LDR-101"
+                  value={newSecCodeVal || generateGovernorateLeaderCode('الغربية', db.getUsers())}
                   onChange={(e) => setNewSecCodeVal(e.target.value.toUpperCase())}
                   className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-black font-mono text-amber-600 uppercase"
                 />
@@ -1304,7 +1292,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                     onChange={(e) => setNewSecRoleVal(e.target.value as UserRole)}
                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white"
                   >
-                    {['Leader', 'Vice', 'Head', 'Coordinator', 'Deputy Coordinator', 'Central', 'HRM'].map((r) => (
+                    {['Leader', 'Vice', 'Head', 'Coordinator', 'Deputy Coordinator', 'HRM'].map((r) => (
                       <option key={r} value={r}>{r}</option>
                     ))}
                   </select>
@@ -1331,7 +1319,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                   {ar ? 'القسم / الفرع' : 'Department'}
                 </label>
                 <input
-                  placeholder="HRM / EPR / Content / VIP / Central"
+                  placeholder="HRM / EPR / Content / VIP"
                   value={newSecDeptVal}
                   onChange={(e) => setNewSecDeptVal(e.target.value)}
                   className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white"

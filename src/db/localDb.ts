@@ -599,12 +599,59 @@ class SupabaseDatabase {
     } catch {}
   }
 
+  sanitizeSingleGovernorateGharbia() {
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('eye_current_governorate', 'الغربية');
+        
+        // Clean codes from localStorage
+        const storedCodesStr = localStorage.getItem('eye_security_codes');
+        if (storedCodesStr) {
+          try {
+            const codes = JSON.parse(storedCodesStr);
+            let changed = false;
+            Object.keys(codes).forEach(k => {
+              if (k.startsWith('EYE-CTRL') || codes[k].role === 'Central') {
+                delete codes[k];
+                changed = true;
+              } else if (codes[k].governorate && codes[k].governorate !== 'الغربية') {
+                codes[k].governorate = 'الغربية';
+                changed = true;
+              }
+            });
+            if (changed) {
+              localStorage.setItem('eye_security_codes', JSON.stringify(codes));
+            }
+          } catch {}
+        }
+      }
+
+      // Clean in-memory user cache
+      if (this.cache.users && this.cache.users.length > 0) {
+        this.cache.users = this.cache.users.filter(u => (u.role as string) !== 'Central');
+        this.cache.users.forEach(u => {
+          u.governorate = 'الغربية';
+        });
+      }
+
+      if (this.cache.currentUser) {
+        this.cache.currentUser.governorate = 'الغربية';
+        if ((this.cache.currentUser.role as string) === 'Central') {
+          this.cache.currentUser.role = 'Member';
+        }
+      }
+    } catch (e) {
+      console.warn('[sanitizeSingleGovernorateGharbia]', e);
+    }
+  }
+
   async init(): Promise<void> {
     if (this.initialized) return;
     this.initialized = true;
+    this.sanitizeSingleGovernorateGharbia();
 
     // Check if client is on older localStorage cache format and sanitize stale ghosts
-    const CACHE_SYNC_VERSION = 'EYE_PLATFORM_V3_CLEAN';
+    const CACHE_SYNC_VERSION = 'EYE_PLATFORM_V3_GHARBIA_ONLY';
     const lastSyncVer = localStorage.getItem('eye_cache_sync_version');
     if (lastSyncVer !== CACHE_SYNC_VERSION) {
       try {
@@ -1304,12 +1351,6 @@ class SupabaseDatabase {
       'EYE-HEAD-SM': { fullName: 'رئيس لجنة السوشيال ميديا', role: 'Head', committee: 'SM', department: 'Content', email: 'head.sm@eye.org' },
       'EYE-HEAD-OR': { fullName: 'رئيس لجنة التنظيم والفعاليات', role: 'Head', committee: 'OR', department: 'VIP', email: 'head.or@eye.org' },
 
-      // Central Officials (المركزية)
-      'EYE-CTRL-HR': { fullName: 'مسئول الموارد البشرية المركزية', role: 'Central', committee: 'HR', department: 'مسئول الموارد البشريه المركزيه', email: 'central.hr@eye.org' },
-      'EYE-CTRL-PR': { fullName: 'مسئول العلاقات العامة المركزية', role: 'Central', committee: 'PR', department: 'مسئول العلاقات العامه المركزيه', email: 'central.pr@eye.org' },
-      'EYE-CTRL-OR': { fullName: 'مسئول التنظيم المركزية', role: 'Central', committee: 'OR', department: 'مسئول التنظيم المركزيه', email: 'central.or@eye.org' },
-      'EYE-CTRL-SM': { fullName: 'مسئول السوشيال ميديا المركزية', role: 'Central', committee: 'SM', department: 'مسئول السوشيال ميديا المركزيه', email: 'central.sm@eye.org' },
-
       // HRM Branch Managers
       'EYE-HRM-PR': { fullName: 'مسئول HR لجنة العلاقات العامة', role: 'HRM', committee: 'HR', department: 'HRM - HR OF PR', email: 'hrm.pr@eye.org' },
       'EYE-HRM-SM': { fullName: 'مسئول HR لجنة السوشيال ميديا', role: 'HRM', committee: 'HR', department: 'HRM - HR OF SM', email: 'hrm.sm@eye.org' },
@@ -1596,7 +1637,7 @@ class SupabaseDatabase {
 
     // Generate unique ID & membership code
     const paddedNum = String(allUsers.length + 1).padStart(4, '0');
-    const rolePrefix = finalRole === 'Leader' ? 'L' : finalRole === 'Vice' ? 'V' : finalRole === 'Head' ? 'H' : finalRole === 'Coordinator' ? 'C' : finalRole === 'Deputy Coordinator' ? 'DC' : finalRole === 'Central' ? 'CTRL' : '';
+    const rolePrefix = finalRole === 'Leader' ? 'L' : finalRole === 'Vice' ? 'V' : finalRole === 'Head' ? 'H' : finalRole === 'Coordinator' ? 'C' : finalRole === 'Deputy Coordinator' ? 'DC' : '';
     const membershipCode = isFirstUser
       ? 'EYE-ADMIN-0001'
       : `EYE-${committee || 'M'}-${rolePrefix}${paddedNum}`;
@@ -1707,8 +1748,7 @@ class SupabaseDatabase {
   }
 
   getTargetGovernorate(user?: UserProfile): string {
-    const u = user || this.cache.currentUser || undefined;
-    return getActiveGovernorate(u);
+    return 'الغربية';
   }
 
   // --- MEMBER UTILITIES (CRUD & STATUS) ---
@@ -1718,28 +1758,18 @@ class SupabaseDatabase {
     })();
     let allUsers = this.cache.users.filter(u => !deletedUserIds.includes(u.id));
 
-    const activeGov = this.getTargetGovernorate(currentUser);
-
-    // Scoped by active governorate
-    const govUsers = (activeGov === 'All' || activeGov === 'المركزية')
-      ? allUsers
-      : allUsers.filter(u => {
-          const uGov = u.governorate?.trim() || 'الغربية';
-          return uGov === activeGov;
-        });
-
-    if (!currentUser) return govUsers;
+    if (!currentUser) return allUsers;
 
     if (currentUser.role === 'Super Admin' || currentUser.role === 'HRM') {
-      return govUsers;
+      return allUsers;
     }
 
     const leadershipRoles = ['Leader', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Head'];
     if (leadershipRoles.includes(currentUser.role)) {
-      return govUsers;
+      return allUsers;
     }
 
-    return filterMembersByPermission(currentUser, govUsers);
+    return filterMembersByPermission(currentUser, allUsers);
   }
 
   getGovernorateSignatories(governorate: string, lang: 'ar' | 'en' = 'ar'): {
@@ -2421,7 +2451,7 @@ class SupabaseDatabase {
         video_url: taskData.videoUrl || null,
         is_video_task: taskData.isVideoTask || false,
         // Store creator's governorate so members on other devices can filter by it
-        governorate: creator.governorate || null,
+        governorate: creator.governorate || 'الغربية',
       };
 
       supabase
@@ -2989,23 +3019,7 @@ class SupabaseDatabase {
 
   // --- ANNOUNCEMENTS ---
   getAnnouncements(currentUser?: UserProfile): Announcement[] {
-    const activeGov = this.getTargetGovernorate(currentUser);
-    if (activeGov === 'All' || activeGov === 'المركزية') {
-      return this.cache.announcements;
-    }
-
-    const govUserIds = new Set(
-      this.cache.users
-        .filter(u => (u.governorate?.trim() || 'الغربية') === activeGov)
-        .map(u => u.id)
-    );
-
-    return this.cache.announcements.filter(a => {
-      if ((a as any).governorate) {
-        return (a as any).governorate === activeGov || (a as any).governorate === 'All' || (a as any).governorate === 'المركزية';
-      }
-      return !a.createdBy || govUserIds.has(a.createdBy);
-    });
+    return this.cache.announcements;
   }
 
   createAnnouncement(
@@ -3031,30 +3045,40 @@ class SupabaseDatabase {
       targetUrl,
     };
     this.cache.announcements.unshift(newAnn);
+    this._lsSave('eye_announcements', this.cache.announcements);
     this.notify();
 
-    supabase
-      .from('announcements')
-      .insert({
-        title,
-        content,
-        committee,
-        created_by: creator.id,
-        created_by_name: creator.fullName,
-        is_pinned: isPinned,
-        category,
-        target_url: targetUrl,
-      })
-      .select()
-      .single()
-      .then(({ data }) => {
-        if (data) {
-          const i = this.cache.announcements.findIndex((a) => a.id === tempId);
-          if (i !== -1) this.cache.announcements[i] = announcementFromRow(data);
-          this.notify();
-        }
-        this.refreshAll();
-      });
+    if (isSupabaseConfigured && supabase) {
+      supabase
+        .from('announcements')
+        .insert({
+          id: newAnn.id,
+          title,
+          content,
+          committee,
+          created_by: creator.id,
+          created_by_name: creator.fullName,
+          is_pinned: isPinned,
+          category,
+          target_url: targetUrl,
+          governorate: creator.governorate || 'الغربية',
+        })
+        .select()
+        .single()
+        .then(({ data, error }) => {
+          if (error) {
+            console.warn('[Supabase Announcement Insert Warn]:', error.message || error);
+          } else if (data) {
+            const i = this.cache.announcements.findIndex((a) => a.id === tempId);
+            if (i !== -1) {
+              this.cache.announcements[i] = announcementFromRow(data);
+              this._lsSave('eye_announcements', this.cache.announcements);
+              this.notify();
+            }
+          }
+        })
+        .catch(err => console.error('[Supabase Announcement Exception]:', err));
+    }
 
     this.logActivity(
       creator.id,
@@ -3409,24 +3433,7 @@ class SupabaseDatabase {
         all = [defaultMeeting];
       }
     }
-
-    if (activeGov === 'All' || activeGov === 'المركزية') {
-      return all;
-    }
-
-    const govUserIds = new Set(
-      this.cache.users
-        .filter(u => (u.governorate?.trim() || 'الغربية') === activeGov)
-        .map(u => u.id)
-    );
-
-    return all.filter(m => {
-      const mtgGov = (m as any).governorate;
-      if (mtgGov && mtgGov !== 'All' && mtgGov !== 'المركزية') {
-        if (mtgGov === activeGov) return true;
-      }
-      return true;
-    });
+    return all;
   }
 
   createMeeting(data: Omit<Meeting, 'id' | 'createdAt' | 'attendanceCode'>, creator: UserProfile): Meeting {
@@ -3461,12 +3468,9 @@ class SupabaseDatabase {
           created_at: meeting.createdAt,
           status: meeting.status,
           attendance_code: meeting.attendanceCode,
-          governorate: meeting.governorate,
+          governorate: meeting.governorate || 'الغربية',
+          created_by: meeting.createdBy,
         };
-        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(meeting.createdBy);
-        if (isUuid) {
-          payload.created_by = meeting.createdBy;
-        }
 
         const { error } = await supabase
           .from('meetings')
@@ -3894,24 +3898,11 @@ class SupabaseDatabase {
   // ═══════════════════════════════════════════════════
   // 360° LEADER FEEDBACK
   // ═══════════════════════════════════════════════════
-  getLeaderFeedback(leaderId?: string, currentUser?: UserProfile): LeaderFeedback[] {
+  getLeaderFeedback(leaderId?: string, _currentUser?: UserProfile): LeaderFeedback[] {
     const all = (this.cache.leaderFeedbacks && this.cache.leaderFeedbacks.length > 0)
       ? this.cache.leaderFeedbacks
       : this._ls<LeaderFeedback>('eye_leader_feedback');
-    let list = leaderId ? all.filter(f => f.leaderId === leaderId) : all;
-
-    const activeGov = this.getTargetGovernorate(currentUser);
-    if (activeGov === 'All' || activeGov === 'المركزية') {
-      return list;
-    }
-
-    const govUserIds = new Set(
-      this.cache.users
-        .filter(u => (u.governorate?.trim() || 'الغربية') === activeGov)
-        .map(u => u.id)
-    );
-
-    return list.filter(f => govUserIds.has(f.leaderId) || govUserIds.has(f.reviewerId));
+    return leaderId ? all.filter(f => f.leaderId === leaderId) : all;
   }
 
   submitLeaderFeedback(data: Omit<LeaderFeedback, 'id' | 'submittedAt'>): 'ok' | 'already' {
@@ -3953,25 +3944,12 @@ class SupabaseDatabase {
   // ═══════════════════════════════════════════════════
   // MEMBER & LEADER EVALUATIONS
   // ═══════════════════════════════════════════════════
-  getMemberEvaluations(targetUserId?: string, currentUser?: UserProfile): MemberEvaluation[] {
+  getMemberEvaluations(targetUserId?: string, _currentUser?: UserProfile): MemberEvaluation[] {
     const all = (this.cache.evaluations && this.cache.evaluations.length > 0)
       ? this.cache.evaluations
       : this._ls<MemberEvaluation>('eye_member_evaluations');
     const sorted = [...all].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-    let list = targetUserId ? sorted.filter(e => e.targetUserId === targetUserId) : sorted;
-
-    const activeGov = this.getTargetGovernorate(currentUser);
-    if (activeGov === 'All' || activeGov === 'المركزية') {
-      return list;
-    }
-
-    const govUserIds = new Set(
-      this.cache.users
-        .filter(u => (u.governorate?.trim() || 'الغربية') === activeGov)
-        .map(u => u.id)
-    );
-
-    return list.filter(e => govUserIds.has(e.targetUserId) || govUserIds.has(e.evaluatorId));
+    return targetUserId ? sorted.filter(e => e.targetUserId === targetUserId) : sorted;
   }
 
   addMemberEvaluation(data: Omit<MemberEvaluation, 'id' | 'createdAt'>, evaluator: UserProfile): MemberEvaluation {
@@ -4019,28 +3997,12 @@ class SupabaseDatabase {
   // ═══════════════════════════════════════════════════
   // OKR WORK PLANS
   // ═══════════════════════════════════════════════════
-  getWorkPlans(committee?: string, currentUser?: UserProfile): WorkPlan[] {
+  getWorkPlans(committee?: string, _currentUser?: UserProfile): WorkPlan[] {
     const all = (this.cache.workPlans && this.cache.workPlans.length > 0)
       ? this.cache.workPlans
       : this._ls<WorkPlan>('eye_work_plans');
     const sorted = [...all].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-
-    const activeGov = this.getTargetGovernorate(currentUser);
-    let plans = sorted;
-
-    if (activeGov !== 'All' && activeGov !== 'المركزية') {
-      const govUserIds = new Set(
-        this.cache.users
-          .filter(u => (u.governorate?.trim() || 'الغربية') === activeGov)
-          .map(u => u.id)
-      );
-      plans = plans.filter(p => {
-        if ((p as any).governorate) return (p as any).governorate === activeGov;
-        return !p.createdBy || govUserIds.has(p.createdBy);
-      });
-    }
-
-    return committee ? plans.filter(p => p.committee === committee || p.committee === 'All') : plans;
+    return committee ? sorted.filter(p => p.committee === committee || p.committee === 'All') : sorted;
   }
 
   createWorkPlan(data: Omit<WorkPlan, 'id' | 'createdAt'>, creator: UserProfile): WorkPlan {
@@ -4132,24 +4094,11 @@ class SupabaseDatabase {
   // ═══════════════════════════════════════════════════
   // IDEA BANK & PITCH ROOM
   // ═══════════════════════════════════════════════════
-  getIdeas(currentUser?: UserProfile): VolunteerIdea[] {
+  getIdeas(_currentUser?: UserProfile): VolunteerIdea[] {
     const all = (this.cache.ideas && this.cache.ideas.length > 0)
       ? this.cache.ideas
       : this._ls<VolunteerIdea>('eye_ideas');
-    const sorted = [...all].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-
-    const activeGov = this.getTargetGovernorate(currentUser);
-    if (activeGov === 'All' || activeGov === 'المركزية') {
-      return sorted;
-    }
-
-    const govUserIds = new Set(
-      this.cache.users
-        .filter(u => (u.governorate?.trim() || 'الغربية') === activeGov)
-        .map(u => u.id)
-    );
-
-    return sorted.filter(i => !i.createdBy || govUserIds.has(i.createdBy));
+    return [...all].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
   createIdea(title: string, description: string, committee: string, creator: UserProfile): VolunteerIdea {
@@ -6537,7 +6486,7 @@ class SupabaseDatabase {
     this.addNotificationsBulk(
       targetUserIds,
       `🎨 ${title}`,
-      `${customMsg} — تم إصدار وتوليد بوستر إعلامي معتمد خاص بك من القيادة المركزية! ادخل لمعاينته وتحميله الآن.`,
+      `${customMsg} — تم إصدار وتوليد بوستر إعلامي معتمد خاص بك من إدارة الكيان بمحافظة الغربية! ادخل لمعاينته وتحميله الآن.`,
       'info'
     );
 
@@ -6644,18 +6593,8 @@ class SupabaseDatabase {
   // ════════════════════════════════════════════════════════════════
   // EXCUSES & MEMBERSHIP FREEZE REQUESTS SYSTEM
   // ════════════════════════════════════════════════════════════════
-  getExcuseRequests(currentUser?: UserProfile): ExcuseRequest[] {
-    const list: ExcuseRequest[] = this._ls<ExcuseRequest>('eye_excuse_requests') || [];
-    const activeGov = this.getTargetGovernorate(currentUser);
-    if (activeGov === 'All' || activeGov === 'المركزية' || currentUser?.role === 'Super Admin') {
-      return list;
-    }
-    const govUserIds = new Set(
-      this.cache.users
-        .filter(u => (u.governorate?.trim() || 'الغربية') === activeGov)
-        .map(u => u.id)
-    );
-    return list.filter(r => !r.memberId || govUserIds.has(r.memberId));
+  getExcuseRequests(_currentUser?: UserProfile): ExcuseRequest[] {
+    return this._ls<ExcuseRequest>('eye_excuse_requests') || [];
   }
 
   clearAllExcuseAndFreezeRequests(actor: UserProfile): void {
@@ -6703,10 +6642,10 @@ class SupabaseDatabase {
       }
     })();
 
-    // Notify Super Admin, Vice, Coordinators, HRM, Head, Central, and Committee Leaders
+    // Notify Super Admin, Vice, Coordinators, HRM, Head, and Committee Leaders
     const receivers = this.getUsers().filter(
       (u) =>
-        (['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM', 'Head', 'Central'].includes(u.role) ||
+        (['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM', 'Head'].includes(u.role) ||
           u.department === 'HRM' ||
           u.committee === 'HR' ||
           (u.role === 'Leader' && (u.committee === req.committee || u.committee === 'All'))) &&
@@ -6732,7 +6671,7 @@ class SupabaseDatabase {
       const target = list.find((r) => r.id === id);
       if (target) {
         const isExecutive =
-          ['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM', 'Head', 'Central', 'Leader'].includes(actor.role) ||
+          ['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM', 'Head', 'Leader'].includes(actor.role) ||
           actor.department === 'HRM' ||
           actor.committee === 'HR';
         if (!isExecutive) {
@@ -6819,18 +6758,8 @@ class SupabaseDatabase {
     }
   }
 
-  getFreezeRequests(currentUser?: UserProfile): FreezeRequest[] {
-    let list: FreezeRequest[] = this._ls<FreezeRequest>('eye_freeze_requests') || [];
-    const activeGov = this.getTargetGovernorate(currentUser);
-    if (activeGov === 'All' || activeGov === 'المركزية' || currentUser?.role === 'Super Admin') {
-      return list;
-    }
-    const govUserIds = new Set(
-      this.cache.users
-        .filter((u) => (u.governorate?.trim() || 'الغربية') === activeGov)
-        .map((u) => u.id)
-    );
-    return list.filter((r) => !r.memberId || govUserIds.has(r.memberId));
+  getFreezeRequests(_currentUser?: UserProfile): FreezeRequest[] {
+    return this._ls<FreezeRequest>('eye_freeze_requests') || [];
   }
 
   createFreezeRequest(req: Omit<FreezeRequest, 'id' | 'createdAt' | 'status'>, actor: UserProfile): FreezeRequest {
@@ -6869,10 +6798,10 @@ class SupabaseDatabase {
       }
     })();
 
-    // Notify Super Admin, Vice, Coordinators, HRM, Head, Central, and Committee Leaders
+    // Notify Super Admin, Vice, Coordinators, HRM, Head, and Committee Leaders
     const receivers = this.getUsers().filter(
       (u) =>
-        (['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM', 'Head', 'Central'].includes(u.role) ||
+        (['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM', 'Head'].includes(u.role) ||
           u.department === 'HRM' ||
           u.committee === 'HR' ||
           (u.role === 'Leader' && (u.committee === req.committee || u.committee === 'All'))) &&
@@ -6898,7 +6827,7 @@ class SupabaseDatabase {
       const target = list.find((r) => r.id === id);
       if (target) {
         const isExecutive =
-          ['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM', 'Head', 'Central', 'Leader'].includes(actor.role) ||
+          ['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM', 'Head', 'Leader'].includes(actor.role) ||
           actor.department === 'HRM' ||
           actor.committee === 'HR';
         if (!isExecutive) {
@@ -7030,10 +6959,10 @@ class SupabaseDatabase {
       }
     })();
 
-    // Notify Super Admin, Vice, Coordinators, HRM, Head, Central, and Committee Leaders (both current and target committee)
+    // Notify Super Admin, Vice, Coordinators, HRM, Head, and Committee Leaders (both current and target committee)
     const receivers = this.getUsers().filter(
       (u) =>
-        (['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM', 'Head', 'Central'].includes(u.role) ||
+        (['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM', 'Head'].includes(u.role) ||
           u.department === 'HRM' ||
           u.committee === 'HR' ||
           (u.role === 'Leader' && (u.committee === req.currentCommittee || u.committee === req.targetCommittee || u.committee === 'All'))) &&
@@ -7070,7 +6999,7 @@ class SupabaseDatabase {
       const target = list.find((r) => r.id === id);
       if (target) {
         const isExecutive =
-          ['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM', 'Head', 'Central', 'Leader'].includes(actor.role) ||
+          ['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM', 'Head', 'Leader'].includes(actor.role) ||
           actor.department === 'HRM' ||
           actor.committee === 'HR';
         if (!isExecutive) {
@@ -7201,16 +7130,7 @@ class SupabaseDatabase {
       }
     }
 
-    const activeGov = this.getTargetGovernorate(currentUser);
-    if (activeGov === 'All' || activeGov === 'المركزية') {
-      return list;
-    }
-    const govUserIds = new Set(
-      this.cache.users
-        .filter(u => (u.governorate?.trim() || 'الغربية') === activeGov)
-        .map(u => u.id)
-    );
-    return list.filter(r => !r.memberId || govUserIds.has(r.memberId));
+    return list;
   }
 
   addDisciplinaryRecord(record: Omit<DisciplinaryRecord, 'id' | 'issuedAt'>): DisciplinaryRecord {

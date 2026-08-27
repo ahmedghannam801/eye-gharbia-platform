@@ -333,7 +333,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
               <span className="text-[11px] sm:text-sm font-black text-blue-800 dark:text-blue-300 uppercase tracking-widest drop-shadow text-center">
                 {currentUser.committee 
                   ? (language === 'ar' ? `— لجنة ${translateCommittee(currentUser.committee)} —` : `— ${currentUser.committee.toUpperCase()} COMMITTEE —`)
-                  : (language === 'ar' ? '— اللجنة المركزية للموارد البشرية —' : '— CENTRAL HUMAN RESOURCES COMMITTEE —')}
+                  : (language === 'ar' ? '— لجنة الموارد البشرية بمحافظة الغربية —' : '— GHARBIA HUMAN RESOURCES COMMITTEE —')}
               </span>
               <div className="w-4 sm:w-12 h-[2px] bg-gradient-to-l from-transparent to-blue-500" />
             </div>
@@ -365,24 +365,11 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
                 <span className="truncate">{language === 'ar' ? `منصة العمل الموحدة لكيان EYE ${userGovWelcomeAr}` : `EYE ${userGovEn} Secretariat Platform`}</span>
               </div>
 
-              {/* Quick Governorate Switcher for Executive Leadership */}
-              {['Super Admin', 'Head', 'Vice'].includes(currentUser.role) && (
-                <div className="inline-flex items-center gap-1.5 bg-amber-500/15 dark:bg-amber-400/10 border border-amber-500/30 dark:border-amber-400/30 px-2.5 py-1 rounded-lg text-amber-800 dark:text-amber-300 text-[11px] font-bold shadow-2xs">
-                  <MapPin className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                  <span>{language === 'ar' ? 'التبديل للمحافظة:' : 'Branch:'}</span>
-                  <select
-                    value={activeGov}
-                    onChange={(e) => handleGovSelect(e.target.value)}
-                    className="bg-transparent font-black text-blue-900 dark:text-blue-300 focus:outline-none cursor-pointer"
-                  >
-                    {EGYPTIAN_GOVERNORATES.map((gov) => (
-                      <option key={gov} value={gov} className="bg-slate-900 text-white">
-                        {gov === 'المركزية' ? 'المركزية' : `محافظة ${gov}`}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+              {/* Branch Badge */}
+              <div className="inline-flex items-center gap-1.5 bg-emerald-500/15 dark:bg-emerald-400/10 border border-emerald-500/30 dark:border-emerald-400/30 px-2.5 py-1 rounded-lg text-emerald-800 dark:text-emerald-300 text-[11px] font-bold shadow-2xs">
+                <MapPin className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span>{language === 'ar' ? 'فرع محافظة الغربية' : 'Gharbia Branch'}</span>
+              </div>
             </div>
 
             <h1 className="text-xl sm:text-3xl lg:text-4xl font-black tracking-tight text-slate-900 dark:text-white drop-shadow-md">

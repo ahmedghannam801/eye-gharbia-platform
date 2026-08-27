@@ -56,7 +56,6 @@ export const translations = {
     'Vice': 'نائب رئيس اللجنة (Vice Head)',
     'Coordinator': 'منسق (Coordinator)',
     'Deputy Coordinator': 'نائب منسق (Deputy Coordinator)',
-    'Central': 'المركزية (Central)',
     
     // Tasks Statuses
     'Draft': 'مسودة',
@@ -193,7 +192,6 @@ export const translations = {
     'Vice': 'Committee Vice Head',
     'Coordinator': 'Coordinator',
     'Deputy Coordinator': 'Deputy Coordinator',
-    'Central': 'Central Official',
     
     // Tasks Statuses
     'Draft': 'Draft',

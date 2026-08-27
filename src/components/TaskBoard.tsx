@@ -225,8 +225,8 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
 
       const usersList = db.getUsers();
 
-      // Map Supabase snake_case rows to the app's camelCase Task/Submission types
-      const allTasks: Task[] = (rawTasks || []).map((r: any): Task => ({
+      // Map Supabase snake_case rows to Task/Submission types
+      const remoteTasks: Task[] = (rawTasks || []).map((r: any): Task => ({
         id: r.id,
         name: r.name,
         description: r.description,
@@ -251,6 +251,13 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
         targetAudience: r.target_audience || undefined,
         governorate: r.governorate || undefined,
       }));
+
+      // Seamlessly combine both remote and local optimistic tasks so newly created items never disappear
+      const localTasks = db.getTasks(currentUser);
+      const taskMap = new Map<string, Task>();
+      localTasks.forEach(t => { if (t && t.id) taskMap.set(t.id, t); });
+      remoteTasks.forEach(t => { if (t && t.id) taskMap.set(t.id, t); });
+      const allTasks: Task[] = Array.from(taskMap.values());
 
       const allSubs: Submission[] = (rawSubs || []).map((r: any): Submission => {
         const memberProfile = usersList.find(u => u.id === r.member_id);
@@ -660,7 +667,7 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
 
       // ── Step 3: Notify all leaders/admins + task creator ─────────────────
       try {
-        const notifyRoles = ['Super Admin', 'Coordinator', 'Deputy Coordinator', 'Leader', 'Head', 'HRM', 'Central', 'Vice'];
+        const notifyRoles = ['Super Admin', 'Coordinator', 'Deputy Coordinator', 'Leader', 'Head', 'HRM', 'Vice'];
         const { data: recipients } = await supabase
           .from('profiles')
           .select('id')

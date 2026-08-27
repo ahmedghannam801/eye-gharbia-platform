@@ -2,7 +2,7 @@
  * EYE Workflow Hub - System Type Declarations
  */
 
-export type UserRole = 'Member' | 'Leader' | 'Super Admin' | 'HRM' | 'Vice' | 'Head' | 'Coordinator' | 'Deputy Coordinator' | 'Central';
+export type UserRole = 'Member' | 'Leader' | 'Super Admin' | 'HRM' | 'Vice' | 'Head' | 'Coordinator' | 'Deputy Coordinator';
 
 export type UserStatus = 'Pending Approval' | 'Active' | 'Disabled';
 
@@ -33,128 +33,36 @@ export interface UserProfile {
   lastStreakDate?: string; // YYYY-MM-DD
   rating?: number;         // معدل التقييم العام
   bonusPoints?: number;    // نقاط البونص المضافة على تقييم AVG
-  governorate?: string;    // المحافظة التابع لها العضو (e.g. 'الغربية')
+  governorate?: string;    // المحافظة التابع لها العضو (الغربية دائماً)
   subCommittee?: string;   // اللجنة الفرعية (e.g. 'HR OF OR')
 }
 
 export const EGYPTIAN_GOVERNORATES = [
-  'القاهرة',
-  'الإسكندرية',
-  'الجيزة',
   'الغربية',
-  'القليوبية',
-  'الشرقية',
-  'الدقهلية',
-  'المنوفية',
-  'البحيرة',
-  'كفر الشيخ',
-  'الإسماعيلية',
-  'بورسعيد',
-  'السويس',
-  'دمياط',
-  'شمال سيناء',
-  'الفيوم',
-  'بني سويف',
-  'المنيا',
-  'أسيوط',
-  'سوهاج',
-  'قنا',
-  'الأقصر',
-  'أسوان',
-  'البحر الأحمر',
-  'المركزية',
 ] as const;
 
 export const GOVERNORATE_PREFIXES: Record<string, string> = {
-  'القاهرة': 'CAI',
-  'الإسكندرية': 'ALX',
-  'الجيزة': 'GZA',
-  'القليوبية': 'QLB',
-  'الشرقية': 'SHR',
-  'الدقهلية': 'DKH',
-  'المنوفية': 'MNF',
-  'البحيرة': 'BHR',
-  'كفر الشيخ': 'KFR',
-  'الإسماعيلية': 'ISM',
-  'بورسعيد': 'PSD',
-  'السويس': 'SWZ',
-  'دمياط': 'DMT',
-  'شمال سيناء': 'SIN',
-  'الفيوم': 'FYM',
-  'بني سويف': 'BSW',
-  'المنيا': 'MNY',
-  'أسيوط': 'AST',
-  'سوهاج': 'SHG',
-  'قنا': 'QNA',
-  'الأقصر': 'LXR',
-  'أسوان': 'ASW',
-  'البحر الأحمر': 'RED',
   'الغربية': 'GHB',
-  'المركزية': 'CTR',
 };
 
 export const GOVERNORATE_NAMES_EN: Record<string, string> = {
   'الغربية': 'GHARBIA',
-  'القاهرة': 'CAIRO',
-  'الإسكندرية': 'ALEXANDRIA',
-  'الجيزة': 'GIZA',
-  'القليوبية': 'QALYUBIA',
-  'الشرقية': 'SHARQIA',
-  'الدقهلية': 'DAKAHLIA',
-  'المنوفية': 'MONUFIA',
-  'البحيرة': 'BEHEIRA',
-  'كفر الشيخ': 'KAFR EL-SHEIKH',
-  'الإسماعيلية': 'ISMAILIA',
-  'بورسعيد': 'PORT SAID',
-  'السويس': 'SUEZ',
-  'دمياط': 'DAMIETTA',
-  'شمال سيناء': 'NORTH SINAI',
-  'جنوب سيناء': 'SOUTH SINAI',
-  'الفيوم': 'FAYOUM',
-  'بني سويف': 'BENI SUEF',
-  'المنيا': 'MINYA',
-  'أسيوط': 'ASYUT',
-  'سوهاج': 'SOHAG',
-  'قنا': 'QENA',
-  'الأقصر': 'LUXOR',
-  'أسوان': 'ASWAN',
-  'البحر الأحمر': 'RED SEA',
-  'الوادي الجديد': 'NEW VALLEY',
-  'مطروح': 'MATROUH',
-  'المركزية': 'CENTRAL',
 };
 
 export function getActiveGovernorate(currentUser?: { role?: string; governorate?: string } | null): string {
-  // Governorate switching across branches is exclusively allowed for Super Admin
-  if (currentUser?.role === 'Super Admin') {
-    if (typeof window !== 'undefined') {
-      try {
-        const savedGov = localStorage.getItem('eye_current_governorate');
-        if (savedGov && savedGov.trim()) return savedGov.trim();
-      } catch {}
-    }
-  }
-  return currentUser?.governorate?.trim() || 'الغربية';
+  return 'الغربية';
 }
 
 export function formatGovernorateAr(governorate?: string): string {
-  if (!governorate) return 'الغربية';
-  const clean = governorate.replace(/^محافظة\s*/, '').trim();
-  return clean || 'الغربية';
+  return 'الغربية';
 }
 
 export function formatGovernorateWelcomeAr(governorate?: string): string {
-  const clean = formatGovernorateAr(governorate);
-  if (clean === 'المركزية' || clean === 'اللجنة المركزية') {
-    return 'بالمركزية';
-  }
-  return `بمحافظة ${clean}`;
+  return 'بمحافظة الغربية';
 }
 
 export function getGovernorateNameEn(governorate?: string): string {
-  if (!governorate) return 'GHARBIA';
-  const clean = formatGovernorateAr(governorate);
-  return GOVERNORATE_NAMES_EN[clean] || clean.toUpperCase();
+  return 'GHARBIA';
 }
 
 export function generateGovernorateLeaderCode(governorate: string, existingUsers: UserProfile[]): string {
@@ -351,12 +259,7 @@ export const COMMITTEE_STRUCTURE: Record<string, string[]> = {
   OR: ['VIP', 'Planning', 'Coordination', 'Logistics'],
 };
 
-export const CENTRAL_DEPARTMENTS: { title: string; committee: string; department: string }[] = [
-  { title: 'مسئول الموارد البشريه المركزيه', committee: 'HR', department: 'مسئول الموارد البشريه المركزيه' },
-  { title: 'مسئول العلاقات العامه المركزيه', committee: 'PR', department: 'مسئول العلاقات العامه المركزيه' },
-  { title: 'مسئول التنظيم المركزيه', committee: 'OR', department: 'مسئول التنظيم المركزيه' },
-  { title: 'مسئول السوشيال ميديا المركزيه', committee: 'SM', department: 'مسئول السوشيال ميديا المركزيه' },
-];
+export const CENTRAL_DEPARTMENTS: { title: string; committee: string; department: string }[] = [];
 
 export const HRM_DEPARTMENTS: { title: string; committee: string; department: string }[] = [
   { title: 'مسئول HR لجنة العلاقات العامة (HR OF PR)', committee: 'HR', department: 'HRM - HR OF PR' },
@@ -647,9 +550,6 @@ export const getUserRoleTitle = (
     if (dept.includes('HR OF SM')) return isAr ? 'مسؤول الموارد البشرية لـ لجنة السوشيال ميديا (HR OF SM)' : 'HR Manager for SM';
     if (dept.includes('HR OF OR')) return isAr ? 'مسؤول الموارد البشرية لـ لجنة التنظيم (HR OF OR)' : 'HR Manager for OR';
     return isAr ? 'مسؤول الموارد البشرية (HRM)' : 'HR Manager (HRM)';
-  }
-  if (role === 'Central') {
-    return user.department || (isAr ? 'مسؤول المركزية' : 'Central Official');
   }
 
   const committeeMap: Record<string, { ar: string; en: string }> = {

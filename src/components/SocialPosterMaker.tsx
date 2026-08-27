@@ -38,7 +38,6 @@ export const SocialPosterMaker: React.FC<SocialPosterMakerProps> = ({ currentUse
     'Deputy Coordinator',
     'Leader',
     'HRM',
-    'Central',
     'Head',
   ].includes(currentUser?.role);
 

@@ -79,11 +79,11 @@ export const FeedbackSystem: React.FC<FeedbackSystemProps> = ({ currentUser, ini
     return () => unsub();
   }, []);
 
-  // Filter members list — Excludes Leadership (Super Admin, Head, Vice, Coordinator, Deputy Coordinator, HRM, Central) from evaluation targets
+  // Filter members list — Excludes Leadership (Super Admin, Head, Vice, Coordinator, Deputy Coordinator, HRM) from evaluation targets
   const filteredUsers = useMemo(() => {
     return allUsersList.filter(u => {
       // Exclude Executive Leadership from being rating targets (Leadership has no evaluations)
-      const isTargetable = (u.role === 'Member' || u.role === 'Leader') && !['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM', 'Central'].includes(u.role);
+      const isTargetable = (u.role === 'Member' || u.role === 'Leader') && !['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM'].includes(u.role);
       if (!isTargetable) return false;
 
       const matchesSearch = u.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -113,10 +113,10 @@ export const FeedbackSystem: React.FC<FeedbackSystemProps> = ({ currentUser, ini
     if (evaluator.id === target.id) return false;
 
     // Leadership roles are not evaluated
-    const isLeadershipTarget = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM', 'Central'].includes(target.role);
+    const isLeadershipTarget = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM'].includes(target.role);
     if (isLeadershipTarget) return false;
 
-    const isExecOrVice = ['Super Admin', 'Head', 'Coordinator', 'Deputy Coordinator', 'Vice', 'HRM', 'Central'].includes(evaluator.role);
+    const isExecOrVice = ['Super Admin', 'Head', 'Coordinator', 'Deputy Coordinator', 'Vice', 'HRM'].includes(evaluator.role);
     const isLeader = evaluator.role === 'Leader';
     const targetIsLeader = target.role === 'Leader';
     const targetIsMember = target.role === 'Member';

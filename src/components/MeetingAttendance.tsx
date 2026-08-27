@@ -42,19 +42,16 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
 
   const load = () => {
     const all = db.getMeetings();
-    // Filter by role visibility
     let visible = all;
     if (currentUser.role === 'Member') {
-      visible = all.filter(m =>
-        (m.committee === 'All' || m.committee === currentUser.committee) &&
-        (m.department === 'All' || m.department === currentUser.department)
-      );
-    } else if (currentUser.role === 'Leader') {
-      visible = all.filter(m =>
-        m.committee === 'All' ||
-        m.committee === currentUser.committee ||
-        m.createdBy === currentUser.id
-      );
+      visible = all.filter(m => {
+        const matchComm = !m.committee || m.committee === 'All' || m.committee === 'None' || m.committee === 'General' || m.committee === currentUser.committee;
+        const matchDept = !m.department || m.department === 'All' || m.department === 'None' || m.department === 'General' || m.department === currentUser.department;
+        return matchComm && matchDept;
+      });
+    } else {
+      // Leaders, Coordinators, Vice, Heads, HRMs and Admins see all meetings relevant to their scope
+      visible = all;
     }
     setMeetings(visible);
     const attMap: Record<string, AttendanceRecord[]> = {};

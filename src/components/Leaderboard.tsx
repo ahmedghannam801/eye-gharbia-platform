@@ -150,12 +150,12 @@ const AllMembersEvaluationsView: React.FC<{
     return getAvailableDepts(committeeFilter, allUsers);
   }, [committeeFilter, allUsers]);
 
-  // Filter and sort members — Excludes Leadership (Super Admin, Head, Vice, Coordinator, Deputy Coordinator, HRM, Central) from evaluation targets
+  // Filter and sort members — Excludes Leadership (Super Admin, Head, Vice, Coordinator, Deputy Coordinator, HRM) from evaluation targets
   const filteredMembers = useMemo(() => {
     return memberEvaluationsData.filter(item => {
       // Exclude Executive Leadership from being rating targets (Leadership has no evaluations)
       const isTargetable = (item.user.role === 'Member' || item.user.role === 'Leader') &&
-        !['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM', 'Central'].includes(item.user.role);
+        !['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM'].includes(item.user.role);
       if (!isTargetable) return false;
 
       const matchesSearch = item.user.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -436,10 +436,10 @@ const AllMembersEvaluationsView: React.FC<{
                   const target = u;
                   if (evaluator.id === target.id) return null;
 
-                  const isLeadershipTarget = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM', 'Central'].includes(target.role);
+                  const isLeadershipTarget = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM'].includes(target.role);
                   if (isLeadershipTarget) return null; // Leadership roles have no evaluations
 
-                  const isExecOrVice = ['Super Admin', 'Head', 'Coordinator', 'Deputy Coordinator', 'Vice', 'HRM', 'Central'].includes(evaluator.role);
+                  const isExecOrVice = ['Super Admin', 'Head', 'Coordinator', 'Deputy Coordinator', 'Vice', 'HRM'].includes(evaluator.role);
                   const isLeader = evaluator.role === 'Leader';
                   const targetIsLeader = target.role === 'Leader';
 

@@ -799,8 +799,8 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({
     printWindow.document.close();
   };
 
-  const isLeadershipTarget = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM', 'Central'].includes(activeUser.role);
-  const isExecOrVice = ['Super Admin', 'Head', 'Coordinator', 'Deputy Coordinator', 'Vice', 'HRM', 'Central'].includes(currentUser.role);
+  const isLeadershipTarget = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM'].includes(activeUser.role);
+  const isExecOrVice = ['Super Admin', 'Head', 'Coordinator', 'Deputy Coordinator', 'Vice', 'HRM'].includes(currentUser.role);
   // Leadership roles have NO evaluations ("ملناش تقييم")
   const canEvaluateTarget = !isOwnProfile && !isLeadershipTarget && (
     isExecOrVice || (currentUser.role === 'Leader' && activeUser.role === 'Member')
@@ -3319,7 +3319,7 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({
               {(userProfile.skills || []).map((skill) => {
                 const skillEndorsements = userProfile.endorsements?.[skill] || [];
                 const alreadyEndorsed = skillEndorsements.includes(currentUser.fullName);
-                const isLeader = currentUser.role === 'Leader' || currentUser.role === 'Super Admin' || currentUser.role === 'Vice' || currentUser.role === 'Coordinator' || currentUser.role === 'Deputy Coordinator' || currentUser.role === 'Head' || currentUser.role === 'Central';
+                const isLeader = currentUser.role === 'Leader' || currentUser.role === 'Super Admin' || currentUser.role === 'Vice' || currentUser.role === 'Coordinator' || currentUser.role === 'Deputy Coordinator' || currentUser.role === 'Head';
 
                 return (
                   <div key={skill} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-200/50 dark:border-slate-800">

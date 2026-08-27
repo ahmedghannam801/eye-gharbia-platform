@@ -59,7 +59,6 @@ const CertPreview: React.FC<{ cert: IssuedCertificate; onPrint: () => void; tran
       : cert.recipientRole === 'Head' ? 'Governorate Head'
       : cert.recipientRole === 'Coordinator' ? 'Governorate Coordinator'
       : cert.recipientRole === 'Deputy Coordinator' ? 'Deputy Coordinator'
-      : cert.recipientRole === 'Central' ? 'Central Official'
       : cert.recipientRole === 'Leader' ? 'Team Leader'
       : cert.recipientRole === 'HRM' ? 'HR Manager'
       : 'Distinguished Member')

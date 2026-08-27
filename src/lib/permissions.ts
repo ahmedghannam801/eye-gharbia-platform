@@ -11,8 +11,8 @@ import { UserProfile, MonthlyPerformance } from '../types';
  * 3. Member: Scoped to their own data and general public committee resources.
  */
 
-export const ADMIN_ROLES = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM', 'Central'];
-export const LEADERSHIP_ROLES = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM', 'Central'];
+export const ADMIN_ROLES = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM'];
+export const LEADERSHIP_ROLES = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM'];
 
 export const isLeadershipRole = (role?: string): boolean => {
   if (!role) return false;
@@ -20,11 +20,11 @@ export const isLeadershipRole = (role?: string): boolean => {
 };
 
 /**
- * Returns true if user has top-level administrative permissions (Super Admin, Head, Vice, Coordinator, Deputy Coordinator, HRM, or Central)
+ * Returns true if user has top-level administrative permissions (Super Admin, Head, Vice, Coordinator, Deputy Coordinator, or HRM)
  */
 export const isAdminUser = (user: Partial<UserProfile> | null | undefined): boolean => {
   if (!user || !user.role) return false;
-  return ADMIN_ROLES.includes(user.role) || isHRVice(user) || isCentralHR(user);
+  return ADMIN_ROLES.includes(user.role) || isHRVice(user);
 };
 
 /**
@@ -37,7 +37,7 @@ export const getEffectiveCommittee = (user: Partial<UserProfile> | null | undefi
   const dept = (user.department || '').toUpperCase();
   const subComm = ((user as any).subCommittee || '').toUpperCase();
 
-  // Check sub-committee or department mapping first (e.g. 'HR OF OR' -> 'OR', 'HR OF SM' -> 'SM', 'HR OF PR' -> 'PR')
+  // Check sub-committee or department mapping first (e.g. 'HR OF OR' -> 'OR', 'HR OF PR' -> 'PR', 'HR OF SM' -> 'SM', 'HR OF MEDIA' -> 'Media', 'HR OF HR' -> 'HR')
   if (subComm.includes('HR OF OR') || dept.includes('HR OF OR')) return 'OR';
   if (subComm.includes('HR OF PR') || dept.includes('HR OF PR')) return 'PR';
   if (subComm.includes('HR OF SM') || dept.includes('HR OF SM')) return 'SM';
@@ -61,9 +61,8 @@ export const isHRVice = (user: Partial<UserProfile> | null | undefined): boolean
   return user.role === 'Vice' && (user.committee === 'HR' || (user.department || '').includes('HR'));
 };
 
-export const isCentralHR = (user: Partial<UserProfile> | null | undefined): boolean => {
-  if (!user) return false;
-  return user.role === 'Central' && (user.committee === 'HR' || (user.department || '').includes('HR'));
+export const isCentralHR = (_user: Partial<UserProfile> | null | undefined): boolean => {
+  return false;
 };
 
 /**
@@ -74,13 +73,13 @@ export const isHRM = (user: Partial<UserProfile> | null | undefined): boolean =>
 };
 
 /**
- * Returns true if the user is a Leader, Central official, or Coordinator for a given committee (or Admin tier)
+ * Returns true if the user is a Leader or Coordinator for a given committee (or Admin tier)
  */
 export const isCommitteeLeader = (user: UserProfile | null | undefined, committee?: string): boolean => {
   if (!user) return false;
   if (isAdminUser(user)) return true;
 
-  const isLeaderRole = user.role === 'Leader' || user.role === 'Head' || user.role === 'Vice' || user.role === 'Coordinator' || user.role === 'Deputy Coordinator' || user.role === 'Central';
+  const isLeaderRole = user.role === 'Leader' || user.role === 'Head' || user.role === 'Vice' || user.role === 'Coordinator' || user.role === 'Deputy Coordinator';
   if (!isLeaderRole) return false;
 
   if (!committee) return true;
@@ -101,7 +100,7 @@ export const canViewMember = (currentUser: UserProfile | null | undefined, targe
 
   if (currentUserComm === 'All') return true;
 
-  const isLeaderRole = currentUser.role === 'Leader' || currentUser.role === 'Vice' || currentUser.role === 'Head' || currentUser.role === 'Coordinator' || currentUser.role === 'Deputy Coordinator' || currentUser.role === 'Central' || currentUser.role === 'HRM';
+  const isLeaderRole = currentUser.role === 'Leader' || currentUser.role === 'Vice' || currentUser.role === 'Head' || currentUser.role === 'Coordinator' || currentUser.role === 'Deputy Coordinator' || currentUser.role === 'HRM';
   if (isLeaderRole) {
     return currentUserComm === targetComm || currentUser.committee === targetMember.committee;
   }
@@ -121,7 +120,7 @@ export const canManageMember = (currentUser: UserProfile | null | undefined, tar
 
   if (currentUserComm === 'All') return true;
 
-  const isLeaderRole = currentUser.role === 'Leader' || currentUser.role === 'Vice' || currentUser.role === 'Head' || currentUser.role === 'Coordinator' || currentUser.role === 'Deputy Coordinator' || currentUser.role === 'Central' || currentUser.role === 'HRM';
+  const isLeaderRole = currentUser.role === 'Leader' || currentUser.role === 'Vice' || currentUser.role === 'Head' || currentUser.role === 'Coordinator' || currentUser.role === 'Deputy Coordinator' || currentUser.role === 'HRM';
   if (isLeaderRole) {
     return (currentUserComm === targetComm || currentUser.committee === targetMember.committee);
   }

@@ -23,14 +23,14 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
   const isAr = language === 'ar';
   const isHRResponsible =
     isAdminUser(currentUser) ||
-    ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM', 'Central'].includes(currentUser.role) ||
+    ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM'].includes(currentUser.role) ||
     currentUser.department === 'HRM' ||
     currentUser.committee === 'HR' ||
     currentUser.committee === 'All' ||
     (currentUser.department || '').includes('HR') ||
     ((currentUser as any).subCommittee || '').includes('HR');
 
-  const isSuperAdminOrVice = isAdminUser(currentUser) || ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Central', 'HRM'].includes(currentUser.role);
+  const isSuperAdminOrVice = isAdminUser(currentUser) || ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM'].includes(currentUser.role);
   const isAdminOrLeader = isHRResponsible || currentUser.role === 'Leader';
 
   // Check if a user can approve/reject requests (Super Admin / Head / Vice / HR have full management and approval authority)

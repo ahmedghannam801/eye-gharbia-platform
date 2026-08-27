@@ -1,38 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../db/localDb';
 import { EyeLogo } from './EyeLogo';
-import { COMMITTEE_STRUCTURE, CENTRAL_DEPARTMENTS, HRM_DEPARTMENTS, UserProfile, UserRole } from '../types';
+import { COMMITTEE_STRUCTURE, HRM_DEPARTMENTS, UserProfile, UserRole } from '../types';
 import { Lock, Mail, User, Phone, Briefcase, Eye, EyeOff, AlertCircle, CheckCircle, ArrowLeft, ArrowRight, Sun, Moon, Copy, MapPin } from 'lucide-react';
 import { useLanguage } from '../lib/LanguageContext';
 import { useTheme } from '../lib/ThemeContext';
 
-// قائمة محافظات مصر المعتمدة في المنصة (25 محافظة + مركزية)
+// قائمة محافظات مصر المعتمدة في المنصة (محافظة الغربية فقط)
 const EGYPT_GOVERNORATES = [
-  'القاهرة',
-  'الإسكندرية',
-  'الجيزة',
   'الغربية',
-  'القليوبية',
-  'الشرقية',
-  'الدقهلية',
-  'المنوفية',
-  'البحيرة',
-  'كفر الشيخ',
-  'الإسماعيلية',
-  'بورسعيد',
-  'السويس',
-  'دمياط',
-  'شمال سيناء',
-  'الفيوم',
-  'بني سويف',
-  'المنيا',
-  'أسيوط',
-  'سوهاج',
-  'قنا',
-  'الأقصر',
-  'أسوان',
-  'البحر الأحمر',
-  'المركزية',
 ] as const;
 
 interface AuthProps {
@@ -65,7 +41,7 @@ export const Auth: React.FC<AuthProps> = ({
   // Login fields
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
-  const [loginGovernorate, setLoginGovernorate] = useState('');
+  const [loginGovernorate, setLoginGovernorate] = useState('الغربية');
 
   // Password Reset fields
   const [newPassword, setNewPassword] = useState('');
@@ -81,7 +57,7 @@ export const Auth: React.FC<AuthProps> = ({
   const [regDepartment, setRegDepartment] = useState('HRM');
   const [regRole, setRegRole] = useState<UserRole>('Member');
   const [regLeaderCode, setRegLeaderCode] = useState('');
-  const [regGovernorate, setRegGovernorate] = useState('');
+  const [regGovernorate, setRegGovernorate] = useState('الغربية');
 
   // After registration: show the generated membership code
   const [newMembershipCode, setNewMembershipCode] = useState<string | null>(null);
@@ -137,10 +113,10 @@ export const Auth: React.FC<AuthProps> = ({
         ? 'لدواعي أمنية، يرجى الانتظار ٥ دقائق قبل محاولة التسجيل مرة أخرى.'
         : 'For security purposes, you can only register once every 5 minutes.';
     }
-    if (cleanErr.includes('already exists') || cleanErr.includes('already registered')) {
+    if (cleanErr.includes('already exists') || cleanErr.includes('already registered') || cleanErr.includes('unique constraint') || cleanErr.includes('duplicate key')) {
       return isAr
-        ? 'هذا البريد الإلكتروني مسجل بالفعل. يرجى تسجيل الدخول.'
-        : 'A user with this email address already exists. Please log in.';
+        ? 'البريد الإلكتروني أو رقم الهاتف مسجل بالفعل في النظام.'
+        : 'This email or phone number is already registered.';
     }
     if (cleanErr.includes('invalid login credentials') || cleanErr.includes('invalid credentials')) {
       return isAr
@@ -170,7 +146,7 @@ export const Auth: React.FC<AuthProps> = ({
 
     const cleanEmail = loginEmail.trim();
     const cleanPassword = loginPassword.trim();
-    const cleanGovernorate = loginGovernorate.trim();
+    const cleanGovernorate = 'الغربية';
 
     // Check client-side rate limit / cooldown lockout
     const lockUntilStr = localStorage.getItem('eye_login_lockout_until');
@@ -190,11 +166,6 @@ export const Auth: React.FC<AuthProps> = ({
       }
     }
 
-    if (!cleanGovernorate) {
-      setErrorMsg(language === 'ar' ? 'يرجى اختيار المحافظة أولاً قبل تسجيل الدخول.' : 'Please select your governorate before signing in.');
-      return;
-    }
-
     if (!cleanEmail || !cleanPassword) {
       setErrorMsg(language === 'ar' ? 'يرجى إدخال جميع البيانات المطلوبة.' : 'Please fill in all credentials.');
       return;
@@ -206,31 +177,11 @@ export const Auth: React.FC<AuthProps> = ({
       localStorage.removeItem('eye_failed_login_count');
       localStorage.removeItem('eye_login_lockout_until');
 
-      const userGov = (res.user.governorate || '').trim();
-      const normalizeGov = (g: string) => g.replace(/^محافظة\s+/, '').trim();
-
-      const isCentralAuthority =
-        res.user.role === 'Super Admin' ||
-        res.user.role === 'Vice' ||
-        res.user.role === 'Coordinator' ||
-        res.user.role === 'Deputy Coordinator' ||
-        res.user.role === 'Central' ||
-        userGov === 'المركزية';
-
-      if (userGov && normalizeGov(userGov) !== normalizeGov(cleanGovernorate) && !isCentralAuthority) {
-        setErrorMsg(
-          language === 'ar'
-            ? `أنت مسجل في محافظة ${userGov} فقط، يرجى اختيارها للدخول`
-            : `You are registered in ${userGov} governorate only. Please select it to sign in.`
-        );
-        return;
-      }
-
       // حفظ المحافظة في الـ session (localStorage)
       try {
         localStorage.setItem('eye_current_governorate', cleanGovernorate);
         // تحديث بيانات المستخدم بالمحافظة إذا لم تكن محفوظة
-        if (!res.user.governorate && res.user.id) {
+        if (res.user.id) {
           db.updateProfile(res.user.id, { governorate: cleanGovernorate }, res.user);
         }
       } catch (err) {
@@ -277,7 +228,7 @@ export const Auth: React.FC<AuthProps> = ({
     }
 
     const trimmedCode = regLeaderCode.trim().toUpperCase();
-    const isSpecialRole = ['Leader', 'Vice', 'Head', 'Coordinator', 'Deputy Coordinator', 'Central', 'HRM'].includes(regRole) || !!trimmedCode;
+    const isSpecialRole = ['Leader', 'Vice', 'Head', 'Coordinator', 'Deputy Coordinator', 'HRM'].includes(regRole) || !!trimmedCode;
     let finalRole = regRole;
     let finalCommittee = regCommittee;
     let finalDepartment = regDepartment;
@@ -543,32 +494,15 @@ export const Auth: React.FC<AuthProps> = ({
             {mode === 'login' && (
               <form className="space-y-5" onSubmit={handleLogin} id="auth-login-form">
 
-                {/* Governorate Dropdown — مطلوب قبل تسجيل الدخول */}
-                <div className="space-y-1.5">
-                  <label htmlFor="login-governorate" className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                    {language === 'ar' ? 'المحافظة' : 'Governorate'}
-                    <span className="text-red-500 ms-1">*</span>
-                  </label>
-                  <div className="relative">
-                    <MapPin className="absolute start-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <select
-                      id="login-governorate"
-                      required
-                      value={loginGovernorate}
-                      onChange={(e) => setLoginGovernorate(e.target.value)}
-                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl ps-10 pe-4 py-3 text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-eye-brand focus:ring-1 focus:ring-eye-brand font-semibold appearance-none"
-                    >
-                      <option value="">{language === 'ar' ? '— اختر محافظتك —' : '— Select your governorate —'}</option>
-                      {EGYPT_GOVERNORATES.map((gov) => (
-                        <option key={gov} value={gov}>{gov}</option>
-                      ))}
-                    </select>
+                {/* Governorate Badge — محافظة الغربية */}
+                <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-800/40 text-emerald-800 dark:text-emerald-300 text-xs font-bold">
+                  <div className="flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    <span>{language === 'ar' ? 'نطاق العمل:' : 'Branch Scope:'}</span>
                   </div>
-                  {!loginGovernorate && (
-                    <p className="text-[10px] text-amber-600 dark:text-amber-400 font-bold">
-                      {language === 'ar' ? '⚠️ يجب اختيار المحافظة أولاً لتسجيل الدخول' : '⚠️ You must select a governorate to continue'}
-                    </p>
-                  )}
+                  <span className="bg-emerald-600 text-white px-2.5 py-0.5 rounded-lg text-xs font-black">
+                    {language === 'ar' ? 'محافظة الغربية' : 'Gharbia Governorate'}
+                  </span>
                 </div>
 
                 <div className="space-y-1.5">
@@ -692,11 +626,6 @@ export const Auth: React.FC<AuthProps> = ({
                         if (!['Leader', 'Vice', 'Head', 'Coordinator', 'Deputy Coordinator'].includes(newRole)) {
                           setRegLeaderCode('');
                         }
-                        if (newRole === 'Central') {
-                          setRegGovernorate('المركزية');
-                          setRegCommittee(CENTRAL_DEPARTMENTS[0].committee);
-                          setRegDepartment(CENTRAL_DEPARTMENTS[0].department);
-                        }
                         if (newRole === 'HRM') {
                           setRegCommittee('HR');
                           setRegDepartment(HRM_DEPARTMENTS[0].department);
@@ -711,7 +640,6 @@ export const Auth: React.FC<AuthProps> = ({
                       <option value="HRM">{language === 'ar' ? 'مسؤول الموارد البشرية (HRM)' : 'HR Manager (HRM)'}</option>
                       <option value="Coordinator">{language === 'ar' ? 'منسق (Coordinator)' : 'Coordinator'}</option>
                       <option value="Deputy Coordinator">{language === 'ar' ? 'نائب منسق (Deputy Coordinator)' : 'Deputy Coordinator'}</option>
-                      <option value="Central">{language === 'ar' ? 'مسؤول بالمركزية (Central)' : 'Central Official'}</option>
                     </select>
                   </div>
                 </div>
@@ -729,49 +657,14 @@ export const Auth: React.FC<AuthProps> = ({
                         type="text"
                         value={regLeaderCode}
                         onChange={(e) => setRegLeaderCode(e.target.value)}
-                        placeholder={language === 'ar' ? 'مثال: EYE-CTRL-HR أو EYE-HRM-PR أو EYE-CAI-LDR-101' : 'e.g. EYE-CTRL-HR, EYE-HRM-PR, EYE-CAI-LDR-101'}
+                        placeholder={language === 'ar' ? 'مثال: EYE-GHB-LDR-101 أو EYE-HRM-PR' : 'e.g. EYE-GHB-LDR-101, EYE-HRM-PR'}
                         className="w-full bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-800 rounded-xl ps-10 pe-4 py-3 text-xs sm:text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 font-black tracking-widest text-center"
                       />
                     </div>
                     <p className="text-[10px] text-amber-600 dark:text-amber-400 font-bold leading-relaxed mt-1.5">
                       {language === 'ar'
-                        ? 'ملاحظة: كود التسجيل يربط حسابك تلقائياً بالمنصب والمحافظة المعتمدة بالكيان. إذا كنت مسؤول مركزية أو HRM أو قائد فرعي استخدم الكود الخاص بك.'
-                        : 'Note: Registration code links your account automatically to your assigned role, branch, and governorate.'}
-                    </p>
-                  </div>
-                )}
-
-                {/* Central Department Selection (Shown ONLY when Central role is selected) */}
-                {regRole === 'Central' && (
-                  <div className="space-y-1.5 p-4 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200/60 dark:border-indigo-800/40 animate-fade-in">
-                    <label className="block text-xs font-bold text-indigo-700 dark:text-indigo-400 uppercase tracking-wider">
-                      {language === 'ar' ? 'تحديد منصب / قسم المركزية *' : 'Central Department / Position *'}
-                    </label>
-                    <div className="relative">
-                      <Briefcase className="absolute start-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-indigo-500" />
-                      <select
-                        value={regDepartment}
-                        onChange={(e) => {
-                          const selectedDept = e.target.value;
-                          const found = CENTRAL_DEPARTMENTS.find(d => d.department === selectedDept);
-                          if (found) {
-                            setRegCommittee(found.committee);
-                            setRegDepartment(found.department);
-                          }
-                        }}
-                        className="w-full bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800 rounded-xl ps-10 pe-4 py-3 text-xs sm:text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 font-bold"
-                      >
-                        {CENTRAL_DEPARTMENTS.map((dept) => (
-                          <option key={dept.department} value={dept.department}>
-                            {dept.title}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <p className="text-[10px] text-indigo-600 dark:text-indigo-400 font-medium leading-relaxed mt-1">
-                      {language === 'ar'
-                        ? 'تنويه: مسؤولو المركزية يمتلكون صلاحية متابعة وتقييم رؤساء اللجان والنواب عبر جميع المحافظات.'
-                        : 'Notice: Central officials have authority to evaluate & monitor Heads and Vices across all governorates.'}
+                        ? 'ملاحظة: كود التسجيل يربط حسابك تلقائياً بالمنصب المعتمد بالكيان بمحافظة الغربية.'
+                        : 'Note: Registration code links your account automatically to your assigned role in Gharbia.'}
                     </p>
                   </div>
                 )}
@@ -809,7 +702,7 @@ export const Auth: React.FC<AuthProps> = ({
                 )}
 
                 {/* Dynamic Committee & Department Selection Based on Role */}
-                {!['Coordinator', 'Deputy Coordinator', 'Central', 'HRM'].includes(regRole) && (
+                {!['Coordinator', 'Deputy Coordinator', 'HRM'].includes(regRole) && (
                   <div className="space-y-4">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {/* Primary Committee Selection (Shown for Leader, Vice, Head, and Member) */}
@@ -885,27 +778,15 @@ export const Auth: React.FC<AuthProps> = ({
                   </div>
                 )}
 
-                {/* Governorate Selection — مطلوب لجميع المتسجلين */}
-                <div className="space-y-1.5">
-                  <label htmlFor="reg-governorate" className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                    {language === 'ar' ? 'المحافظة' : 'Governorate'}
-                    <span className="text-red-500 ms-1">*</span>
-                  </label>
-                  <div className="relative">
-                    <MapPin className="absolute start-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <select
-                      id="reg-governorate"
-                      required
-                      value={regGovernorate}
-                      onChange={(e) => setRegGovernorate(e.target.value)}
-                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl ps-10 pe-4 py-3 text-xs sm:text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-eye-brand focus:ring-1 focus:ring-eye-brand font-semibold appearance-none"
-                    >
-                      <option value="">{language === 'ar' ? '— اختر محافظتك —' : '— Select your governorate —'}</option>
-                      {EGYPT_GOVERNORATES.map((gov) => (
-                        <option key={gov} value={gov}>{gov}</option>
-                      ))}
-                    </select>
+                {/* Governorate Field — محافظة الغربية */}
+                <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-800/40 text-emerald-800 dark:text-emerald-300 text-xs font-bold">
+                  <div className="flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    <span>{language === 'ar' ? 'المحافظة والفرع:' : 'Governorate & Branch:'}</span>
                   </div>
+                  <span className="bg-emerald-600 text-white px-2.5 py-0.5 rounded-lg text-xs font-black">
+                    {language === 'ar' ? 'محافظة الغربية' : 'Gharbia Governorate'}
+                  </span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

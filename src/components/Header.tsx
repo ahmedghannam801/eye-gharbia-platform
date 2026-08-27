@@ -569,29 +569,11 @@ export const Header: React.FC<HeaderProps> = ({
           <span>{language === 'ar' ? 'En' : 'عربي'}</span>
         </button>
 
-        {/* Governorate Switcher Badge (Super Admin / Executive Leadership) */}
-        {['Super Admin', 'Head', 'Vice'].includes(currentUser.role) && (
-          <div className="hidden md:flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-amber-500/10 dark:bg-amber-400/10 border border-amber-500/30 dark:border-amber-400/30 text-amber-800 dark:text-amber-300 text-xs font-bold transition-all">
-            <MapPin className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-            <select
-              value={activeGov}
-              onChange={(e) => {
-                const newGov = e.target.value;
-                try { localStorage.setItem('eye_current_governorate', newGov); } catch {}
-                db.notify();
-                window.dispatchEvent(new CustomEvent('eye_governorate_changed', { detail: newGov }));
-              }}
-              className="bg-transparent text-xs font-black text-slate-900 dark:text-amber-200 focus:outline-none cursor-pointer"
-              title={language === 'ar' ? 'اختيار المحافظة / المركزية' : 'Select Governorate / Central'}
-            >
-              {EGYPTIAN_GOVERNORATES.map((gov) => (
-                <option key={gov} value={gov} className="bg-slate-900 text-white">
-                  {gov === 'المركزية' ? 'المركزية' : `محافظة ${gov}`}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
+        {/* Governorate Badge (Gharbia Only) */}
+        <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-500/10 dark:bg-emerald-400/10 border border-emerald-500/30 dark:border-emerald-400/30 text-emerald-800 dark:text-emerald-300 text-xs font-bold transition-all">
+          <MapPin className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+          <span>{language === 'ar' ? 'محافظة الغربية' : 'Gharbia Governorate'}</span>
+        </div>
 
         {/* Interactive Notification Bell */}
         <div className="relative shrink-0" ref={notifRef}>
