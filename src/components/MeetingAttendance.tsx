@@ -83,14 +83,18 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
     }
   };
 
+  const isExecutiveAdmin = ['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator'].includes(currentUser.role);
+
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
+    const effectiveCommittee = isExecutiveAdmin ? formCommittee : (currentUser.committee || 'HR');
+    const effectiveDept = isExecutiveAdmin ? formDept : 'All';
     db.createMeeting({
       title: formTitle,
       description: formDesc,
       type: formType,
-      committee: isLeaderOrAdmin(currentUser) ? formCommittee : currentUser.committee,
-      department: formDept,
+      committee: effectiveCommittee,
+      department: effectiveDept,
       scheduledAt: formDate,
       location: formLocation,
       expectedAttendeesCount: formAttendeesCount ? parseInt(formAttendeesCount, 10) : undefined,
@@ -446,14 +450,23 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
                   <option value="Department">{isAr ? 'قسم' : 'Department'}</option>
                   <option value="Emergency">{isAr ? 'طارئ' : 'Emergency'}</option>
                 </select>
-                <select value={formCommittee} onChange={e => setFormCommittee(e.target.value)}
-                  className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold focus:outline-none focus:border-eye-brand">
-                  <option value="All">{isAr ? 'كل اللجان' : 'All Committees'}</option>
-                  {['HR','PR','SM','OR'].map(c => <option key={c} value={c}>{c === 'HR' ? (isAr ? 'الموارد البشرية (HRM)' : 'HRM') : c}</option>)}
-                </select>
+                {isExecutiveAdmin ? (
+                  <select value={formCommittee} onChange={e => setFormCommittee(e.target.value)}
+                    className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold focus:outline-none focus:border-eye-brand">
+                    <option value="All">{isAr ? 'كل اللجان' : 'All Committees'}</option>
+                    {['HR','PR','SM','OR'].map(c => <option key={c} value={c}>{c === 'HR' ? (isAr ? 'الموارد البشرية (HRM)' : 'HRM') : c}</option>)}
+                  </select>
+                ) : (
+                  <div className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-200">
+                    <span className="text-slate-500">{isAr ? 'اللجنة:' : 'Committee:'}</span>
+                    <span className="bg-blue-600 text-white px-2.5 py-0.5 rounded-lg text-[11px] font-black">
+                      {currentUser.committee === 'HR' ? (isAr ? 'الموارد البشرية (HRM)' : 'HRM') : (isAr ? `لجنة ${currentUser.committee}` : currentUser.committee)}
+                    </span>
+                  </div>
+                )}
               </div>
 
-              {(formCommittee === 'HR' || formCommittee === 'HRM') && (
+              {isExecutiveAdmin && (formCommittee === 'HR' || formCommittee === 'HRM') && (
                 <div className="space-y-1 animate-fadeIn">
                   <label className="text-[10px] font-bold text-amber-700 dark:text-amber-300 block">
                     {isAr ? 'فرع HRM المستهدف:' : 'Target HRM Branch:'}

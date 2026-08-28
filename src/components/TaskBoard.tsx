@@ -387,28 +387,6 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
       targetAudience: targetAudienceMode,
     }, currentUser);
 
-    // Notify all members in the same governorate
-    try {
-      const { data: members } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('governorate', currentUser.governorate)
-        .eq('status', 'Active')
-        .neq('id', currentUser.id);
-
-      if (members && members.length > 0) {
-        const notifications = members.map(member => ({
-          user_id: member.id,
-          title: 'مهمة جديدة',
-          message: `تم إضافة مهمة جديدة: ${newTaskName}`,
-          type: 'info',
-          is_read: false
-        }));
-        await supabase.from('notifications').insert(notifications);
-      }
-    } catch (err) {
-      console.error('Notification error:', err);
-    }
 
     setShowCreateTaskModal(false);
     setNewTaskName('');
@@ -764,25 +742,29 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
       // Update local db cache
       db.updateTask(selectedTask.id, { deadline: isoDate }, currentUser);
 
-      // Notify members in governorate about the extension
+      // Notify target committee members + Super Admin about the extension
       try {
-        const { data: members } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('governorate', currentUser.governorate)
-          .eq('status', 'Active')
-          .neq('id', currentUser.id);
+        const isSpecific = Boolean(selectedTask.assignedMemberIds && selectedTask.assignedMemberIds.length > 0);
+        const targetUsers = db.getUsers().filter(u => {
+          if (u.status !== 'Active') return false;
+          if (u.role === 'Super Admin') return true;
+          if (isSpecific) return selectedTask.assignedMemberIds!.includes(u.id);
+          const isHrmTask = selectedTask.committee === 'HR' || selectedTask.committee === 'HRM';
+          const isHrmUser = u.committee === 'HR' || u.committee === 'HRM' || u.department === 'HRM';
+          const matchComm = selectedTask.committee === 'All' || (isHrmTask ? isHrmUser : u.committee === selectedTask.committee);
+          const matchDept = !selectedTask.department || selectedTask.department === 'All' || selectedTask.department === 'General' || selectedTask.department === 'None' || u.department === selectedTask.department;
+          return matchComm && matchDept;
+        });
 
-        if (members && members.length > 0) {
-          const notifs = members.map(m => ({
-            user_id: m.id,
-            title: 'تمديد موعد التسليم ⏳',
-            message: `تم تمديد موعد تسليم المهمة "${selectedTask.name}" إلى ${new Date(isoDate).toLocaleDateString('ar-EG')}`,
-            type: 'info',
-            is_read: false,
-            related_id: selectedTask.id
-          }));
-          await supabase.from('notifications').insert(notifs);
+        const targetUserIds = targetUsers.map(u => u.id).filter(id => id !== currentUser.id);
+        if (targetUserIds.length > 0) {
+          db.addNotificationsBulk(
+            targetUserIds,
+            'تمديد موعد التسليم ⏳',
+            `تم تمديد موعد تسليم المهمة "${selectedTask.name}" إلى ${new Date(isoDate).toLocaleDateString('ar-EG')}`,
+            'info',
+            selectedTask.id
+          );
         }
       } catch (notifErr) {
         console.warn('Deadline notification error:', notifErr);

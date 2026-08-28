@@ -2565,10 +2565,14 @@ class SupabaseDatabase {
       const isSpecific = Boolean(newTask.assignedMemberIds && newTask.assignedMemberIds.length > 0);
       const targetUsers = this.getUsers().filter((u) => {
         if (u.status !== 'Active') return false;
+        // Super Admin receives ALL task notifications across all committees
+        if (u.role === 'Super Admin') return true;
         if (isSpecific) {
           return newTask.assignedMemberIds!.includes(u.id);
         }
-        const matchComm = newTask.committee === 'All' || u.committee === newTask.committee;
+        const isHrmTask = newTask.committee === 'HR' || newTask.committee === 'HRM';
+        const isHrmUser = u.committee === 'HR' || u.committee === 'HRM' || u.department === 'HRM';
+        const matchComm = newTask.committee === 'All' || (isHrmTask ? isHrmUser : u.committee === newTask.committee);
         const matchDept = !newTask.department || newTask.department === 'All' || newTask.department === 'General' || newTask.department === 'None' || u.department === newTask.department;
         return matchComm && matchDept;
       });
@@ -2651,8 +2655,12 @@ class SupabaseDatabase {
       const isSpecific = Boolean(task.assignedMemberIds && task.assignedMemberIds.length > 0);
       const users = this.getUsers().filter((u) => {
         if (u.status !== 'Active') return false;
+        // Super Admin receives ALL task notifications across all committees
+        if (u.role === 'Super Admin') return true;
         if (isSpecific) return task.assignedMemberIds!.includes(u.id);
-        const matchComm = task.committee === 'All' || u.committee === task.committee;
+        const isHrmTask = task.committee === 'HR' || task.committee === 'HRM';
+        const isHrmUser = u.committee === 'HR' || u.committee === 'HRM' || u.department === 'HRM';
+        const matchComm = task.committee === 'All' || (isHrmTask ? isHrmUser : u.committee === task.committee);
         const matchDept = !task.department || task.department === 'All' || task.department === 'General' || task.department === 'None' || u.department === task.department;
         return matchComm && matchDept;
       });
@@ -3155,8 +3163,16 @@ class SupabaseDatabase {
       `Posted announcement "${title}" [${category}] for target ${committee}.`
     );
 
-    // Send notifications to EVERYONE across all committees and governorates for announcements!
-    const users = this.getUsers().filter((u) => u.status === 'Active');
+    // Send notifications to target committee members + Super Admin
+    const isHrmAnn = committee === 'HR' || committee === 'HRM';
+    const users = this.getUsers().filter((u) => {
+      if (u.status !== 'Active') return false;
+      // Super Admin receives ALL announcement notifications
+      if (u.role === 'Super Admin') return true;
+      if (!committee || committee === 'All' || committee === 'None' || committee === 'General') return true;
+      const isHrmUser = u.committee === 'HR' || u.committee === 'HRM' || u.department === 'HRM';
+      return isHrmAnn ? isHrmUser : u.committee === committee;
+    });
     const notifTitle = category === 'New Feature' ? '🚀 ميزة جديدة متوفرة الآن!' : `📢 تعميم/إعلان جديد: ${title}`;
     const notifMsg = category === 'New Feature'
       ? `تم إطلاق ميزة جديدة: "${title}". يمكنك الدخول وتجربتها الآن على المنصة!`
@@ -3550,12 +3566,17 @@ class SupabaseDatabase {
 
     this.logActivity(creator.id, creator.fullName, creator.role, 'Meeting Created', `Created meeting "${meeting.title}" (Code: ${code})`);
 
-    // Dispatch bulk notifications to target members
-    const targetUsers = this.getUsers().filter(u =>
-      (meeting.committee === 'All' || u.committee === meeting.committee) &&
-      (meeting.department === 'All' || u.department === meeting.department) &&
-      u.status === 'Active'
-    );
+    // Dispatch bulk notifications to target committee members + Super Admin
+    const isHrmMeeting = meeting.committee === 'HR' || meeting.committee === 'HRM';
+    const targetUsers = this.getUsers().filter(u => {
+      if (u.status !== 'Active') return false;
+      // Super Admin receives ALL meeting notifications across all committees
+      if (u.role === 'Super Admin') return true;
+      const isHrmUser = u.committee === 'HR' || u.committee === 'HRM' || u.department === 'HRM';
+      const matchComm = meeting.committee === 'All' || (isHrmMeeting ? isHrmUser : u.committee === meeting.committee);
+      const matchDept = !meeting.department || meeting.department === 'All' || meeting.department === 'None' || meeting.department === 'General' || u.department === meeting.department;
+      return matchComm && matchDept;
+    });
     const targetUserIds = targetUsers.map(u => u.id);
     this.addNotificationsBulk(
       targetUserIds,
