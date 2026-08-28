@@ -16,6 +16,13 @@ interface MeetingsProps {
 
 const isLeaderOrAdmin = (u: UserProfile) => ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader'].includes(u.role);
 
+// Only meeting creator or Super Admin can manage meeting attendance, code, and status
+const canManageMeeting = (mtg: Meeting, user: UserProfile): boolean => {
+  if (!user) return false;
+  if (user.role === 'Super Admin') return true;
+  return Boolean(mtg.createdBy && (mtg.createdBy === user.id || mtg.createdBy === user.email));
+};
+
 export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavigateToView }) => {
   const { language, isRtl } = useLanguage();
   const isAr = language === 'ar';
@@ -177,7 +184,7 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
             const att = attendanceMap[mtg.id] || [];
             const iCheckedIn = att.some(a => a.memberId === currentUser.id);
             const isExpanded = expandedMtg === mtg.id;
-            const isCreator = mtg.createdBy === currentUser.id || isLeaderOrAdmin(currentUser);
+            const canManage = canManageMeeting(mtg, currentUser);
 
             return (
               <div key={mtg.id} className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm card-pressable">
@@ -196,6 +203,11 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
                       <p className="text-sm font-black text-slate-900 dark:text-white truncate">{mtg.title}</p>
                       <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${statusColor(mtg.status)}`}>{statusLabel(mtg.status)}</span>
                       <span className="text-[9px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-500 px-2 py-0.5 rounded-full">{typeLabel(mtg.type)}</span>
+                      {mtg.createdByName && (
+                        <span className="text-[9px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/60 px-2 py-0.5 rounded-full border border-slate-200/60 dark:border-slate-700/60">
+                          👤 {isAr ? `المنظم: ${mtg.createdByName}` : `Host: ${mtg.createdByName}`}
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 sm:gap-3 flex-wrap mt-1 text-[10px] text-slate-500 font-semibold">
                       <span className="flex items-center gap-1 font-bold text-slate-700 dark:text-slate-300">
@@ -236,7 +248,7 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
                         {isAr ? 'سجّل حضورك' : 'Check-in'}
                       </button>
                     )}
-                    {isLeaderOrAdmin(currentUser) && (
+                    {canManage && (
                       <button
                         onClick={(e) => { e.stopPropagation(); handleDeleteMeeting(mtg.id); }}
                         className="p-1.5 rounded-lg bg-red-50 hover:bg-red-500 text-red-500 hover:text-white border border-red-100 transition-colors"
@@ -321,68 +333,86 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
                       </div>
                     )}
 
-                    {/* Leader Controls */}
-                    {isLeaderOrAdmin(currentUser) && (
-                      <div className="space-y-4">
+                    {/* Meeting Manager Controls (Meeting Creator or Super Admin only) */}
+                    {canManage && (
+                      <div className="space-y-4 bg-slate-50/50 dark:bg-slate-800/30 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-700/80">
                         {/* Attendance Code Display */}
-                        <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+                        <div className="flex items-center gap-3 bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
                           <QrCode className="w-4 h-4 text-eye-brand shrink-0" />
                           <div>
-                            <p className="text-[10px] text-slate-500 font-bold">{isAr ? 'كود الحضور السري' : 'Secret Attendance Code'}</p>
+                            <p className="text-[10px] text-slate-500 font-bold">{isAr ? 'كود الحضور السري (خاص بمنشئ الاجتماع / الإدارة)' : 'Secret Attendance Code (Host / Admin Only)'}</p>
                             <p className="text-xl font-black font-mono tracking-widest text-eye-brand">{mtg.attendanceCode}</p>
                           </div>
                           <p className="text-[10px] text-slate-400 ms-auto">{isAr ? 'أعطه للأعضاء فقط' : 'Share with members only'}</p>
                         </div>
 
                         {/* Status controls */}
-                        <div className="flex gap-2 flex-wrap">
+                        <div className="flex gap-2 flex-wrap items-center">
                           {mtg.status === 'Scheduled' && (
-                            <button onClick={() => db.updateMeetingStatus(mtg.id, 'Open')}
-                              className="flex items-center gap-1.5 px-3 py-2 bg-emerald-100 text-emerald-700 rounded-xl text-xs font-bold hover:bg-emerald-200 transition-all">
-                              <Unlock className="w-3.5 h-3.5" />{isAr ? 'افتح تسجيل الحضور' : 'Open Check-in'}
+                            <button
+                              onClick={() => db.updateMeetingStatus(mtg.id, 'Open', currentUser)}
+                              className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
+                            >
+                              <Unlock className="w-3.5 h-3.5" />
+                              {isAr ? 'افتح تسجيل الحضور' : 'Open Check-in'}
                             </button>
                           )}
                           {mtg.status === 'Open' && (
-                            <button onClick={() => db.updateMeetingStatus(mtg.id, 'Closed')}
-                              className="flex items-center gap-1.5 px-3 py-2 bg-red-100 text-red-600 rounded-xl text-xs font-bold hover:bg-red-200 transition-all">
-                              <Lock className="w-3.5 h-3.5" />{isAr ? 'أغلق تسجيل الحضور' : 'Close Check-in'}
+                            <button
+                              onClick={() => db.updateMeetingStatus(mtg.id, 'Closed', currentUser)}
+                              className="flex items-center gap-1.5 px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
+                            >
+                              <Lock className="w-3.5 h-3.5" />
+                              {isAr ? 'أغلق تسجيل الحضور' : 'Close Check-in'}
                             </button>
                           )}
-                          <button onClick={() => db.deleteMeeting(mtg.id, currentUser)}
-                            className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 text-slate-500 rounded-xl text-xs font-bold hover:bg-red-50 hover:text-red-500 transition-all">
-                            <Trash2 className="w-3.5 h-3.5" />{isAr ? 'حذف' : 'Delete'}
-                          </button>
-                        </div>
-
-                        {/* Attendance list */}
-                        <div>
-                          <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">
-                            {isAr ? `الحاضرون (${att.length})` : `Attendance (${att.length})`}
-                          </p>
-                          {att.length === 0 ? (
-                            <p className="text-xs text-slate-400 font-semibold">{isAr ? 'لا أحد سجّل حضوره بعد' : 'No one checked in yet'}</p>
-                          ) : (
-                            <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                              {att.map(a => (
-                                <div key={a.id} className="flex items-center gap-3 p-2.5 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-700">
-                                  <UserCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                                  <div className="flex-1 min-w-0">
-                                    <p 
-                                      className="text-[10px] font-black text-slate-800 dark:text-slate-100 cursor-pointer hover:text-eye-brand hover:underline"
-                                      onClick={() => onNavigateToView?.('profile', a.memberId)}
-                                    >
-                                      {a.memberName}
-                                    </p>
-                                    <p className="text-[9px] text-slate-400">{a.department} · {new Date(a.checkedInAt).toLocaleTimeString(isAr ? 'ar-EG' : 'en-GB', { timeStyle: 'short' })}</p>
-                                  </div>
-                                  {a.isExcused && <span className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold">{isAr ? 'معذور' : 'Excused'}</span>}
-                                </div>
-                              ))}
-                            </div>
+                          {mtg.status === 'Closed' && (
+                            <button
+                              onClick={() => db.updateMeetingStatus(mtg.id, 'Open', currentUser)}
+                              className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm animate-pulse"
+                            >
+                              <Unlock className="w-3.5 h-3.5" />
+                              {isAr ? 'إعادة فتح تسجيل الحضور 🔓' : 'Reopen Check-in 🔓'}
+                            </button>
                           )}
+                          <button
+                            onClick={() => handleDeleteMeeting(mtg.id)}
+                            className="flex items-center gap-1.5 px-3 py-2 bg-red-50 hover:bg-red-600 text-red-600 hover:text-white rounded-xl text-xs font-bold transition-all border border-red-200/60"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            {isAr ? 'حذف الاجتماع' : 'Delete'}
+                          </button>
                         </div>
                       </div>
                     )}
+
+                    {/* Attendance list (Visible to anyone who can view the meeting) */}
+                    <div>
+                      <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">
+                        {isAr ? `قائمة الحاضرين (${att.length})` : `Attendance List (${att.length})`}
+                      </p>
+                      {att.length === 0 ? (
+                        <p className="text-xs text-slate-400 font-semibold">{isAr ? 'لا أحد سجّل حضوره بعد' : 'No one checked in yet'}</p>
+                      ) : (
+                        <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                          {att.map(a => (
+                            <div key={a.id} className="flex items-center gap-3 p-2.5 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-700">
+                              <UserCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <p 
+                                  className="text-[10px] font-black text-slate-800 dark:text-slate-100 cursor-pointer hover:text-eye-brand hover:underline"
+                                  onClick={() => onNavigateToView?.('profile', a.memberId)}
+                                >
+                                  {a.memberName}
+                                </p>
+                                <p className="text-[9px] text-slate-400">{a.department} · {new Date(a.checkedInAt).toLocaleTimeString(isAr ? 'ar-EG' : 'en-GB', { timeStyle: 'short' })}</p>
+                              </div>
+                              {a.isExcused && <span className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold">{isAr ? 'معذور' : 'Excused'}</span>}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>

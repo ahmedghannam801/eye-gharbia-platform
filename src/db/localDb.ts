@@ -645,10 +645,76 @@ class SupabaseDatabase {
     }
   }
 
+  fixSpecificMemberRoles(): void {
+    try {
+      let modified = false;
+      if (this.cache.users && this.cache.users.length > 0) {
+        this.cache.users = this.cache.users.map(u => {
+          const email = (u.email || '').toLowerCase().trim();
+          const name = (u.fullName || '').trim();
+          if (email === 'ysft7136@gmail.com' || name.includes('يوسف غنيم')) {
+            if (u.role === 'Super Admin' || u.membershipCode === 'EYE-ADMIN-0001') {
+              modified = true;
+              return {
+                ...u,
+                role: 'Member' as UserRole,
+                committee: (!u.committee || u.committee === 'None') ? 'HR' : u.committee,
+                department: (!u.department || u.department === 'None') ? 'HRM' : u.department,
+                membershipCode: 'EYE-HR-0001',
+                bio: 'Enthusiastic member of the HRM department.',
+              };
+            }
+          }
+          return u;
+        });
+      }
+
+      if (this.cache.currentUser) {
+        const curEmail = (this.cache.currentUser.email || '').toLowerCase().trim();
+        const curName = (this.cache.currentUser.fullName || '').trim();
+        if (curEmail === 'ysft7136@gmail.com' || curName.includes('يوسف غنيم')) {
+          if (this.cache.currentUser.role === 'Super Admin' || this.cache.currentUser.membershipCode === 'EYE-ADMIN-0001') {
+            this.cache.currentUser = {
+              ...this.cache.currentUser,
+              role: 'Member',
+              committee: (!this.cache.currentUser.committee || this.cache.currentUser.committee === 'None') ? 'HR' : this.cache.currentUser.committee,
+              department: (!this.cache.currentUser.department || this.cache.currentUser.department === 'None') ? 'HRM' : this.cache.currentUser.department,
+              membershipCode: 'EYE-HR-0001',
+              bio: 'Enthusiastic member of the HRM department.',
+            };
+            this.setCurrentUser(this.cache.currentUser);
+            modified = true;
+          }
+        }
+      }
+
+      if (modified) {
+        this._lsSave('eye_users', this.cache.users);
+        if (isSupabaseConfigured && supabase) {
+          supabase
+            .from('profiles')
+            .update({
+              role: 'Member',
+              membership_code: 'EYE-HR-0001',
+              bio: 'Enthusiastic member of the HRM department.',
+              committee: 'HR',
+              department: 'HRM',
+            })
+            .eq('email', 'ysft7136@gmail.com')
+            .then(() => {})
+            .catch(() => {});
+        }
+      }
+    } catch (e) {
+      console.warn('[fixSpecificMemberRoles error]:', e);
+    }
+  }
+
   async init(): Promise<void> {
     if (this.initialized) return;
     this.initialized = true;
     this.sanitizeSingleGovernorateGharbia();
+    this.fixSpecificMemberRoles();
 
     // Check if client is on older localStorage cache format and sanitize stale ghosts
     const CACHE_SYNC_VERSION = 'EYE_PLATFORM_V3_GHARBIA_ONLY';
@@ -860,6 +926,8 @@ class SupabaseDatabase {
         this.cache.currentUser = { ...updatedUser };
       }
     }
+
+    this.fixSpecificMemberRoles();
 
     if (tasks.data) {
       const remoteTasks = tasks.data.map(taskFromRow);
@@ -1627,9 +1695,8 @@ class SupabaseDatabase {
       return { success: false, error: 'يوجد حساب آخر مسجل بهذا البريد الإلكتروني بالفعل.' };
     }
 
-    // Determine if first user (Super Admin)
-    const isFirstUser = allUsers.length === 0;
-    const finalRole: UserRole = isFirstUser ? 'Super Admin' : role;
+    // Assign requested role or Member
+    const finalRole: UserRole = role || 'Member';
     const finalStatus: UserStatus = 'Active';
 
     // Resolve governorate — fallback to 'الغربية' if not provided
@@ -1637,10 +1704,10 @@ class SupabaseDatabase {
 
     // Generate unique ID & membership code
     const paddedNum = String(allUsers.length + 1).padStart(4, '0');
-    const rolePrefix = finalRole === 'Leader' ? 'L' : finalRole === 'Vice' ? 'V' : finalRole === 'Head' ? 'H' : finalRole === 'Coordinator' ? 'C' : finalRole === 'Deputy Coordinator' ? 'DC' : '';
-    const membershipCode = isFirstUser
-      ? 'EYE-ADMIN-0001'
-      : `EYE-${committee || 'M'}-${rolePrefix}${paddedNum}`;
+    const rolePrefix = finalRole === 'Leader' ? 'L' : finalRole === 'Vice' ? 'V' : finalRole === 'Head' ? 'H' : finalRole === 'Coordinator' ? 'C' : finalRole === 'Deputy Coordinator' ? 'DC' : 'M';
+    const membershipCode = finalRole === 'Super Admin'
+      ? `EYE-ADMIN-${paddedNum}`
+      : `EYE-${committee || 'HR'}-${rolePrefix}${paddedNum}`;
 
     let userId = 'user-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4);
 
@@ -3501,9 +3568,17 @@ class SupabaseDatabase {
     return meeting;
   }
 
-  async updateMeetingStatus(meetingId: string, status: MeetingStatus): Promise<void> {
+  async updateMeetingStatus(meetingId: string, status: MeetingStatus, actor?: UserProfile): Promise<void> {
     try {
       const current = this.getMeetings();
+      const targetMeeting = current.find(m => m.id === meetingId);
+      if (actor && targetMeeting) {
+        const canManage = actor.role === 'Super Admin' || targetMeeting.createdBy === actor.id || targetMeeting.createdBy === actor.email;
+        if (!canManage) {
+          console.warn('[updateMeetingStatus Unauthorized]: Only meeting creator or Super Admin can update meeting status');
+          return;
+        }
+      }
       this.cache.meetings = current.map(m => m.id === meetingId ? { ...m, status } : m);
       this._lsSave('eye_meetings', this.cache.meetings);
       this.notify();
@@ -3522,6 +3597,14 @@ class SupabaseDatabase {
   async deleteMeeting(meetingId: string, actor: UserProfile): Promise<void> {
     try {
       const current = this.getMeetings();
+      const targetMeeting = current.find(m => m.id === meetingId);
+      if (actor && targetMeeting) {
+        const canManage = actor.role === 'Super Admin' || targetMeeting.createdBy === actor.id || targetMeeting.createdBy === actor.email;
+        if (!canManage) {
+          console.warn('[deleteMeeting Unauthorized]: Only meeting creator or Super Admin can delete this meeting');
+          return;
+        }
+      }
       this.cache.meetings = current.filter(m => m.id !== meetingId);
       this._lsSave('eye_meetings', this.cache.meetings);
       this.recordDeletedId('eye_deleted_meeting_ids', meetingId);
