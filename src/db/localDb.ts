@@ -814,8 +814,8 @@ class SupabaseDatabase {
       safeFetch(supabase.from('tasks').select('*').order('created_date', { ascending: false })),
       safeFetch(supabase.from('submissions').select('*').order('submitted_at', { ascending: false })),
       safeFetch(supabase.from('announcements').select('*').order('created_date', { ascending: false })),
-      safeFetch(supabase.from('notifications').select('*').order('created_at', { ascending: false })),
-      safeFetch(supabase.from('activity_logs').select('*').order('timestamp', { ascending: false })),
+      safeFetch(supabase.from('notifications').select('*').order('created_at', { ascending: false }).limit(100)),
+      safeFetch(supabase.from('activity_logs').select('*').order('timestamp', { ascending: false }).limit(100)),
       safeFetch(supabase.from('issued_certificates').select('*').order('issued_at', { ascending: false })),
       safeFetch(supabase.from('meetings').select('*').order('created_at', { ascending: false })),
       safeFetch(supabase.from('attendance').select('*')),
@@ -826,7 +826,7 @@ class SupabaseDatabase {
       safeFetch(supabase.from('live_workshops').select('*').order('created_at', { ascending: false })),
       safeFetch(supabase.from('excuses_freezes').select('*').order('created_at', { ascending: false })),
       safeFetch(supabase.from('org_settings').select('*').eq('id', 1).maybeSingle()),
-      safeFetch(supabase.from('disciplinary_records').select('*').order('issued_at', { ascending: false })),
+      safeFetch(supabase.from('disciplinary_records').select('*').order('issued_at', { ascending: false }).limit(100)),
       safeFetch(supabase.from('memory_wall').select('*').order('created_at', { ascending: false })),
       safeFetch(supabase.from('occasions').select('*').order('created_at', { ascending: false })),
       safeFetch(supabase.from('issued_posters').select('*').order('created_at', { ascending: false })),
@@ -835,7 +835,7 @@ class SupabaseDatabase {
       safeFetch(supabase.from('reward_purchases').select('*').order('purchased_at', { ascending: false })),
       safeFetch(supabase.from('weekly_quizzes').select('*').order('created_at', { ascending: false })),
       safeFetch(supabase.from('weekly_challenges').select('*').order('created_at', { ascending: false })),
-      safeFetch(supabase.from('quiz_submissions').select('*').order('submitted_at', { ascending: false })),
+      safeFetch(supabase.from('quiz_submissions').select('*').order('submitted_at', { ascending: false }).limit(150)),
     ]);
 
     const getDeletedIds = (key: string): string[] => {
@@ -1294,6 +1294,15 @@ class SupabaseDatabase {
     this.notify();
   }
 
+  private _realtimeRefreshTimeout: any = null;
+  private debouncedRealtimeRefresh(): void {
+    if (this._realtimeRefreshTimeout) return;
+    this._realtimeRefreshTimeout = setTimeout(() => {
+      this._realtimeRefreshTimeout = null;
+      this.refreshAll();
+    }, 5000);
+  }
+
   // Keep the app in sync when ANY user changes shared data.
   private subscribeRealtime() {
     // Only subscribe if Supabase is configured
@@ -1347,33 +1356,33 @@ class SupabaseDatabase {
         )
         .subscribe();
 
-      // Subscribe to all platform tables for instant real-time synchronization across devices
+      // Subscribe to all platform tables for instant real-time synchronization across devices (debounced to preserve bandwidth)
       supabase
         .channel('eye-hub-changes')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' },              () => { this.refreshAll(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' },                 () => { this.refreshAll(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'submissions' },           () => { this.refreshAll(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'announcements' },         () => { this.refreshAll(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' },         () => { this.refreshAll(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'activity_logs' },          () => { this.refreshAll(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'meetings' },              () => { this.refreshAll(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance' },            () => { this.refreshAll(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'excuses_freezes' },       () => { this.refreshAll(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'work_plans' },            () => { this.refreshAll(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'volunteer_ideas' },       () => { this.refreshAll(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'member_evaluations' },    () => { this.refreshAll(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'leader_feedbacks' },      () => { this.refreshAll(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'disciplinary_records' },  () => { this.refreshAll(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'live_workshops' },        () => { this.refreshAll(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'issued_certificates' },  () => { this.refreshAll(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'reward_items' },          () => { this.refreshAll(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'reward_purchases' },      () => { this.refreshAll(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'weekly_quizzes' },        () => { this.refreshAll(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'weekly_challenges' },     () => { this.refreshAll(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'memory_wall' },           () => { this.refreshAll(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'occasions' },             () => { this.refreshAll(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'issued_posters' },        () => { this.refreshAll(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'academy_courses' },       () => { this.refreshAll(); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' },              () => { this.debouncedRealtimeRefresh(); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' },                 () => { this.debouncedRealtimeRefresh(); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'submissions' },           () => { this.debouncedRealtimeRefresh(); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'announcements' },         () => { this.debouncedRealtimeRefresh(); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' },         () => { this.debouncedRealtimeRefresh(); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'activity_logs' },          () => { this.debouncedRealtimeRefresh(); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'meetings' },              () => { this.debouncedRealtimeRefresh(); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance' },            () => { this.debouncedRealtimeRefresh(); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'excuses_freezes' },       () => { this.debouncedRealtimeRefresh(); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'work_plans' },            () => { this.debouncedRealtimeRefresh(); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'volunteer_ideas' },       () => { this.debouncedRealtimeRefresh(); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'member_evaluations' },    () => { this.debouncedRealtimeRefresh(); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'leader_feedbacks' },      () => { this.debouncedRealtimeRefresh(); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'disciplinary_records' },  () => { this.debouncedRealtimeRefresh(); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'live_workshops' },        () => { this.debouncedRealtimeRefresh(); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'issued_certificates' },  () => { this.debouncedRealtimeRefresh(); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'reward_items' },          () => { this.debouncedRealtimeRefresh(); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'reward_purchases' },      () => { this.debouncedRealtimeRefresh(); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'weekly_quizzes' },        () => { this.debouncedRealtimeRefresh(); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'weekly_challenges' },     () => { this.debouncedRealtimeRefresh(); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'memory_wall' },           () => { this.debouncedRealtimeRefresh(); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'occasions' },             () => { this.debouncedRealtimeRefresh(); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'issued_posters' },        () => { this.debouncedRealtimeRefresh(); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'academy_courses' },       () => { this.debouncedRealtimeRefresh(); })
         .subscribe();
 
       console.debug('Full-platform real-time subscriptions established successfully');
