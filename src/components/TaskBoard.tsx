@@ -1700,7 +1700,7 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
             className="bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 dark:text-slate-200"
           >
             <option value="All">{language === 'ar' ? 'كل اللجان' : 'All Committees'}</option>
-            {Object.keys(COMMITTEE_STRUCTURE).map(c => <option key={c} value={c}>{c === 'HR' ? (language === 'ar' ? 'الموارد البشرية (HRM)' : 'HRM Committee') : translateCommittee(c)}</option>)}
+            {Object.keys(COMMITTEE_STRUCTURE).map(c => <option key={c} value={c}>{translateCommittee(c)}</option>)}
           </select>
 
           {(filterCommittee === 'HR' || filterCommittee === 'HRM') && (
@@ -1709,10 +1709,14 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
               onChange={(e) => setFilterDepartment(e.target.value)}
               className="bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-xl px-3 py-2 text-xs font-bold text-amber-900 dark:text-amber-200 animate-fadeIn shadow-sm"
             >
-              <option value="All">{language === 'ar' ? '🏢 كل فروع HRM' : 'All HRM Branches'}</option>
+              <option value="All">{language === 'ar' ? '🏢 كل فروع وأقسام HR' : 'All HR Departments'}</option>
+              <option value="HRM">إدارة HRM العامة</option>
               <option value="HR OF PR">HR OF PR</option>
               <option value="HR OF SM">HR OF SM</option>
               <option value="HR OF OR">HR OF OR</option>
+              <option value="HRS">HRS (الدعم)</option>
+              <option value="HRIS">HRIS (نظم المعلومات)</option>
+              <option value="HRD">HRD (التدريب)</option>
             </select>
           )}
 

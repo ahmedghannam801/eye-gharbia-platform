@@ -277,7 +277,7 @@ export const IdeaBank: React.FC<IdeaBankProps> = ({ currentUser, onNavigateToVie
                 className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold focus:outline-none"
               >
                 {['HR','PR','SM','OR'].map(c => (
-                  <option key={c} value={c}>{c === 'HR' ? (isAr ? 'الموارد البشرية (HRM)' : 'HRM Committee') : `${c} Committee`}</option>
+                  <option key={c} value={c}>{c === 'HR' ? (isAr ? 'الموارد البشرية (HR)' : 'HR Committee') : `${c} Committee`}</option>
                 ))}
               </select>
               <div className="flex items-center justify-between pt-1">

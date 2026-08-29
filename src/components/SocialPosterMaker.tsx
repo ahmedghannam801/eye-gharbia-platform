@@ -712,7 +712,7 @@ export const SocialPosterMaker: React.FC<SocialPosterMakerProps> = ({ currentUse
                     className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-2 text-xs font-bold text-slate-900 dark:text-white"
                   >
                     <option value="all">{isAr ? 'جميع اللجان' : 'All Committees'}</option>
-                    <option value="HR">{isAr ? 'الموارد البشرية (HRM)' : 'HRM Committee'}</option>
+                    <option value="HR">{isAr ? 'الموارد البشرية (HR)' : 'HR Committee'}</option>
                     <option value="PR">لجنة PR</option>
                     <option value="SM">لجنة SM</option>
                     <option value="OR">لجنة OR</option>
@@ -721,16 +721,20 @@ export const SocialPosterMaker: React.FC<SocialPosterMakerProps> = ({ currentUse
 
                 {(committeeFilter === 'HR' || committeeFilter === 'HRM') && (
                   <div className="col-span-2 animate-fadeIn">
-                    <label className="text-[10px] font-bold text-amber-600 dark:text-amber-400 block mb-1">{isAr ? 'فرع HRM المستهدف:' : 'HRM Branch:'}</label>
+                    <label className="text-[10px] font-bold text-amber-600 dark:text-amber-400 block mb-1">{isAr ? 'فرع / قسم HR المستهدف:' : 'HR Department / Branch:'}</label>
                     <select
                       value={subCommitteeFilter}
                       onChange={e => setSubCommitteeFilter(e.target.value)}
                       className="w-full bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-xl p-2 text-xs font-bold text-amber-900 dark:text-amber-200"
                     >
-                      <option value="all">{isAr ? '🏢 كل فروع HRM' : 'All HRM Branches'}</option>
+                      <option value="all">{isAr ? '🏢 كل فروع وأقسام HR' : 'All HR Departments'}</option>
+                      <option value="HRM">إدارة HRM العامة</option>
                       <option value="HR OF PR">HR OF PR</option>
                       <option value="HR OF SM">HR OF SM</option>
                       <option value="HR OF OR">HR OF OR</option>
+                      <option value="HRS">HRS (الدعم)</option>
+                      <option value="HRIS">HRIS (نظم المعلومات)</option>
+                      <option value="HRD">HRD (التدريب)</option>
                     </select>
                   </div>
                 )}

@@ -717,7 +717,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
               >
                 <option value="all">{ar ? 'جميع اللجان' : 'All Committees'}</option>
                 {['HR', 'PR', 'SM', 'OR'].map(c => (
-                  <option key={c} value={c}>{c === 'HR' ? (ar ? 'الموارد البشرية (HRM)' : 'HRM Committee') : `${c} Committee`}</option>
+                  <option key={c} value={c}>{c === 'HR' ? (ar ? 'الموارد البشرية (HR)' : 'HR Committee') : `${c} Committee`}</option>
                 ))}
               </select>
 
@@ -727,10 +727,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                   onChange={e => setSubCommitteeFilter(e.target.value)}
                   className="bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-xl px-3 py-2 text-xs font-bold text-amber-900 dark:text-amber-200 animate-fadeIn"
                 >
-                  <option value="all">{ar ? '🏢 كل فروع HRM' : 'All HRM Branches'}</option>
+                  <option value="all">{ar ? '🏢 كل فروع وأقسام HR' : 'All HR Departments'}</option>
+                  <option value="HRM">إدارة HRM العامة</option>
                   <option value="HR OF PR">HR OF PR</option>
                   <option value="HR OF SM">HR OF SM</option>
                   <option value="HR OF OR">HR OF OR</option>
+                  <option value="HRS">HRS (الدعم)</option>
+                  <option value="HRIS">HRIS (نظم المعلومات)</option>
+                  <option value="HRD">HRD (التدريب)</option>
                 </select>
               )}
 

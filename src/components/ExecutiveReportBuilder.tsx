@@ -54,7 +54,7 @@ interface ExecutiveReportBuilderProps {
 }
 
 export const ExecutiveReportBuilder: React.FC<ExecutiveReportBuilderProps> = ({ currentUser }) => {
-  const { isRtl, language } = useLanguage();
+  const { isRtl, language, translateCommittee } = useLanguage();
   const isAr = language === 'ar';
 
   const [analytics, setAnalytics] = useState<ExecutiveAnalyticsData | null>(null);
@@ -779,7 +779,7 @@ export const ExecutiveReportBuilder: React.FC<ExecutiveReportBuilderProps> = ({ 
               className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-semibold focus:outline-none focus:border-indigo-500 cursor-pointer"
             >
               <option value="All">{isAr ? 'جميع اللجان (All Committees)' : 'All Committees'}</option>
-              <option value="HR">{isAr ? 'لجنة الموارد البشرية (HRM)' : 'HRM Committee'}</option>
+              <option value="HR">{isAr ? 'لجنة الموارد البشرية (HR)' : 'HR Committee'}</option>
               <option value="PR">{isAr ? 'لجنة العلاقات العامة (PR)' : 'PR Committee'}</option>
               <option value="SM">{isAr ? 'لجنة السوشيال ميديا (SM)' : 'SM Committee'}</option>
               <option value="OR">{isAr ? 'لجنة التنظيم واللوجستيات (OR)' : 'OR Committee'}</option>
@@ -789,17 +789,21 @@ export const ExecutiveReportBuilder: React.FC<ExecutiveReportBuilderProps> = ({ 
           {(selectedCommittee === 'HR' || (selectedCommittee as string) === 'HRM') && (
             <div className="space-y-1.5 animate-fadeIn">
               <label className="text-xs font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
-                <span>🏢 فرع الموارد البشرية المحدد (HRM Branch):</span>
+                <span>{isAr ? '🏢 قسم / فرع الموارد البشرية (HR Department / Branch):' : '🏢 HR Sub-Department:'}</span>
               </label>
               <select
                 value={selectedSubCommittee}
                 onChange={(e: any) => setSelectedSubCommittee(e.target.value)}
                 className="w-full bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-xl px-3 py-2.5 text-xs font-bold text-amber-900 dark:text-amber-200 focus:outline-none focus:border-amber-500 cursor-pointer"
               >
-                <option value="All">{isAr ? 'كل فروع إدارة HRM' : 'All HRM Branches'}</option>
-                <option value="HR OF PR">HR OF PR (العلاقات العامة)</option>
-                <option value="HR OF SM">HR OF SM (السوشيال ميديا)</option>
-                <option value="HR OF OR">HR OF OR (التنظيم)</option>
+                <option value="All">{isAr ? 'كل أقسام وفروع إدارة HR' : 'All HR Departments'}</option>
+                <option value="HRM">{isAr ? 'إدارة الموارد البشرية العامة (HRM)' : 'HR Management (HRM)'}</option>
+                <option value="HR OF PR">HR OF PR ({isAr ? 'العلاقات العامة' : 'PR'})</option>
+                <option value="HR OF SM">HR OF SM ({isAr ? 'السوشيال ميديا' : 'SM'})</option>
+                <option value="HR OF OR">HR OF OR ({isAr ? 'التنظيم' : 'OR'})</option>
+                <option value="HRS">{isAr ? 'لجنة الدعم والمساندة (HRS)' : 'HR Support (HRS)'}</option>
+                <option value="HRIS">{isAr ? 'نظم معلومات الموارد البشرية (HRIS)' : 'HR Information Systems (HRIS)'}</option>
+                <option value="HRD">{isAr ? 'التطوير والتدريب (HRD)' : 'HR Development (HRD)'}</option>
               </select>
             </div>
           )}
@@ -952,7 +956,7 @@ export const ExecutiveReportBuilder: React.FC<ExecutiveReportBuilderProps> = ({ 
               {isAr ? 'موضوع التقرير: ' : 'Focus Topic: '} {customTopic}
             </p>
             <p className="text-[11px] text-slate-400 font-bold">
-              {isAr ? `الفترة المحددة: ${reportPeriod === 'current_week' ? 'الأسبوع الحالي' : reportPeriod === 'last_week' ? 'الأسبوع الماضي' : reportPeriod === 'monthly' ? 'التقييم الشهري الشامل' : 'التقرير الشامل التراكمي'} | نطاق اللجنة: ${selectedCommittee === 'All' ? 'جميع اللجان' : `لجنة ${selectedCommittee}`}` : `Period: ${reportPeriod} | Scope: ${selectedCommittee}`}
+              {isAr ? `الفترة المحددة: ${reportPeriod === 'current_week' ? 'الأسبوع الحالي' : reportPeriod === 'last_week' ? 'الأسبوع الماضي' : reportPeriod === 'monthly' ? 'التقييم الشهري الشامل' : 'التقرير الشامل التراكمي'} | نطاق اللجنة: ${selectedCommittee === 'All' ? 'جميع اللجان' : translateCommittee(selectedCommittee)}` : `Period: ${reportPeriod} | Scope: ${selectedCommittee === 'All' ? 'All Committees' : translateCommittee(selectedCommittee)}`}
             </p>
           </div>
 

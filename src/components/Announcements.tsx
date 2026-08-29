@@ -382,7 +382,7 @@ export const Announcements: React.FC<AnnouncementsProps> = ({ currentUser, onNav
                   >
                     <option value="All">جميع الأعضاء واللجان (Global)</option>
                     {Object.keys(COMMITTEE_STRUCTURE).map(comm => (
-                      <option key={comm} value={comm}>{comm === 'HR' ? 'لجنة الموارد البشرية (HRM)' : `لجنة ${comm}`}</option>
+                      <option key={comm} value={comm}>{comm === 'HR' ? 'لجنة الموارد البشرية (HR)' : `لجنة ${comm}`}</option>
                     ))}
                   </select>
                 </div>

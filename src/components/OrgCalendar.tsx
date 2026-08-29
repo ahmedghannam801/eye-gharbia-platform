@@ -128,7 +128,7 @@ export const OrgCalendar: React.FC<OrgCalendarProps> = ({ currentUser }) => {
           >
             <option value="All">{isAr ? 'جميع اللجان' : 'All Committees'}</option>
             {['HR', 'PR', 'SM', 'OR'].map(c => (
-              <option key={c} value={c}>{c === 'HR' ? (isAr ? 'الموارد البشرية (HRM)' : 'HRM Committee') : `${c} Committee`}</option>
+              <option key={c} value={c}>{c === 'HR' ? (isAr ? 'الموارد البشرية (HR)' : 'HR Committee') : `${c} Committee`}</option>
             ))}
           </select>
 
@@ -138,10 +138,14 @@ export const OrgCalendar: React.FC<OrgCalendarProps> = ({ currentUser }) => {
               onChange={e => setSelectedSubCommittee(e.target.value)}
               className="bg-amber-900/80 border border-amber-500 text-amber-100 rounded-xl px-3 py-2 text-xs font-bold animate-fadeIn"
             >
-              <option value="All">{isAr ? '🏢 كل فروع HRM' : 'All HRM Branches'}</option>
+              <option value="All">{isAr ? '🏢 كل فروع وأقسام HR' : 'All HR Departments'}</option>
+              <option value="HRM">إدارة HRM العامة</option>
               <option value="HR OF PR">HR OF PR</option>
               <option value="HR OF SM">HR OF SM</option>
               <option value="HR OF OR">HR OF OR</option>
+              <option value="HRS">HRS (الدعم)</option>
+              <option value="HRIS">HRIS (نظم المعلومات)</option>
+              <option value="HRD">HRD (التدريب)</option>
             </select>
           )}
 

@@ -454,13 +454,13 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
                   <select value={formCommittee} onChange={e => setFormCommittee(e.target.value)}
                     className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold focus:outline-none focus:border-eye-brand">
                     <option value="All">{isAr ? 'كل اللجان' : 'All Committees'}</option>
-                    {['HR','PR','SM','OR'].map(c => <option key={c} value={c}>{c === 'HR' ? (isAr ? 'الموارد البشرية (HRM)' : 'HRM') : c}</option>)}
+                    {['HR','PR','SM','OR'].map(c => <option key={c} value={c}>{c === 'HR' ? (isAr ? 'الموارد البشرية (HR)' : 'HR') : c}</option>)}
                   </select>
                 ) : (
                   <div className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-200">
                     <span className="text-slate-500">{isAr ? 'اللجنة:' : 'Committee:'}</span>
                     <span className="bg-blue-600 text-white px-2.5 py-0.5 rounded-lg text-[11px] font-black">
-                      {currentUser.committee === 'HR' ? (isAr ? 'الموارد البشرية (HRM)' : 'HRM') : (isAr ? `لجنة ${currentUser.committee}` : currentUser.committee)}
+                      {currentUser.committee === 'HR' ? (isAr ? 'الموارد البشرية (HR)' : 'HR') : (isAr ? `لجنة ${currentUser.committee}` : currentUser.committee)}
                     </span>
                   </div>
                 )}
@@ -469,17 +469,21 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
               {isExecutiveAdmin && (formCommittee === 'HR' || formCommittee === 'HRM') && (
                 <div className="space-y-1 animate-fadeIn">
                   <label className="text-[10px] font-bold text-amber-700 dark:text-amber-300 block">
-                    {isAr ? 'فرع HRM المستهدف:' : 'Target HRM Branch:'}
+                    {isAr ? 'قسم / فرع HR المستهدف:' : 'Target HR Department / Branch:'}
                   </label>
                   <select
                     value={formDept}
                     onChange={e => setFormDept(e.target.value)}
                     className="w-full bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-xl px-3 py-2 text-xs font-bold text-amber-900 dark:text-amber-200 focus:outline-none focus:border-amber-500"
                   >
-                    <option value="All">{isAr ? 'جميع فروع إدارة HRM' : 'All HRM Branches'}</option>
-                    <option value="HR OF PR">HR OF PR (العلاقات العامة)</option>
-                    <option value="HR OF SM">HR OF SM (السوشيال ميديا)</option>
-                    <option value="HR OF OR">HR OF OR (التنظيم)</option>
+                    <option value="All">{isAr ? 'جميع أقسام وفروع إدارة HR' : 'All HR Departments'}</option>
+                    <option value="HRM">{isAr ? 'إدارة الموارد البشرية العامة (HRM)' : 'HR Management (HRM)'}</option>
+                    <option value="HR OF PR">HR OF PR ({isAr ? 'العلاقات العامة' : 'PR'})</option>
+                    <option value="HR OF SM">HR OF SM ({isAr ? 'السوشيال ميديا' : 'SM'})</option>
+                    <option value="HR OF OR">HR OF OR ({isAr ? 'التنظيم' : 'OR'})</option>
+                    <option value="HRS">{isAr ? 'لجنة الدعم والمساندة (HRS)' : 'HR Support (HRS)'}</option>
+                    <option value="HRIS">{isAr ? 'نظم معلومات الموارد البشرية (HRIS)' : 'HR Info Systems (HRIS)'}</option>
+                    <option value="HRD">{isAr ? 'التطوير والتدريب (HRD)' : 'HR Development (HRD)'}</option>
                   </select>
                 </div>
               )}

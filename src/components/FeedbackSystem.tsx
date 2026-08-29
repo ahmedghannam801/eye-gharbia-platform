@@ -737,7 +737,7 @@ export const FeedbackSystem: React.FC<FeedbackSystemProps> = ({ currentUser, ini
                   className="bg-slate-900/90 text-white text-xs font-bold px-2.5 py-1 rounded-xl border border-purple-400/40 focus:outline-none cursor-pointer"
                 >
                   <option value="all">{isAr ? 'جميع اللجان' : 'All Committees'}</option>
-                  <option value="HR">{isAr ? 'الموارد البشرية (HRM)' : 'HRM Committee'}</option>
+                  <option value="HR">{isAr ? 'الموارد البشرية (HR)' : 'HR Committee'}</option>
                   <option value="PR">لجنة PR</option>
                   <option value="SM">لجنة SM</option>
                   <option value="OR">لجنة OR</option>
@@ -749,10 +749,14 @@ export const FeedbackSystem: React.FC<FeedbackSystemProps> = ({ currentUser, ini
                     onChange={e => setSubCommitteeFilter(e.target.value)}
                     className="bg-amber-500/30 text-white text-xs font-bold px-2.5 py-1 rounded-xl border border-amber-400/50 focus:outline-none cursor-pointer animate-fadeIn"
                   >
-                    <option value="all">{isAr ? '🏢 كل فروع HRM' : 'All HRM'}</option>
+                    <option value="all">{isAr ? '🏢 كل فروع وأقسام HR' : 'All HR'}</option>
+                    <option value="HRM">إدارة HRM العامة</option>
                     <option value="HR OF PR">HR OF PR</option>
                     <option value="HR OF SM">HR OF SM</option>
                     <option value="HR OF OR">HR OF OR</option>
+                    <option value="HRS">HRS (الدعم)</option>
+                    <option value="HRIS">HRIS (نظم المعلومات)</option>
+                    <option value="HRD">HRD (التدريب)</option>
                   </select>
                 )}
               </div>
@@ -837,7 +841,7 @@ export const FeedbackSystem: React.FC<FeedbackSystemProps> = ({ currentUser, ini
             className="w-full sm:w-auto max-w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-3 py-2.5 text-xs text-slate-800 dark:text-white font-bold truncate min-w-0 focus:outline-none focus:border-purple-500"
           >
             <option value="all">{isAr ? 'جميع اللجان' : 'All Committees'}</option>
-            <option value="HR">{isAr ? 'الموارد البشرية (HRM)' : 'HRM Committee'}</option>
+            <option value="HR">{isAr ? 'الموارد البشرية (HR)' : 'HR Committee'}</option>
             <option value="PR">لجنة PR</option>
             <option value="SM">لجنة SM</option>
             <option value="OR">لجنة OR</option>
@@ -849,10 +853,14 @@ export const FeedbackSystem: React.FC<FeedbackSystemProps> = ({ currentUser, ini
               onChange={(e) => setSubCommitteeFilter(e.target.value)}
               className="w-full sm:w-auto max-w-full bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-2xl px-3 py-2.5 text-xs text-amber-900 dark:text-amber-200 font-bold truncate min-w-0 focus:outline-none focus:border-purple-500 animate-fadeIn"
             >
-              <option value="all">{isAr ? '🏢 كل فروع HRM' : 'All HRM'}</option>
+              <option value="all">{isAr ? '🏢 كل فروع وأقسام HR' : 'All HR'}</option>
+              <option value="HRM">إدارة HRM العامة</option>
               <option value="HR OF PR">HR OF PR</option>
               <option value="HR OF SM">HR OF SM</option>
               <option value="HR OF OR">HR OF OR</option>
+              <option value="HRS">HRS (الدعم)</option>
+              <option value="HRIS">HRIS (نظم المعلومات)</option>
+              <option value="HRD">HRD (التدريب)</option>
             </select>
           )}
 

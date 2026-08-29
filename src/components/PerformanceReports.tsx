@@ -327,7 +327,7 @@ export const PerformanceReports: React.FC<PerformanceReportsProps> = ({ currentU
               <label className="text-[10px] font-black text-slate-500 uppercase">{ar ? 'اللجنة' : 'Committee'}</label>
               <select value={selectedCommittee} onChange={e => setSelectedCommittee(e.target.value)}
                 className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-emerald-500 font-bold">
-                {COMMITTEES.map(c => <option key={c} value={c}>{c === 'HR' ? (ar ? 'الموارد البشرية (HRM)' : 'HRM') : c}</option>)}
+                {COMMITTEES.map(c => <option key={c} value={c}>{c === 'HR' ? (ar ? 'الموارد البشرية (HR)' : 'HR') : c}</option>)}
               </select>
             </div>
             <div className="space-y-1">
@@ -360,24 +360,24 @@ export const PerformanceReports: React.FC<PerformanceReportsProps> = ({ currentU
               setFilterSubCommittee('all');
             }}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${filterCommittee === c ? 'bg-eye-brand text-white border-eye-brand' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'}`}>
-              {c === 'HR' ? (ar ? 'الموارد البشرية (HRM)' : 'HRM') : c} ({reports.filter(r => r.committee === c).length})
+              {c === 'HR' ? (ar ? 'الموارد البشرية (HR)' : 'HR') : c} ({reports.filter(r => r.committee === c).length})
             </button>
           ))}
         </div>
 
-        {/* HRM Sub-Committees filter row */}
+        {/* HR Sub-Committees filter row */}
         {(filterCommittee === 'HR' || filterCommittee === 'HRM') && (
           <div className="flex flex-wrap items-center gap-2 p-2 bg-amber-500/10 dark:bg-amber-950/30 rounded-2xl border border-amber-300/40 dark:border-amber-700/40 animate-fadeIn">
             <span className="text-[11px] font-black text-amber-700 dark:text-amber-300 px-1">
-              {ar ? 'فروع HRM:' : 'HRM Branches:'}
+              {ar ? 'أقسام وفروع HR:' : 'HR Departments:'}
             </span>
-            {['all', 'HR OF PR', 'HR OF SM', 'HR OF OR'].map(sub => (
+            {['all', 'HRM', 'HR OF PR', 'HR OF SM', 'HR OF OR', 'HRS', 'HRIS', 'HRD'].map(sub => (
               <button
                 key={sub}
                 onClick={() => setFilterSubCommittee(sub)}
                 className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer shadow-sm ${filterSubCommittee === sub ? 'bg-amber-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-amber-100 dark:hover:bg-slate-700'}`}
               >
-                {sub === 'all' ? (ar ? 'كل الفروع' : 'All Branches') : sub}
+                {sub === 'all' ? (ar ? 'كل الأقسام' : 'All Departments') : sub}
               </button>
             ))}
           </div>

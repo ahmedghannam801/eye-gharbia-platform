@@ -64,7 +64,7 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({ isOpen, onCl
   const top3 = sorted.slice(0, 3);
   const others = sorted.slice(3, 10);
 
-  const committees = ['All', 'HRM', 'Public Relations', 'Social Media', 'Organization & Relations'];
+  const committees = ['All', 'HR', 'PR', 'SM', 'OR'];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in">
@@ -100,24 +100,24 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({ isOpen, onCl
                 }}
                 className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer whitespace-nowrap ${selectedCommittee === c ? 'bg-amber-500 text-white shadow-md' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'}`}
               >
-                {c === 'All' ? (ar ? 'كل اللجان 🌟' : 'All Committees 🌟') : c === 'HRM' ? (ar ? 'الموارد البشرية (HRM)' : 'HRM Committee') : c}
+                {c === 'All' ? (ar ? 'كل اللجان 🌟' : 'All Committees 🌟') : (c === 'HR' || c === 'HRM') ? (ar ? 'الموارد البشرية (HR)' : 'HR Committee') : (c === 'PR' || c === 'Public Relations') ? (ar ? 'العلاقات العامة (PR)' : 'PR') : (c === 'SM' || c === 'Social Media') ? (ar ? 'السوشيال ميديا (SM)' : 'SM') : (c === 'OR' || c === 'Organization & Relations') ? (ar ? 'التنظيم (OR)' : 'OR') : c}
               </button>
             ))}
           </div>
 
-          {/* HRM Sub-Committees Secondary Filter */}
+          {/* HR Sub-Committees Secondary Filter */}
           {isHrmSelected && (
             <div className="flex items-center gap-2 overflow-x-auto pt-1 pb-1 animate-fadeIn bg-amber-500/10 dark:bg-amber-950/30 p-2 rounded-2xl border border-amber-300/40 dark:border-amber-700/40">
               <span className="text-[11px] font-black text-amber-700 dark:text-amber-300 whitespace-nowrap px-1">
-                {ar ? 'فروع HRM:' : 'HRM Branches:'}
+                {ar ? 'أقسام وفروع HR:' : 'HR Departments:'}
               </span>
-              {['All', 'HR OF PR', 'HR OF SM', 'HR OF OR'].map(sub => (
+              {['All', 'HRM', 'HR OF PR', 'HR OF SM', 'HR OF OR', 'HRS', 'HRIS', 'HRD'].map(sub => (
                 <button
                   key={sub}
                   onClick={() => setSelectedSubCommittee(sub)}
                   className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer whitespace-nowrap ${selectedSubCommittee === sub ? 'bg-amber-600 text-white shadow-sm' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-amber-100 dark:hover:bg-slate-700'}`}
                 >
-                  {sub === 'All' ? (ar ? 'كل الفروع' : 'All Branches') : sub}
+                  {sub === 'All' ? (ar ? 'كل الأقسام' : 'All Departments') : sub}
                 </button>
               ))}
             </div>
