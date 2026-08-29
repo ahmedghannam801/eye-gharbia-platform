@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../db/localDb';
 import { VolunteerIdea, UserProfile } from '../types';
 import { useLanguage } from '../lib/LanguageContext';
-import { Lightbulb, ThumbsUp, MessageSquare, Plus, CheckCircle2, ArrowRightLeft, XCircle, Clock, Sparkles, Inbox } from 'lucide-react';
+import { Lightbulb, ThumbsUp, MessageSquare, Plus, CheckCircle2, ArrowRightLeft, XCircle, Clock, Sparkles, Inbox, BarChart2 } from 'lucide-react';
 import { SuggestionBox } from './SuggestionBox';
+import { PollsManager } from './PollsManager';
 
 interface IdeaBankProps {
   currentUser: UserProfile;
@@ -14,7 +15,7 @@ export const IdeaBank: React.FC<IdeaBankProps> = ({ currentUser, onNavigateToVie
   const { language, isRtl } = useLanguage();
   const isAr = language === 'ar';
   const isAdminOrLeader = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader'].includes(currentUser.role);
-  const [viewTab, setViewTab] = useState<'ideas' | 'suggestions'>('ideas');
+  const [viewTab, setViewTab] = useState<'ideas' | 'polls' | 'suggestions'>('ideas');
 
   const [ideas, setIdeas] = useState<VolunteerIdea[]>([]);
   const [showCreate, setShowCreate] = useState(false);
@@ -88,7 +89,7 @@ export const IdeaBank: React.FC<IdeaBankProps> = ({ currentUser, onNavigateToVie
   return (
     <div className="p-6 space-y-6 animate-fade-in" dir={isRtl ? 'rtl' : 'ltr'}>
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-slate-50 to-amber-50/30 dark:from-slate-900 dark:to-amber-950/20 p-6 rounded-3xl border border-amber-200/40 dark:border-slate-800 shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm">
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 font-bold text-xs uppercase tracking-widest">
             <Lightbulb className="w-4 h-4" />
@@ -97,8 +98,8 @@ export const IdeaBank: React.FC<IdeaBankProps> = ({ currentUser, onNavigateToVie
           <h1 className="text-2xl font-black text-slate-900 dark:text-white">
             {isAr ? 'شارك فكرتك الإبداعية 💡' : 'Pitch Your Creative Ideas 💡'}
           </h1>
-          <p className="text-xs text-slate-500 font-semibold">
-            {isAr ? 'اطرح أفكارك ومقترحاتك لتطوير الكيان أو قدم اقتراحات مجهولة للإدارة' : 'Pitch ideas, vote on proposals, or submit anonymous suggestions'}
+          <p className="text-xs text-slate-600 dark:text-slate-300 font-semibold">
+            {isAr ? 'اطرح أفكارك ومقترحاتك لتطوير الكيان أو شارك في استطلاعات الرأي' : 'Pitch ideas, vote on proposals, or submit anonymous suggestions'}
           </p>
         </div>
         {viewTab === 'ideas' && (
@@ -113,25 +114,34 @@ export const IdeaBank: React.FC<IdeaBankProps> = ({ currentUser, onNavigateToVie
       </div>
 
       {/* Tab Switcher */}
-      <div className="flex rounded-2xl bg-slate-100 dark:bg-slate-800 p-1.5 w-fit border border-slate-200/50 dark:border-slate-700">
+      <div className="flex flex-wrap rounded-2xl bg-slate-100 dark:bg-slate-800 p-1.5 w-fit border border-slate-200/50 dark:border-slate-700 gap-1">
         <button
           onClick={() => setViewTab('ideas')}
           className={`flex items-center gap-2 px-5 py-2.5 text-xs font-black rounded-xl transition-all cursor-pointer ${viewTab === 'ideas' ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
         >
           <Lightbulb className="w-3.5 h-3.5" />
-          <span>{isAr ? 'بنك الأفكار' : 'Idea Bank'}</span>
+          <span>{isAr ? 'بنك الأفكار والمبادرات' : 'Ideas Bank'}</span>
+        </button>
+        <button
+          onClick={() => setViewTab('polls')}
+          className={`flex items-center gap-2 px-5 py-2.5 text-xs font-black rounded-xl transition-all cursor-pointer ${viewTab === 'polls' ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
+        >
+          <BarChart2 className="w-3.5 h-3.5" />
+          <span>{isAr ? 'استطلاعات الرأي والتصويت 📊' : 'Polls & Voting'}</span>
         </button>
         <button
           onClick={() => setViewTab('suggestions')}
           className={`flex items-center gap-2 px-5 py-2.5 text-xs font-black rounded-xl transition-all cursor-pointer ${viewTab === 'suggestions' ? 'bg-gradient-to-r from-violet-500 to-purple-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
         >
           <Inbox className="w-3.5 h-3.5" />
-          <span>{isAr ? 'صندوق الاقتراحات' : 'Suggestions Box'}</span>
+          <span>{isAr ? 'صندوق المقترحات السرية' : 'Suggestions Box'}</span>
         </button>
       </div>
 
       {viewTab === 'suggestions' ? (
         <SuggestionBox currentUser={currentUser} />
+      ) : viewTab === 'polls' ? (
+        <PollsManager currentUser={currentUser} />
       ) : (
       <>
 

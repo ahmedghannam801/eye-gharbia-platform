@@ -722,15 +722,15 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ currentUser, onNavigat
   };
 
   return (
-    <div className="space-y-8 p-6 animate-fade-in" dir={isRtl ? 'rtl' : 'ltr'} id="leaderboard-viewport">
+    <div className="space-y-6 p-6 animate-fade-in" dir={isRtl ? 'rtl' : 'ltr'} id="leaderboard-viewport">
 
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-slate-50 to-amber-50/30 dark:from-slate-900/60 dark:to-amber-950/20 p-6 rounded-3xl border border-amber-200/40 dark:border-slate-800 shadow-sm">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-6 rounded-3xl border-2 border-amber-300 dark:border-slate-800 shadow-sm">
         <div className="space-y-1">
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
             {language === 'ar' ? 'لوحة التنافسية وسجل التقييمات 🏆' : 'Points & Performance Board 🏆'}
           </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold">
+          <p className="text-xs text-slate-600 dark:text-slate-300 font-semibold">
             {language === 'ar' ? 'متابعة أداء وتقييمات أعضاء الكيان وتصنيف المتصدرين' : 'Track overall member performance ratings and leaderboard ranks'}
           </p>
         </div>
@@ -738,51 +738,51 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ currentUser, onNavigat
           {['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader'].includes(currentUser.role) && (
             <button
               onClick={() => setIsGoogleSheetsModalOpen(true)}
-              className="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black rounded-2xl shadow-md transition-all cursor-pointer flex items-center gap-2 border border-emerald-400/30"
+              className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl shadow-md transition-all cursor-pointer flex items-center gap-2 border border-emerald-500"
             >
               <FileSpreadsheet className="w-4 h-4" />
               <span>{language === 'ar' ? '🔗 ربط Google Sheets' : '🔗 Sync Google Sheets'}</span>
             </button>
           )}
 
-          <div className="bg-white dark:bg-slate-900 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-center">
-            <p className="text-amber-500 font-black text-lg font-mono">{myScore?.points ?? 0}</p>
-            <p className="text-slate-500">{language === 'ar' ? 'نقاطي' : 'My Points'}</p>
+          <div className="bg-slate-50 dark:bg-slate-800 px-4 py-2 rounded-2xl border border-slate-200 dark:border-slate-700 text-center shadow-xs">
+            <p className="text-amber-600 dark:text-amber-400 font-black text-xl font-mono">{myScore?.points ?? 0}</p>
+            <p className="text-[11px] text-slate-700 dark:text-slate-200 font-bold">{language === 'ar' ? 'نقاطي' : 'My Points'}</p>
           </div>
-          <div className="bg-white dark:bg-slate-900 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-center">
-            <p className="text-blue-500 font-black text-lg font-mono">#{myScore?.rank ?? '-'}</p>
-            <p className="text-slate-500">{language === 'ar' ? 'ترتيبي' : 'My Rank'}</p>
+          <div className="bg-slate-50 dark:bg-slate-800 px-4 py-2 rounded-2xl border border-slate-200 dark:border-slate-700 text-center shadow-xs">
+            <p className="text-blue-600 dark:text-blue-400 font-black text-xl font-mono">#{myScore?.rank ?? '-'}</p>
+            <p className="text-[11px] text-slate-700 dark:text-slate-200 font-bold">{language === 'ar' ? 'ترتيبي' : 'My Rank'}</p>
           </div>
         </div>
       </div>
 
       {/* Main View Tab Switcher */}
-      <div className="flex flex-wrap gap-1.5 rounded-2xl bg-slate-100 dark:bg-slate-800 p-1.5 w-fit border border-slate-200/50 dark:border-slate-700">
+      <div className="flex flex-wrap gap-1.5 rounded-2xl bg-white dark:bg-slate-900 p-1.5 w-fit border-2 border-slate-200 dark:border-slate-800 shadow-sm">
         <button
           onClick={() => setActiveTab('ranks')}
           className={`flex items-center gap-2 px-5 py-2.5 text-xs font-black rounded-xl transition-all cursor-pointer ${
-            activeTab === 'ranks' ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-white shadow-md' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+            activeTab === 'ranks' ? 'bg-amber-500 text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
           }`}
         >
-          <Trophy className="w-3.5 h-3.5" />
+          <Trophy className="w-4 h-4" />
           <span>{language === 'ar' ? 'لوحة الصدارة والترتيب' : 'Ranks & Leaderboard'}</span>
         </button>
         <button
           onClick={() => setActiveTab('evaluations')}
           className={`flex items-center gap-2 px-5 py-2.5 text-xs font-black rounded-xl transition-all cursor-pointer ${
-            activeTab === 'evaluations' ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+            activeTab === 'evaluations' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
           }`}
         >
-          <Star className="w-3.5 h-3.5" />
+          <Star className="w-4 h-4" />
           <span>{language === 'ar' ? '⭐ سجل تقييمات كل الأعضاء' : '⭐ All Members Evaluations'}</span>
         </button>
         <button
           onClick={() => setActiveTab('badges')}
           className={`flex items-center gap-2 px-5 py-2.5 text-xs font-black rounded-xl transition-all cursor-pointer ${
-            activeTab === 'badges' ? 'bg-gradient-to-r from-purple-500 to-indigo-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+            activeTab === 'badges' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800'
           }`}
         >
-          <Shield className="w-3.5 h-3.5" />
+          <Shield className="w-4 h-4" />
           <span>{language === 'ar' ? 'الشارات والإنجازات' : 'Badges & Streaks'}</span>
         </button>
       </div>
@@ -797,10 +797,10 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ currentUser, onNavigat
       {/* Category Toggle: Members vs Leaders & Season Filter Selector */}
       <div className="space-y-3">
         {/* Category Role Switcher (Members vs Leaders) */}
-        <div className="flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-slate-50/70 to-blue-50/30 dark:from-slate-900 dark:to-blue-950/20 p-4 rounded-2xl border border-blue-200/50 dark:border-slate-800 shadow-xs">
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border-2 border-blue-200 dark:border-slate-800 shadow-sm">
           <div className="flex items-center gap-2">
             <Trophy className="w-5 h-5 text-amber-500" />
-            <h3 className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-100">
+            <h3 className="text-xs font-black uppercase tracking-wider text-slate-900 dark:text-white">
               {language === 'ar' ? 'تصنيف لوحة التنافسية الصدارة (البيست):' : 'Leaderboard Category:'}
             </h3>
           </div>
@@ -808,30 +808,30 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ currentUser, onNavigat
           <div className="flex flex-wrap gap-2 text-xs font-extrabold">
             <button
               onClick={() => setRoleCategoryFilter('members')}
-              className={`px-4 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-2 border ${
+              className={`px-4 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-2 border-2 ${
                 roleCategoryFilter === 'members'
-                  ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-blue-500 shadow-md scale-105'
-                  : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50'
+                  ? 'bg-blue-600 text-white border-blue-600 shadow-md font-black'
+                  : 'bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
               }`}
             >
               <span>🏅</span>
               <span>{language === 'ar' ? 'أفضل الأعضاء (Members)' : 'Top Members'}</span>
-              <span className="px-2 py-0.5 rounded-full text-[9px] bg-white/20 text-current font-mono">
+              <span className="px-2 py-0.5 rounded-full text-[10px] bg-white/20 text-current font-mono font-black">
                 {roleCategoryFilter === 'members' ? users.length : ''}
               </span>
             </button>
 
             <button
               onClick={() => setRoleCategoryFilter('leaders')}
-              className={`px-4 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-2 border ${
+              className={`px-4 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-2 border-2 ${
                 roleCategoryFilter === 'leaders'
-                  ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white border-amber-500 shadow-md scale-105'
-                  : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50'
+                  ? 'bg-amber-500 text-white border-amber-500 shadow-md font-black'
+                  : 'bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
               }`}
             >
               <span>👑</span>
               <span>{language === 'ar' ? 'أفضل القادة والمسؤولين (Leaders)' : 'Top Leaders'}</span>
-              <span className="px-2 py-0.5 rounded-full text-[9px] bg-white/20 text-current font-mono">
+              <span className="px-2 py-0.5 rounded-full text-[10px] bg-white/20 text-current font-mono font-black">
                 {roleCategoryFilter === 'leaders' ? users.length : ''}
               </span>
             </button>

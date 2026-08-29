@@ -218,7 +218,7 @@ const RewardsShopInner: React.FC<RewardsShopProps> = ({ currentUser }) => {
   return (
     <div className="p-4 sm:p-6 space-y-6 animate-fade-in" dir={isRtl ? 'rtl' : 'ltr'}>
       {/* Header Banner */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-gradient-to-r from-slate-50 via-pink-50/30 to-amber-50/20 dark:from-slate-900 dark:via-pink-950/20 dark:to-slate-900 p-6 sm:p-8 rounded-3xl border border-pink-200/50 dark:border-slate-800 shadow-md">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-white dark:bg-slate-900 p-6 sm:p-8 rounded-3xl border-2 border-pink-200 dark:border-slate-800 shadow-sm">
         <div className="space-y-2">
           <div className="flex items-center gap-2 text-pink-600 dark:text-pink-400 font-bold text-xs uppercase tracking-widest">
             <Gift className="w-4 h-4" />
@@ -227,7 +227,7 @@ const RewardsShopInner: React.FC<RewardsShopProps> = ({ currentUser }) => {
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">
             {isAr ? 'متجر المكافآت واستبدال النقاط 🎁' : 'Points Exchange & Rewards Store 🎁'}
           </h1>
-          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 font-semibold max-w-2xl leading-relaxed">
+          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 font-semibold max-w-2xl leading-relaxed">
             {isAr ? 'اجمع النقاط من إنجاز المهام، حضور الاجتماعات، التقييمات الشهرية والمشاركات التطوعية، واستبدلها بمكافآت وشهادات رسمية فورية!' : 'Earn points from tasks, meetings attendance, leader evaluations, and volunteer initiatives, then redeem them for exclusive perks!'}
           </p>
         </div>

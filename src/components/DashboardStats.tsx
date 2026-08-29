@@ -4,7 +4,8 @@ import { UserProfile, Task, Submission, COMMITTEE_STRUCTURE, EGYPTIAN_GOVERNORAT
 import { 
   Users, FileCheck, CheckSquare, Clock, UserPlus, ShieldAlert, CheckCircle, 
   XCircle, ArrowUpRight, Award, Plus, Trash2, Shield, Calendar, RefreshCcw, 
-  ChevronLeft, ChevronRight, FileSpreadsheet, ArrowLeft, ArrowRight, BarChart3, MapPin
+  ChevronLeft, ChevronRight, FileSpreadsheet, ArrowLeft, ArrowRight, BarChart3, MapPin,
+  CalendarDays, Megaphone, Flame, Star, Trophy, Sparkles, MessageSquare, BookOpen, Gift, CheckCheck, Lightbulb
 } from 'lucide-react';
 import { useLanguage } from '../lib/LanguageContext';
 import { MinistryLogo } from './EyeLogo';
@@ -872,123 +873,321 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
       )}
 
       {/* ========================================== */}
-      {/* 3. MEMBER PORTAL (INDIVIDUAL PROGRESS CARD) */}
+      {/* 3. MEMBER PORTAL (SMART FOCUS ACTION HUB) */}
       {/* ========================================== */}
-      {currentUser.role === 'Member' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-fade-in">
-          {/* Member stats widgets */}
-          <div className="lg:col-span-4 space-y-6">
-            <div className="bg-white p-6 rounded-3xl border border-slate-200 text-center space-y-4 flex flex-col items-center shadow-sm">
-              <img src={currentUser.avatarUrl || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(currentUser.fullName)}`} className="w-16 h-16 rounded-2xl border-2 border-amber-400 object-cover" alt="" />
-              <div>
-                <h3 className="text-base font-extrabold text-slate-800">{currentUser.fullName}</h3>
-                <span className="text-[10px] text-eye-brand font-bold uppercase tracking-widest">{translateCommittee(currentUser.committee)} / {translateDepartment(currentUser.department)}</span>
-              </div>
+      {currentUser.role === 'Member' && (() => {
+        const pendingMemberTasks = memberTasks.filter(t => !memberSubs.some(s => s.taskId === t.id && s.status === 'Accepted'));
+        const firstActiveTask = pendingMemberTasks[0] || null;
 
-              {/* Progress visual indicator */}
-              <div className="relative w-28 h-28 flex items-center justify-center pt-2">
-                <svg className="w-full h-full transform -rotate-90">
-                  <circle cx="56" cy="56" r="48" stroke="rgba(0,0,0,0.03)" strokeWidth="8" fill="transparent" />
-                  <circle
-                    cx="56"
-                    cy="56"
-                    r="48"
-                    stroke="var(--color-eye-brand)"
-                    strokeWidth="8"
-                    fill="transparent"
-                    strokeDasharray="301.6"
-                    strokeDashoffset={301.6 - (301.6 * (memberSubs.filter(s => s.status === 'Accepted').length / Math.max(1, memberTasks.length)))}
-                    className="transition-all duration-1000"
-                  />
-                </svg>
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-xl font-black text-slate-800 font-mono">
-                    {Math.round((memberSubs.filter(s => s.status === 'Accepted').length / Math.max(1, memberTasks.length)) * 100)}%
-                  </span>
-                  <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">{language === 'ar' ? 'نسبة الإنجاز' : 'Completed'}</span>
-                </div>
-              </div>
+        const allMeetings = db.getMeetings();
+        const memberVisibleMeetings = allMeetings.filter(m => {
+          const matchComm = !m.committee || m.committee === 'All' || m.committee === 'None' || m.committee === 'General' || m.committee === currentUser.committee;
+          const matchDept = !m.department || m.department === 'All' || m.department === 'None' || m.department === 'General' || m.department === currentUser.department;
+          return matchComm && matchDept && m.status !== 'Closed';
+        });
+        const nextActiveMeeting = memberVisibleMeetings[0] || null;
+        const myAttendanceList = db.getAllAttendance().filter(a => a.memberId === currentUser.id);
+        const hasCheckedInNextMtg = nextActiveMeeting
+          ? db.getAttendance(nextActiveMeeting.id).some(a => a.memberId === currentUser.id)
+          : false;
 
-              <div className="w-full grid grid-cols-2 gap-4 pt-2 border-t border-slate-100 text-start">
-                <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{language === 'ar' ? 'المهام المعينة' : 'Assigned'}</span>
-                  <p className="text-xs sm:text-sm font-bold text-slate-800">{memberTasks.length} {language === 'ar' ? 'مهام' : 'Tasks'}</p>
+        const latestAnn = db.getAnnouncements()[0] || null;
+
+        // Weekly Quizzes / Trivia Data
+        const allQuizzes = db.getQuizzes();
+        const activeQuiz = allQuizzes[0] || null;
+        const quizSubs = db.getQuizSubmissions ? db.getQuizSubmissions() : [];
+        const hasSolvedActiveQuiz = activeQuiz ? quizSubs.some((s: any) => s.quizId === activeQuiz.id && s.userId === currentUser.id) : false;
+
+        return (
+          <div className="space-y-6 animate-fade-in">
+            {/* Quick Action Shortcuts Bar (6 Focused Actions) */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              <button
+                onClick={() => onNavigateToView('tasks')}
+                className="flex items-center gap-3 p-3 bg-white dark:bg-slate-900 border-2 border-blue-200 dark:border-blue-900/60 rounded-2xl shadow-sm hover:border-blue-500 hover:shadow-md transition-all text-start cursor-pointer group"
+              >
+                <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                  <CheckSquare className="w-4 h-4" />
                 </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{language === 'ar' ? 'المقبولة' : 'Accepted'}</span>
-                  <p className="text-xs sm:text-sm font-bold text-emerald-600">{memberSubs.filter(s => s.status === 'Accepted').length} {language === 'ar' ? 'ملفات' : 'Files'}</p>
+                <div className="min-w-0">
+                  <p className="text-xs font-black text-slate-900 dark:text-white truncate">{language === 'ar' ? 'المهام والتسليمات' : 'My Tasks'}</p>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold">{pendingMemberTasks.length} {language === 'ar' ? 'مهمة متبقية' : 'pending'}</p>
                 </div>
-              </div>
+              </button>
+
+              <button
+                onClick={() => onNavigateToView('meetings')}
+                className="flex items-center gap-3 p-3 bg-white dark:bg-slate-900 border-2 border-emerald-200 dark:border-emerald-900/60 rounded-2xl shadow-sm hover:border-emerald-500 hover:shadow-md transition-all text-start cursor-pointer group"
+              >
+                <div className="w-9 h-9 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                  <CalendarDays className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-black text-slate-900 dark:text-white truncate">{language === 'ar' ? 'الاجتماعات والحضور' : 'Meetings'}</p>
+                  <p className="text-[10px] text-emerald-700 dark:text-emerald-400 font-bold">{myAttendanceList.length} {language === 'ar' ? 'حضور مسجل' : 'attended'}</p>
+                </div>
+              </button>
+
+              <button
+                onClick={() => onNavigateToView('trivia')}
+                className="flex items-center gap-3 p-3 bg-white dark:bg-slate-900 border-2 border-rose-200 dark:border-rose-900/60 rounded-2xl shadow-sm hover:border-rose-500 hover:shadow-md transition-all text-start cursor-pointer group"
+              >
+                <div className="w-9 h-9 rounded-xl bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-black text-slate-900 dark:text-white truncate">{language === 'ar' ? 'المسابقات والكويزات 🎯' : 'Weekly Trivia'}</p>
+                  <p className="text-[10px] text-rose-600 dark:text-rose-400 font-bold">{language === 'ar' ? '+100 نقطة فوز' : '+100 pts win'}</p>
+                </div>
+              </button>
+
+              <button
+                onClick={() => onNavigateToView('leaderboard')}
+                className="flex items-center gap-3 p-3 bg-white dark:bg-slate-900 border-2 border-amber-200 dark:border-amber-900/60 rounded-2xl shadow-sm hover:border-amber-500 hover:shadow-md transition-all text-start cursor-pointer group"
+              >
+                <div className="w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                  <Trophy className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-black text-slate-900 dark:text-white truncate">{language === 'ar' ? 'لوحة الصدارة والرتب' : 'Leaderboard'}</p>
+                  <p className="text-[10px] text-amber-700 dark:text-amber-400 font-bold">{currentUser.points || 0} {language === 'ar' ? 'نقطة تميز' : 'pts'}</p>
+                </div>
+              </button>
+
+              <button
+                onClick={() => onNavigateToView('ideabank')}
+                className="flex items-center gap-3 p-3 bg-white dark:bg-slate-900 border-2 border-amber-200 dark:border-amber-900/60 rounded-2xl shadow-sm hover:border-amber-500 hover:shadow-md transition-all text-start cursor-pointer group"
+              >
+                <div className="w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                  <Lightbulb className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-black text-slate-900 dark:text-white truncate">{language === 'ar' ? 'الأفكار والاستطلاعات 💡' : 'Ideas & Polls'}</p>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold">{language === 'ar' ? 'شارك وصوت' : 'Vote & Pitch'}</p>
+                </div>
+              </button>
+
+              <button
+                onClick={() => onNavigateToView('excuses-freeze')}
+                className="flex items-center gap-3 p-3 bg-white dark:bg-slate-900 border-2 border-purple-200 dark:border-purple-900/60 rounded-2xl shadow-sm hover:border-purple-500 hover:shadow-md transition-all text-start cursor-pointer group col-span-2 sm:col-span-1"
+              >
+                <div className="w-9 h-9 rounded-xl bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+                  <Clock className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-black text-slate-900 dark:text-white truncate">{language === 'ar' ? 'طلب عذر / تجميد' : 'Excuses'}</p>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold">{language === 'ar' ? 'طلب مباشر' : 'Request'}</p>
+                </div>
+              </button>
             </div>
-            
-            {/* Active Members List Widget */}
-            {renderActiveMembersWidget()}
-          </div>
 
-          {/* Assigned Tasks panel for Members */}
-          <div className="lg:col-span-8 bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-sm">
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-extrabold text-slate-800 flex items-center gap-2">
-                <CheckSquare className="w-5 h-5 text-amber-500" />
-                <span>{language === 'ar' ? `الأهداف والمهام المسندة لقسمك حالياً (${memberTasks.length})` : `Department Task Objectives Assigned to You (${memberTasks.length})`}</span>
-              </h2>
+            {/* Smart Focus Cards (Tasks + Meeting Check-in + Weekly Competitions) */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              
+              {/* Card 1: Active Task Priority */}
+              <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl border-2 border-blue-200 dark:border-blue-900/60 shadow-sm flex flex-col justify-between space-y-4">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-black uppercase tracking-wider text-blue-700 dark:text-blue-300 flex items-center gap-1.5 bg-blue-100 dark:bg-blue-950 px-3 py-1 rounded-full border border-blue-300 dark:border-blue-800">
+                      <CheckSquare className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                      <span>{language === 'ar' ? 'المهمة النشطة' : 'Active Assignment'}</span>
+                    </span>
+                    {firstActiveTask && (
+                      <span className="text-[11px] font-black text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg">
+                        ⏳ {new Date(firstActiveTask.deadline).toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-GB')}
+                      </span>
+                    )}
+                  </div>
+
+                  {firstActiveTask ? (
+                    <div>
+                      <h4 className="text-base font-black text-slate-900 dark:text-white leading-snug">{firstActiveTask.name}</h4>
+                      <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2 mt-1.5 font-medium leading-relaxed">{firstActiveTask.description}</p>
+                    </div>
+                  ) : (
+                    <div className="py-5 text-center flex flex-col items-center justify-center">
+                      <CheckCheck className="w-9 h-9 text-emerald-500 mb-2" />
+                      <p className="text-sm font-black text-slate-900 dark:text-white">{language === 'ar' ? 'أحسنت! لا توجد مهام متأخرة عليك.' : 'All tasks completed. Good job!'}</p>
+                      <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5">{language === 'ar' ? 'أنت جاهز دائماً لأي تكليف قادم 👏' : 'You are all caught up!'}</p>
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  onClick={() => onNavigateToView('tasks', firstActiveTask?.id)}
+                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black transition-all shadow-md shadow-blue-600/25 flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <span>{firstActiveTask ? (language === 'ar' ? 'تسليم المهمة الآن 🚀' : 'Submit Task Solution 🚀') : (language === 'ar' ? 'عرض سجل المهام' : 'View Task Archive')}</span>
+                  <ArrowUpRight className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Card 2: Upcoming Meeting / Check-in */}
+              <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl border-2 border-emerald-200 dark:border-emerald-900/60 shadow-sm flex flex-col justify-between space-y-4">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5 bg-emerald-100 dark:bg-emerald-950 px-3 py-1 rounded-full border border-emerald-300 dark:border-emerald-800">
+                      <CalendarDays className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                      <span>{language === 'ar' ? 'أقرب سيشن واجتماع' : 'Upcoming Session'}</span>
+                    </span>
+                    {nextActiveMeeting && (
+                      <span className={`text-[11px] font-black px-2.5 py-1 rounded-full ${nextActiveMeeting.status === 'Open' ? 'bg-emerald-500 text-white animate-pulse' : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200'}`}>
+                        {nextActiveMeeting.status === 'Open' ? (language === 'ar' ? 'مفتوح للتسجيل 🔓' : 'Open 🔓') : (language === 'ar' ? 'مجدول' : 'Scheduled')}
+                      </span>
+                    )}
+                  </div>
+
+                  {nextActiveMeeting ? (
+                    <div>
+                      <h4 className="text-base font-black text-slate-900 dark:text-white leading-snug">{nextActiveMeeting.title}</h4>
+                      <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-1 mt-1.5 font-medium">
+                        📍 {nextActiveMeeting.location || (language === 'ar' ? 'أونلاين' : 'Online')} · 🕒 {new Date(nextActiveMeeting.scheduledAt).toLocaleString(language === 'ar' ? 'ar-EG' : 'en-GB', { dateStyle: 'short', timeStyle: 'short' })}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="py-5 text-center flex flex-col items-center justify-center">
+                      <Calendar className="w-9 h-9 text-blue-500 dark:text-blue-400 mb-2" />
+                      <p className="text-sm font-black text-slate-900 dark:text-white">{language === 'ar' ? 'لا توجد اجتماعات معلنة حالياً.' : 'No scheduled meetings right now.'}</p>
+                      <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5">{language === 'ar' ? 'سيتم إشعارك فور جدولة أي سيشن جديد 🔔' : 'Stay tuned for updates!'}</p>
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  onClick={() => onNavigateToView('meetings')}
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition-all shadow-md shadow-emerald-600/25 flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <span>{hasCheckedInNextMtg ? (language === 'ar' ? '✓ تم تسجيل حضورك' : '✓ Attended') : (language === 'ar' ? 'تسجيل الحضور بالكود 📝' : 'Open Attendance')}</span>
+                  <ArrowUpRight className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Card 3: Weekly Trivia & Competitions */}
+              <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl border-2 border-rose-200 dark:border-rose-900/60 shadow-sm flex flex-col justify-between space-y-4">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-black uppercase tracking-wider text-rose-700 dark:text-rose-300 flex items-center gap-1.5 bg-rose-100 dark:bg-rose-950 px-3 py-1 rounded-full border border-rose-300 dark:border-rose-800">
+                      <Sparkles className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
+                      <span>{language === 'ar' ? 'مسابقة الأسبوع 🎯' : 'Weekly Quiz'}</span>
+                    </span>
+                    <span className="text-[11px] font-black text-amber-900 dark:text-amber-300 bg-amber-100 dark:bg-amber-950/80 px-2.5 py-1 rounded-full border border-amber-300 dark:border-amber-800">
+                      ⚡ +100 XP
+                    </span>
+                  </div>
+
+                  <div>
+                    <h4 className="text-base font-black text-slate-900 dark:text-white leading-snug">
+                      {activeQuiz ? activeQuiz.title : (language === 'ar' ? 'كويز وتحدي المعلومات الأسبوعي' : 'Weekly Trivia Challenge')}
+                    </h4>
+                    <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-1 mt-1.5 font-medium">
+                      {hasSolvedActiveQuiz 
+                        ? (language === 'ar' ? '✓ تم حل المسابقة بنجاح وكسب النقاط!' : '✓ Quiz answered and points claimed!')
+                        : (language === 'ar' ? 'أجب عن أسئلة الكيان الأسبوعية واكسب نقاط ترقية إضافية!' : 'Answer questions and boost your rank!')}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => onNavigateToView('trivia')}
+                  className={`w-full py-3 text-white rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md ${
+                    hasSolvedActiveQuiz
+                      ? 'bg-slate-700 hover:bg-slate-600'
+                      : 'bg-gradient-to-r from-rose-600 via-rose-500 to-amber-600 hover:from-rose-500 hover:to-amber-500 shadow-rose-500/25 animate-pulse'
+                  }`}
+                >
+                  <span>{hasSolvedActiveQuiz ? (language === 'ar' ? 'عرض نتائج المسابقات 🏆' : 'View Quiz Results 🏆') : (language === 'ar' ? 'بدء حل المسابقة الآن 🎯' : 'Start Quiz Now 🎯')}</span>
+                  <ArrowUpRight className="w-4 h-4" />
+                </button>
+              </div>
+
             </div>
 
-            <div className="space-y-4">
+            {/* Latest Official Announcement Banner */}
+            {latestAnn && (
+              <div
+                onClick={() => onNavigateToView('announcements')}
+                className="bg-gradient-to-r from-indigo-900 via-blue-950 to-slate-900 p-4 sm:p-5 rounded-3xl text-white border border-blue-500/40 shadow-md hover:border-amber-400 transition-all cursor-pointer flex items-center justify-between gap-4"
+              >
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="w-10 h-10 rounded-2xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-amber-300 shrink-0">
+                    <Megaphone className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[9px] bg-amber-400 text-slate-950 font-black px-2 py-0.5 rounded-full uppercase">{language === 'ar' ? 'هام وعاجل' : 'Official Notice'}</span>
+                      <span className="text-[10px] text-blue-200 font-semibold">{new Date(latestAnn.createdDate).toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-GB')}</span>
+                    </div>
+                    <p className="text-xs sm:text-sm font-black text-white truncate mt-1">{latestAnn.title}</p>
+                  </div>
+                </div>
+
+                <span className="text-xs font-bold text-amber-300 flex items-center gap-1 shrink-0">
+                  <span>{language === 'ar' ? 'قراءة' : 'Read'}</span>
+                  <ArrowUpRight className="w-4 h-4" />
+                </span>
+              </div>
+            )}
+
+            {/* Detailed Department Tasks Progress */}
+            <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 space-y-4 shadow-sm">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                <h3 className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-2">
+                  <CheckSquare className="w-4 h-4 text-blue-600" />
+                  <span>{language === 'ar' ? `سجل مهام وأهداف قسمك (${memberTasks.length})` : `Your Department Tasks (${memberTasks.length})`}</span>
+                </h3>
+                <span className="text-xs text-blue-600 dark:text-blue-400 font-bold">
+                  {memberSubs.filter(s => s.status === 'Accepted').length} / {memberTasks.length} {language === 'ar' ? 'مكتمل' : 'done'}
+                </span>
+              </div>
+
               {memberTasks.length === 0 ? (
-                <div className="text-center py-12 text-slate-400 text-xs font-bold">
-                  {language === 'ar' ? 'لا توجد مهام إدارية منشورة لقسمك حالياً.' : 'No tasks assigned to your department at this moment. Stay tuned!'}
+                <div className="py-8 text-center text-slate-400 text-xs font-bold">
+                  {language === 'ar' ? 'لا توجد مهام منشورة لقسمك حالياً.' : 'No tasks assigned to your department yet.'}
                 </div>
               ) : (
-                memberTasks.map(task => {
-                  const hasSubmitted = memberSubs.find(s => s.taskId === task.id);
-                  return (
-                    <div
-                      key={task.id}
-                      onClick={() => onNavigateToView('tasks', task.id)}
-                      className="p-4 bg-slate-50 border border-slate-200/60 hover:border-eye-brand rounded-2xl cursor-pointer flex flex-col sm:flex-row justify-between sm:items-center gap-4 transition-all hover:bg-slate-100 text-start"
-                    >
-                      <div className="space-y-1">
-                        <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
-                          task.priority === 'High' || task.priority === 'Urgent' ? 'bg-red-50 text-red-600 border border-red-200/50' : 'bg-slate-200 text-slate-700'
-                        }`}>
-                          {task.priority === 'High' ? (language === 'ar' ? 'أولوية عالية' : 'High Priority') : 
-                           task.priority === 'Urgent' ? (language === 'ar' ? 'عاجل جداً' : 'Urgent Priority') : 
-                           (language === 'ar' ? 'أولوية عادية' : 'Normal Priority')}
-                        </span>
-                        <p className="text-xs font-bold text-slate-800">{task.name}</p>
-                        <p className="text-[11px] text-slate-500 line-clamp-1">{task.description}</p>
-                      </div>
-
-                      <div className="flex items-center justify-between sm:justify-end gap-4">
-                        <div className="text-start sm:text-end font-mono text-[10px]">
-                          <span className="text-slate-400 block">{language === 'ar' ? 'الموعد النهائي' : 'Deadline'}</span>
-                          <span className="text-slate-600 font-bold">{new Date(task.deadline).toLocaleDateString()}</span>
+                <div className="space-y-2.5">
+                  {memberTasks.map(task => {
+                    const hasSubmitted = memberSubs.find(s => s.taskId === task.id);
+                    return (
+                      <div
+                        key={task.id}
+                        onClick={() => onNavigateToView('tasks', task.id)}
+                        className="p-3.5 bg-slate-50 dark:bg-slate-850/50 hover:bg-blue-50/50 dark:hover:bg-slate-800/60 rounded-2xl border border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3 cursor-pointer transition-all text-start"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-xs font-black text-slate-800 dark:text-slate-100 truncate">{task.name}</p>
+                          <p className="text-[10px] text-slate-400 font-semibold mt-0.5">
+                            📅 {new Date(task.deadline).toLocaleDateString(language === 'ar' ? 'ar-EG' : 'en-GB')}
+                          </p>
                         </div>
 
                         {hasSubmitted ? (
-                          <span className={`px-2.5 py-1 rounded-xl text-[10px] font-bold uppercase tracking-wider ${
-                            hasSubmitted.status === 'Accepted' ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' :
-                            hasSubmitted.status === 'Rejected' ? 'bg-red-50 text-red-600 border border-red-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
+                          <span className={`px-2.5 py-1 rounded-xl text-[10px] font-black uppercase ${
+                            hasSubmitted.status === 'Accepted'
+                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                              : hasSubmitted.status === 'Rejected'
+                              ? 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'
+                              : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
                           }`}>
-                            {hasSubmitted.status === 'Accepted' ? (language === 'ar' ? 'مقبول' : 'Accepted') :
-                             hasSubmitted.status === 'Rejected' ? (language === 'ar' ? 'مرفوض' : 'Rejected') :
-                             (language === 'ar' ? 'قيد المراجعة' : 'Pending')}
+                            {hasSubmitted.status === 'Accepted' ? (language === 'ar' ? '✓ تم القبول' : 'Accepted') :
+                             hasSubmitted.status === 'Rejected' ? (language === 'ar' ? '✕ مرفوض' : 'Rejected') :
+                             (language === 'ar' ? '⏳ قيد المراجعة' : 'Pending')}
                           </span>
                         ) : (
-                          <span className="px-2.5 py-1 rounded-xl text-[10px] font-bold uppercase tracking-wider bg-amber-50 text-eye-brand border border-amber-200/40">
-                            {language === 'ar' ? 'رفع ملف الإجابة' : 'Submit File'}
+                          <span className="px-2.5 py-1 rounded-xl text-[10px] font-black bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300">
+                            {language === 'ar' ? 'مطلوب التسليم' : 'Due'}
                           </span>
                         )}
                       </div>
-                    </div>
-                  );
-                })
+                    );
+                  })}
+                </div>
               )}
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ========================================== */}
       {/* MODAL: CREATE LEADER FORM (SUPER ADMIN) */}

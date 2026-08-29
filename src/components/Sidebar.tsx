@@ -52,62 +52,85 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const ADMIN_PLUS = ['Leader', 'Super Admin', 'Head', 'Vice', 'HRM', 'Coordinator', 'Deputy Coordinator'];
   const TOP_ROLES = ['Super Admin', 'Head', 'Vice', 'HRM', 'Coordinator', 'Deputy Coordinator'];
 
-  // ── NAV grouped into sections ──
+  const isMember = currentUser.role === 'Member';
+
+  // ── NAV grouped into clean sections ──
   const navGroups: {
     groupLabel: string;
     items: { id: string; label: string; icon: any; roles: string[]; badge?: number }[];
-  }[] = [
-    {
-      groupLabel: language === 'ar' ? 'الرئيسية' : 'Core',
-      items: [
-        { id: 'dashboard',     label: language === 'ar' ? 'القائمة الرئيسية' : t('dashboard'),     icon: LayoutDashboard, roles: ALL_ROLES },
-        { id: 'profile',       label: t('profile'),       icon: User,          roles: ALL_ROLES },
-        { id: 'tasks',         label: language === 'ar' ? 'المهام الإدارية' : t('tasks'),         icon: FolderKanban,  roles: ALL_ROLES },
-        { id: 'announcements', label: language === 'ar' ? 'الإعلانات والتعاميم' : t('announcements'), icon: Megaphone,     roles: ALL_ROLES, badge: unreadCount },
-        { id: 'meetings',      label: language === 'ar' ? 'الاجتماعات' : 'Meetings',      icon: CalendarDays, roles: ALL_ROLES },
-        { id: 'excuses-freeze', label: language === 'ar' ? 'الأعذار والطلبات' : 'Excuses & Requests', icon: Clock, roles: ALL_ROLES },
-      ],
-    },
-    {
-      groupLabel: language === 'ar' ? 'التنافسية والتميز' : 'Excellence & Ranking',
-      items: [
-        { id: 'leaderboard',   label: language === 'ar' ? 'لوحة الصدارة والترتيب' : 'Leaderboard & Ranks', icon: Trophy, roles: ALL_ROLES },
-        { id: 'challenges',    label: language === 'ar' ? 'التحديات والسلسلة' : 'Challenges & Streaks', icon: Flame, roles: ALL_ROLES },
-        { id: 'academy',       label: language === 'ar' ? 'الأكاديمية' : 'Academy',           icon: BookOpen,   roles: ALL_ROLES },
-        { id: 'certificates',  label: language === 'ar' ? 'الشهادات' : 'Certificates',               icon: Star,      roles: ALL_ROLES },
-        { id: 'rewards',       label: language === 'ar' ? 'متجر المكافآت' : 'Rewards Shop',   icon: Gift,       roles: ALL_ROLES },
-      ],
-    },
-    {
-      groupLabel: language === 'ar' ? 'تقييم الأداء والتقارير' : 'Performance & Reports',
-      items: [
-        { id: 'feedback',     label: language === 'ar' ? 'تقييم الأعضاء والقادة 360°' : '360° Evaluation Hub', icon: Star, roles: ['Leader', ...TOP_ROLES] },
-        { id: 'radar',        label: language === 'ar' ? 'رادار الأداء' : 'Performance Radar',      icon: BarChart3, roles: ALL_ROLES },
-        { id: 'exec-report',  label: language === 'ar' ? 'مركز التقارير الموحد' : 'Reports Hub', icon: FileCheck, roles: [...TOP_ROLES, 'Leader'] },
-        { id: 'disciplinary', label: language === 'ar' ? 'السجل الانضباطي والإنذارات 📜' : 'Disciplinary Vault 📜', icon: ShieldAlert, roles: ALL_ROLES },
-      ],
-    },
-    {
-      groupLabel: language === 'ar' ? 'التفاعل والأنشطة' : 'Activities & Workflows',
-      items: [
-        { id: 'memory-wall',   label: language === 'ar' ? 'معرض الذكريات 📸' : 'Memory Wall 📸', icon: Camera, roles: ALL_ROLES },
-        { id: 'workplans',     label: language === 'ar' ? 'خطط العمل' : 'Work Plans',         icon: Target,     roles: ALL_ROLES },
-        { id: 'ideabank',      label: language === 'ar' ? 'بنك الأفكار والمقترحات' : 'Ideas & Pitch Bank', icon: Lightbulb, roles: ALL_ROLES },
-        { id: 'polls',         label: language === 'ar' ? 'الاستطلاعات' : 'Polls',            icon: BarChart3,  roles: ALL_ROLES },
-        { id: 'trivia',        label: language === 'ar' ? 'المسابقات الأسبوعية' : 'Weekly Trivia', icon: HelpCircle, roles: ALL_ROLES },
-        { id: 'templates-hub', label: language === 'ar' ? 'مكتبة القوالب والنماذج' : 'Templates Hub', icon: FolderDown, roles: [...TOP_ROLES, 'Leader'] },
-        { id: 'poster-maker',  label: language === 'ar' ? 'صانع البوسترات والتهاني 🎨' : 'Poster Maker 🎨', icon: Palette, roles: ALL_ROLES },
-      ],
-    },
-    {
-      groupLabel: language === 'ar' ? 'الإدارة والإعدادات' : 'Admin & System',
-      items: [
-        { id: 'rules',   label: language === 'ar' ? 'اللوائح والقوانين والإرشادات' : 'Rules & Bylaws', icon: BookOpen,  roles: ALL_ROLES },
-        { id: 'social',  label: language === 'ar' ? 'السوشيال ميديا' : 'Social Media',                         icon: Share2,    roles: ALL_ROLES },
-        { id: 'settings', label: t('settings'),                                                                 icon: Settings,  roles: ['Super Admin', 'Head', 'Vice', 'HRM'] },
-      ],
-    },
-  ];
+  }[] = isMember
+    ? [
+        {
+          groupLabel: language === 'ar' ? 'الأساسيات والمهام اليومية' : 'Daily Essentials',
+          items: [
+            { id: 'dashboard',     label: language === 'ar' ? 'الرئيسية' : t('dashboard'),     icon: LayoutDashboard, roles: ALL_ROLES },
+            { id: 'tasks',         label: language === 'ar' ? 'المهام والتسليمات' : t('tasks'), icon: FolderKanban,   roles: ALL_ROLES },
+            { id: 'meetings',      label: language === 'ar' ? 'الاجتماعات والحضور' : 'Meetings', icon: CalendarDays,   roles: ALL_ROLES },
+            { id: 'announcements', label: language === 'ar' ? 'الإعلانات والتعاميم' : t('announcements'), icon: Megaphone, roles: ALL_ROLES, badge: unreadCount },
+          ],
+        },
+        {
+          groupLabel: language === 'ar' ? 'حسابي ومتابعتي' : 'My Space',
+          items: [
+            { id: 'profile',       label: language === 'ar' ? 'ملفي الشخصي ونقاطي' : t('profile'), icon: User,        roles: ALL_ROLES },
+            { id: 'excuses-freeze', label: language === 'ar' ? 'تقديم عذر / تجميد' : 'Excuses & Freeze', icon: Clock, roles: ALL_ROLES },
+            { id: 'certificates',  label: language === 'ar' ? 'شهاداتي التقديرية' : 'Certificates', icon: Star,     roles: ALL_ROLES },
+            { id: 'disciplinary', label: language === 'ar' ? 'السجل الانضباطي' : 'Disciplinary Vault', icon: ShieldAlert, roles: ALL_ROLES },
+          ],
+        },
+        {
+          groupLabel: language === 'ar' ? 'التنافسية والمجتمع' : 'Ranking & Community',
+          items: [
+            { id: 'leaderboard',   label: language === 'ar' ? 'لوحة الصدارة والرتب' : 'Leaderboard', icon: Trophy,   roles: ALL_ROLES },
+            { id: 'trivia',        label: language === 'ar' ? 'المسابقات والكويزات 🎯' : 'Weekly Trivia 🎯', icon: HelpCircle, roles: ALL_ROLES },
+            { id: 'rewards',       label: language === 'ar' ? 'متجر المكافآت' : 'Rewards Shop',    icon: Gift,       roles: ALL_ROLES },
+            { id: 'ideabank',      label: language === 'ar' ? 'بنك الأفكار والاستطلاعات 💡' : 'Ideas & Polls', icon: Lightbulb, roles: ALL_ROLES },
+            { id: 'rules',         label: language === 'ar' ? 'اللوائح والقوانين' : 'Rules & Bylaws', icon: BookOpen,   roles: ALL_ROLES },
+          ],
+        },
+      ]
+    : [
+        {
+          groupLabel: language === 'ar' ? 'الرئيسية والمتابعة' : 'Core & Operations',
+          items: [
+            { id: 'dashboard',     label: language === 'ar' ? 'لوحة التحكم الرئيسية' : t('dashboard'), icon: LayoutDashboard, roles: ALL_ROLES },
+            { id: 'tasks',         label: language === 'ar' ? 'إدارة المهام والتسليمات' : t('tasks'), icon: FolderKanban, roles: ALL_ROLES },
+            { id: 'meetings',      label: language === 'ar' ? 'الاجتماعات وتسجيل الحضور' : 'Meetings', icon: CalendarDays, roles: ALL_ROLES },
+            { id: 'announcements', label: language === 'ar' ? 'الإعلانات والتعاميم' : t('announcements'), icon: Megaphone, roles: ALL_ROLES, badge: unreadCount },
+            { id: 'profile',       label: t('profile'), icon: User, roles: ALL_ROLES },
+            { id: 'excuses-freeze', label: language === 'ar' ? 'الأعذار وطلبات التجميد' : 'Excuses & Requests', icon: Clock, roles: ALL_ROLES },
+          ],
+        },
+        {
+          groupLabel: language === 'ar' ? 'القيادة والتقارير التنفيذية' : 'Leadership & Analytics',
+          items: [
+            { id: 'exec-report',  label: language === 'ar' ? 'مركز التقارير التنفيذي الموحد' : 'Reports Hub', icon: FileCheck, roles: ADMIN_PLUS },
+            { id: 'feedback',     label: language === 'ar' ? 'تقييم الأعضاء والقادة 360°' : '360° Evaluation', icon: Star, roles: ADMIN_PLUS },
+            { id: 'workplans',     label: language === 'ar' ? 'خطط العمل وأهداف OKRs' : 'Work Plans OKRs', icon: Target, roles: ADMIN_PLUS },
+            { id: 'radar',        label: language === 'ar' ? 'رادار الأداء الشامل' : 'Performance Radar', icon: BarChart3, roles: ADMIN_PLUS },
+            { id: 'disciplinary', label: language === 'ar' ? 'السجل الانضباطي والإنذارات' : 'Disciplinary Vault', icon: ShieldAlert, roles: ADMIN_PLUS },
+          ],
+        },
+        {
+          groupLabel: language === 'ar' ? 'التنافسية والمجتمع' : 'Ranking & Community',
+          items: [
+            { id: 'leaderboard',   label: language === 'ar' ? 'لوحة الصدارة والترتيب' : 'Leaderboard', icon: Trophy, roles: ALL_ROLES },
+            { id: 'trivia',        label: language === 'ar' ? 'المسابقات والكويزات 🎯' : 'Weekly Trivia 🎯', icon: HelpCircle, roles: ALL_ROLES },
+            { id: 'certificates',  label: language === 'ar' ? 'منظومة الشهادات' : 'Certificates', icon: Star, roles: ALL_ROLES },
+            { id: 'rewards',       label: language === 'ar' ? 'متجر المكافآت' : 'Rewards Shop', icon: Gift, roles: ALL_ROLES },
+            { id: 'ideabank',      label: language === 'ar' ? 'بنك الأفكار والاستطلاعات 💡' : 'Ideas & Polls', icon: Lightbulb, roles: ALL_ROLES },
+          ],
+        },
+        {
+          groupLabel: language === 'ar' ? 'الأدوات والنظام' : 'Tools & System',
+          items: [
+            { id: 'templates-hub', label: language === 'ar' ? 'مكتبة القوالب والنماذج' : 'Templates Hub', icon: FolderDown, roles: ADMIN_PLUS },
+            { id: 'poster-maker',  label: language === 'ar' ? 'صانع البوسترات والتهاني 🎨' : 'Poster Maker 🎨', icon: Palette, roles: ALL_ROLES },
+            { id: 'rules',         label: language === 'ar' ? 'اللوائح والقوانين' : 'Rules & Bylaws', icon: BookOpen, roles: ALL_ROLES },
+            { id: 'settings',      label: t('settings'), icon: Settings, roles: TOP_ROLES },
+          ],
+        },
+      ];
 
   return (
     <>

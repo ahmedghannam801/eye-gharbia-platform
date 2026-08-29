@@ -422,8 +422,6 @@ export default function App() {
       case 'dashboard':
       case 'committee-chat':
         return <DashboardStats currentUser={currentUser} onNavigateToView={handleNavigateToView} />;
-      case 'challenges':
-        return <WeeklyChallenges currentUser={currentUser} />;
       case 'templates-hub':
         return <TemplatesHub currentUser={currentUser} />;
       case 'tasks':
@@ -439,25 +437,27 @@ export default function App() {
       case 'workplans':
         return <WorkPlansOKR currentUser={currentUser} />;
       case 'ideabank':
+      case 'polls':
         return <IdeaBank currentUser={currentUser} onNavigateToView={handleNavigateToView} />;
+      case 'trivia':
+        return <WeeklyTrivia currentUser={currentUser} />;
       case 'academy':
-        return <InternalAcademy currentUser={currentUser} />;
+      case 'challenges':
+      case 'memory-wall':
+        return <DashboardStats currentUser={currentUser} onNavigateToView={handleNavigateToView} />;
       case 'exec-report':
         return <ExecutiveReportBuilder currentUser={currentUser} />;
       case 'rewards':
         return <RewardsShop currentUser={currentUser} />;
       case 'radar':
+        if (currentUser.role === 'Member') {
+          return <DashboardStats currentUser={currentUser} onNavigateToView={handleNavigateToView} />;
+        }
         return <PerformanceRadar currentUser={currentUser} />;
-      case 'trivia':
-        return <WeeklyTrivia currentUser={currentUser} />;
       case 'certificates':
         return <CertificateGenerator currentUser={currentUser} />;
       case 'excuses-freeze':
         return <ExcusesAndFreezeModal currentUser={currentUser} onNavigateToView={handleNavigateToView} />;
-      case 'polls':
-        return <PollsManager currentUser={currentUser} />;
-      case 'memory-wall':
-        return <MemoryWall currentUser={currentUser} />;
       case 'rules':
         return <RulesAndBylaws currentUser={currentUser} />;
       case 'member-month':
