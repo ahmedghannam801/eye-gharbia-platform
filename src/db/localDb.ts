@@ -110,16 +110,19 @@ const userFromRow = (r: any): UserProfile => {
     dept = 'HRM';
   }
 
+  const userRole = (override.role !== undefined ? override.role : (r.role || r.user_role || 'Member')) as UserRole;
+  const isExecutiveRole = ['Coordinator', 'Deputy Coordinator', 'Super Admin'].includes(userRole);
+
   return {
     id: r.id,
     fullName: fullName,
     email: override.email !== undefined ? override.email : (r.email || ''),
     phoneNumber: override.phoneNumber !== undefined ? override.phoneNumber : (r.phone_number || ''),
-    role: (override.role !== undefined ? override.role : (r.role || r.user_role || 'Member')) as UserRole,
+    role: userRole,
     status: (override.status !== undefined ? override.status : (r.status || 'Active')) as UserStatus,
-    committee: override.committee !== undefined ? override.committee : (r.committee || 'None'),
-    department: override.department !== undefined ? override.department : (r.department || dept || 'None'),
-    subCommittee: override.subCommittee !== undefined ? override.subCommittee : (r.sub_committee || r.sub_committee_name),
+    committee: isExecutiveRole ? 'None' : (override.committee !== undefined ? override.committee : (r.committee || 'None')),
+    department: isExecutiveRole ? 'Executive' : (override.department !== undefined ? override.department : (r.department || dept || 'None')),
+    subCommittee: isExecutiveRole ? '' : (override.subCommittee !== undefined ? override.subCommittee : (r.sub_committee || r.sub_committee_name)),
     membershipCode: override.membershipCode !== undefined ? override.membershipCode : r.membership_code,
     avatarUrl: getPermanentStorageUrl((override.avatarUrl !== undefined ? override.avatarUrl : (r.avatar_url && r.avatar_url.trim())) || ''),
     joinedDate: r.joined_date,
@@ -2037,17 +2040,43 @@ class SupabaseDatabase {
     const idx = this.cache.users.findIndex((u) => u.id === id);
     if (idx === -1) return false;
     const oldRole = this.cache.users[idx].role;
+    const isExec = ['Coordinator', 'Deputy Coordinator', 'Super Admin'].includes(newRole);
+
     this.cache.users[idx].role = newRole;
-    saveProfileOverride(id, { role: newRole });
+    if (isExec) {
+      this.cache.users[idx].committee = 'None';
+      this.cache.users[idx].department = 'Executive';
+      this.cache.users[idx].subCommittee = '';
+    }
+
+    const roleOverrides: Partial<UserProfile> = { role: newRole };
+    if (isExec) {
+      roleOverrides.committee = 'None';
+      roleOverrides.department = 'Executive';
+      roleOverrides.subCommittee = '';
+    }
+    saveProfileOverride(id, roleOverrides);
+
     this._lsSave('eye_users', this.cache.users);
     if (this.cache.currentUser?.id === id) {
-      this.cache.currentUser = { ...this.cache.currentUser, role: newRole };
+      this.cache.currentUser = { 
+        ...this.cache.currentUser, 
+        role: newRole,
+        ...(isExec ? { committee: 'None', department: 'Executive', subCommittee: '' } : {})
+      };
     }
     this.notify();
 
+    const updatePayload: Record<string, any> = { role: newRole };
+    if (isExec) {
+      updatePayload.committee = 'None';
+      updatePayload.department = 'Executive';
+      updatePayload.sub_committee = '';
+    }
+
     supabase
       .from('profiles')
-      .update({ role: newRole })
+      .update(updatePayload)
       .eq('id', id)
       .then(({ error }) => {
         if (error) {
@@ -2098,6 +2127,14 @@ class SupabaseDatabase {
   ): boolean {
     const idx = this.cache.users.findIndex((u) => u.id === id);
     if (idx === -1) return false;
+
+    const targetRole = updates.role || this.cache.users[idx].role;
+    if (['Coordinator', 'Deputy Coordinator', 'Super Admin'].includes(targetRole)) {
+      updates.committee = 'None';
+      updates.department = 'Executive';
+      updates.subCommittee = '';
+    }
+
     saveProfileOverride(id, updates);
     
     this.cache.users[idx] = { ...this.cache.users[idx], ...updates };

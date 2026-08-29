@@ -35,7 +35,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNavigateToView }) => {
-  const { language, isRtl } = useLanguage();
+  const { language, isRtl, translateCommittee, translateDepartment } = useLanguage();
   const ar = language === 'ar';
   const [activeTab, setActiveTab] = useState<'members' | 'config' | 'master' | 'logs' | 'security-codes'>('members');
   const [settings, setSettings] = useState<OrganizationSettings>(db.getSettings());
@@ -218,8 +218,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
     setEditPhone(user.phoneNumber || '');
     setEditRole(user.role);
     setEditStatus(user.status);
-    setEditCommittee(user.committee || 'HR');
-    setEditDepartment(user.department || 'HRM');
+    const isExec = ['Coordinator', 'Deputy Coordinator', 'Super Admin'].includes(user.role);
+    setEditCommittee(isExec ? 'None' : (user.committee || 'HR'));
+    setEditDepartment(isExec ? 'Executive' : (user.department || 'HRM'));
     setEditSubCommittee(user.subCommittee || 'HR OF OR');
     setEditCode(user.membershipCode || '');
     setEditDob(user.dateOfBirth || '');
@@ -230,15 +231,16 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
     e.preventDefault();
     if (!editingUser) return;
 
+    const isExec = ['Coordinator', 'Deputy Coordinator', 'Super Admin'].includes(editRole);
     const updatedFields = {
       fullName: editFullName,
       email: editEmail,
       phoneNumber: editPhone,
       role: editRole,
       status: editStatus,
-      committee: editCommittee,
-      department: editDepartment,
-      subCommittee: editCommittee === 'HRM' || editCommittee === 'HR' || editDepartment.startsWith('HRM') ? editSubCommittee : '',
+      committee: isExec ? 'None' : editCommittee,
+      department: isExec ? 'Executive' : editDepartment,
+      subCommittee: !isExec && (editCommittee === 'HRM' || editCommittee === 'HR' || editDepartment.startsWith('HRM')) ? editSubCommittee : '',
       membershipCode: editCode,
       dateOfBirth: editDob,
     };
@@ -783,7 +785,20 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                       </td>
                       <td className="py-3.5 px-4 font-mono text-[11px] font-bold text-emerald-600 dark:text-emerald-400">{u.phoneNumber || '—'}</td>
                       <td className="py-3.5 px-4 font-mono text-[11px] font-bold text-indigo-600 dark:text-indigo-400">{u.membershipCode}</td>
-                      <td className="py-3.5 px-4 font-bold">{u.committee} - {u.department}</td>
+                      <td className="py-3.5 px-4 font-bold text-xs">
+                        {['Coordinator', 'Deputy Coordinator', 'Super Admin'].includes(u.role) || u.committee === 'None' ? (
+                          <span className="inline-flex items-center gap-1 text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded-lg border border-indigo-200 dark:border-indigo-800/50 text-[11px]">
+                            {ar ? 'إدارة عليا (عام)' : 'Executive / Leadership'}
+                          </span>
+                        ) : (
+                          <span>
+                            {translateCommittee(u.committee)}
+                            {u.department && u.department !== 'None' && u.department !== 'Executive' && u.department !== u.committee
+                              ? ` - ${translateDepartment(u.department)}`
+                              : ''}
+                          </span>
+                        )}
+                      </td>
                       <td className="py-3.5 px-4">
                         <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${ROLE_COLORS[u.role] || ''}`}>
                           {u.role}
@@ -1426,7 +1441,15 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                   <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">{ar ? 'المنصب / الدور (Role)' : 'Role'}</label>
                   <select
                     value={editRole}
-                    onChange={e => setEditRole(e.target.value as UserRole)}
+                    onChange={e => {
+                      const nextR = e.target.value as UserRole;
+                      setEditRole(nextR);
+                      if (['Coordinator', 'Deputy Coordinator', 'Super Admin'].includes(nextR)) {
+                        setEditCommittee('None');
+                        setEditDepartment('Executive');
+                        setEditSubCommittee('');
+                      }
+                    }}
                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white"
                   >
                     {ALL_ROLES.map(r => (
@@ -1448,55 +1471,64 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                   </select>
                 </div>
 
-                <div>
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">{ar ? 'اللجنة' : 'Committee'}</label>
-                  <select
-                    value={editCommittee}
-                    onChange={e => {
-                      const comm = e.target.value;
-                      setEditCommittee(comm);
-                      const depts = COMMITTEE_STRUCTURE[comm] || [];
-                      if (depts.length > 0) setEditDepartment(depts[0]);
-                    }}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white"
-                  >
-                    <option value="None">None</option>
-                    {['HRM', 'HR', 'PR', 'SM', 'OR'].map(c => (
-                      <option key={c} value={c}>{c === 'HRM' ? 'HRM (الموارد البشرية)' : `${c} Committee`}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">{ar ? 'القسم' : 'Department'}</label>
-                  <select
-                    value={editDepartment}
-                    onChange={e => setEditDepartment(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white"
-                  >
-                    <option value="None">None</option>
-                    {(COMMITTEE_STRUCTURE[editCommittee] || ['HRM', 'EPR', 'Content', 'Graphic Design', 'VIP']).map(d => (
-                      <option key={d} value={d}>{d}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Sub-committee dropdown shown ONLY for HRM / HR */}
-                {(editCommittee === 'HRM' || editCommittee === 'HR' || editDepartment.startsWith('HRM')) && (
-                  <div className="col-span-2 bg-indigo-50/70 dark:bg-indigo-950/40 p-3.5 rounded-2xl border border-indigo-200 dark:border-indigo-800/60 space-y-1">
-                    <label className="text-xs font-black text-indigo-900 dark:text-indigo-200 block mb-1">
-                      {ar ? 'اللجنة الفرعية لـ HRM *' : 'HRM Sub-Committee *'}
-                    </label>
-                    <select
-                      value={editSubCommittee}
-                      onChange={e => setEditSubCommittee(e.target.value)}
-                      className="w-full bg-white dark:bg-slate-800 border border-indigo-200 dark:border-indigo-700 rounded-xl px-3 py-2 text-xs font-bold text-indigo-900 dark:text-indigo-100"
-                    >
-                      <option value="HR OF OR">HR OF OR (Human Resources of Organization & Recruitment)</option>
-                      <option value="HR OF SM">HR OF SM (Human Resources of Social Media)</option>
-                      <option value="HR OF PR">HR OF PR (Human Resources of Public Relations)</option>
-                    </select>
+                {['Coordinator', 'Deputy Coordinator', 'Super Admin'].includes(editRole) ? (
+                  <div className="col-span-1 sm:col-span-2 bg-indigo-50/80 dark:bg-indigo-950/40 p-3 rounded-2xl border border-indigo-200 dark:border-indigo-800/60 text-xs font-bold text-indigo-900 dark:text-indigo-200 flex items-center gap-2">
+                    <span>👑</span>
+                    <span>{ar ? 'منصب الإدارة العليا (المنسق / نائب المنسق / Super Admin) يشرف على كافة اللجان بدون التقيد بلجنة معينة.' : 'Executive Leadership oversees all committees without committee restriction.'}</span>
                   </div>
+                ) : (
+                  <>
+                    <div>
+                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">{ar ? 'اللجنة' : 'Committee'}</label>
+                      <select
+                        value={editCommittee}
+                        onChange={e => {
+                          const comm = e.target.value;
+                          setEditCommittee(comm);
+                          const depts = COMMITTEE_STRUCTURE[comm] || [];
+                          if (depts.length > 0) setEditDepartment(depts[0]);
+                        }}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white"
+                      >
+                        <option value="None">None</option>
+                        {['HRM', 'HR', 'PR', 'SM', 'OR'].map(c => (
+                          <option key={c} value={c}>{c === 'HRM' ? 'HRM (الموارد البشرية)' : `${c} Committee`}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">{ar ? 'القسم' : 'Department'}</label>
+                      <select
+                        value={editDepartment}
+                        onChange={e => setEditDepartment(e.target.value)}
+                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white"
+                      >
+                        <option value="None">None</option>
+                        {(COMMITTEE_STRUCTURE[editCommittee] || ['HRM', 'EPR', 'Content', 'Graphic Design', 'VIP']).map(d => (
+                          <option key={d} value={d}>{d}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Sub-committee dropdown shown ONLY for HRM / HR */}
+                    {(editCommittee === 'HRM' || editCommittee === 'HR' || editDepartment.startsWith('HRM')) && (
+                      <div className="col-span-2 bg-indigo-50/70 dark:bg-indigo-950/40 p-3.5 rounded-2xl border border-indigo-200 dark:border-indigo-800/60 space-y-1">
+                        <label className="text-xs font-black text-indigo-900 dark:text-indigo-200 block mb-1">
+                          {ar ? 'اللجنة الفرعية لـ HRM *' : 'HRM Sub-Committee *'}
+                        </label>
+                        <select
+                          value={editSubCommittee}
+                          onChange={e => setEditSubCommittee(e.target.value)}
+                          className="w-full bg-white dark:bg-slate-800 border border-indigo-200 dark:border-indigo-700 rounded-xl px-3 py-2 text-xs font-bold text-indigo-900 dark:text-indigo-100"
+                        >
+                          <option value="HR OF OR">HR OF OR (Human Resources of Organization & Recruitment)</option>
+                          <option value="HR OF SM">HR OF SM (Human Resources of Social Media)</option>
+                          <option value="HR OF PR">HR OF PR (Human Resources of Public Relations)</option>
+                        </select>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
 

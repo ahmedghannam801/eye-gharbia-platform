@@ -252,6 +252,11 @@ export const Auth: React.FC<AuthProps> = ({
       if (codeDetails.governorate) finalGovernorate = codeDetails.governorate;
     }
 
+    if (['Coordinator', 'Deputy Coordinator', 'Super Admin'].includes(finalRole)) {
+      finalCommittee = 'None';
+      finalDepartment = 'Executive';
+    }
+
     if (!finalGovernorate) {
       setErrorMsg(language === 'ar' ? 'يرجى اختيار المحافظة التابع لها أولاً.' : 'Please select your governorate.');
       return;
