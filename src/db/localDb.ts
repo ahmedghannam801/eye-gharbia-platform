@@ -3690,7 +3690,7 @@ class SupabaseDatabase {
     return this._ls<AttendanceRecord>('eye_attendance');
   }
 
-  checkIn(meetingId: string, code: string, member: UserProfile): 'ok' | 'wrong_code' | 'already' | 'closed' {
+  checkIn(meetingId: string, code: string, member: UserProfile, feedback?: string, rating?: number): 'ok' | 'wrong_code' | 'already' | 'closed' {
     const meeting = this.getMeetings().find(m => m.id === meetingId);
     if (!meeting) return 'wrong_code';
     if (meeting.status === 'Closed') return 'closed';
@@ -3707,6 +3707,8 @@ class SupabaseDatabase {
       department: member.department,
       checkedInAt: new Date().toISOString(),
       isExcused: false,
+      feedback: feedback ? feedback.trim() : undefined,
+      rating: rating || undefined,
     };
     const all = this.getAllAttendance();
     this.cache.attendance = [...all, record];
@@ -3726,6 +3728,8 @@ class SupabaseDatabase {
           department: record.department,
           checked_in_at: record.checkedInAt,
           is_excused: record.isExcused,
+          feedback: record.feedback,
+          rating: record.rating,
         });
       } catch (err) {
         console.error('[Supabase CheckIn Insert Error]:', err);

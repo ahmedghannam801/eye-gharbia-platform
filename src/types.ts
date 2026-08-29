@@ -303,6 +303,8 @@ export interface AttendanceRecord {
   checkedInAt: string;
   isExcused: boolean;
   excuseReason?: string;
+  feedback?: string; // آراء ومقترحات العضو حول السيشن (خاصة بالقادة)
+  rating?: number;   // تقييم السيشن من 1 إلى 5
 }
 
 // ─────────────────────────────────────────────
