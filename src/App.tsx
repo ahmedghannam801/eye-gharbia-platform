@@ -18,6 +18,7 @@ import { YouthWelcomeModal } from './components/YouthWelcomeModal';
 import { OccasionBanner } from './components/OccasionBanner';
 import { ProfileCompletionModal } from './components/ProfileCompletionModal';
 import { OzyAIAssistant } from './components/OzyAIAssistant';
+import { DeveloperWatermark } from './components/DeveloperWatermark';
 import { playRoyalNotificationSound } from './lib/notificationSound';
 
 // Heavy Workspace Views - Lazy Loaded for Maximum Page Speed & Performance
@@ -590,6 +591,9 @@ export default function App() {
 
       {/* Egyptian Youth Motivational Welcome Pop-up */}
       <YouthWelcomeModal currentUser={currentUser} />
+
+      {/* Floating Developer Watermark across Platform */}
+      <DeveloperWatermark variant="floating" />
     </div>
   );
 }

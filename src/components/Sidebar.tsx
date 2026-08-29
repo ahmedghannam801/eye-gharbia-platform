@@ -7,6 +7,8 @@ import { PanelRightClose, PanelRightOpen, LayoutDashboard, FolderKanban, Megapho
 import { useLanguage } from '../lib/LanguageContext';
 import { useTheme } from '../lib/ThemeContext';
 
+import { DeveloperWatermark } from './DeveloperWatermark';
+
 interface SidebarProps {
   currentUser: UserProfile;
   currentView: string;
@@ -289,15 +291,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </nav>
 
         {/* Logout Section */}
-        <div className="mt-auto border-t border-slate-100 dark:border-slate-800 pt-4">
+        <div className="mt-auto border-t border-slate-100 dark:border-slate-800 pt-3">
           <button
             onClick={onLogout}
-            className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-slate-600 dark:text-slate-400 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-600 dark:hover:text-red-400 transition-all duration-150"
+            className="flex w-full items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-600 dark:text-slate-400 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-600 dark:hover:text-red-400 transition-all duration-150"
             id="sidebar-logout-btn"
           >
             <LogOut className="w-4.5 h-4.5" />
-            <span>{t('logout')}</span>
+            {!isCollapsed && <span>{t('logout')}</span>}
           </button>
+
+          {/* Developer Watermark Signature */}
+          <DeveloperWatermark variant="sidebar" isCollapsed={isCollapsed} />
         </div>
       </aside>
 

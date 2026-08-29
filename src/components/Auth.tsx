@@ -5,6 +5,7 @@ import { COMMITTEE_STRUCTURE, HRM_DEPARTMENTS, UserProfile, UserRole } from '../
 import { Lock, Mail, User, Phone, Briefcase, Eye, EyeOff, AlertCircle, CheckCircle, ArrowLeft, ArrowRight, Sun, Moon, Copy, MapPin } from 'lucide-react';
 import { useLanguage } from '../lib/LanguageContext';
 import { useTheme } from '../lib/ThemeContext';
+import { DeveloperWatermark } from './DeveloperWatermark';
 
 // قائمة محافظات مصر المعتمدة في المنصة (محافظة الغربية فقط)
 const EGYPT_GOVERNORATES = [
@@ -920,6 +921,9 @@ export const Auth: React.FC<AuthProps> = ({
                 </button>
               </form>
             )}
+
+            {/* Developer Signature */}
+            <DeveloperWatermark variant="auth" />
 
           </div>
         </div>

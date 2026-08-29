@@ -8,6 +8,8 @@ import {
   Users, Users2, Trophy, Clock, HelpCircle, Send, Sun, Moon 
 } from 'lucide-react';
 
+import { DeveloperWatermark } from './DeveloperWatermark';
+
 interface LandingPageProps {
   onNavigate: (view: string) => void;
 }
@@ -580,11 +582,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
 
       {/* Footer */}
       <footer className="border-t border-slate-200 bg-white py-12 px-6 mt-auto">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
-          <EyeLogo size={36} showText={true} theme="light" />
-          <p className="text-xs text-slate-400 font-bold text-center md:text-start leading-relaxed">
-            &copy; {new Date().getFullYear()} {language === 'ar' ? 'كيان EYE الغربية. جميع الحقوق محفوظة. الأمانة الفنية المعتمدة تحت إشراف وزارة الشباب والرياضة.' : 'Egyptian Youth Entity (EYE) Gharbia. All rights reserved. Ministry of Youth & Sports.'}
-          </p>
+        <div className="max-w-7xl mx-auto space-y-6">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+            <EyeLogo size={36} showText={true} theme="light" />
+            <p className="text-xs text-slate-500 font-bold text-center md:text-start leading-relaxed">
+              {language === 'ar' ? 'الأمانة الفنية المعتمدة لكيان EYE الغربية — تحت إشراف وزارة الشباب والرياضة.' : 'Egyptian Youth Entity (EYE) Gharbia — Ministry of Youth & Sports.'}
+            </p>
+          </div>
+          <DeveloperWatermark variant="footer" />
         </div>
       </footer>
     </div>
