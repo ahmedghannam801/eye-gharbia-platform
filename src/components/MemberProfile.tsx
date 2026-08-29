@@ -2099,7 +2099,7 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({
                               <td style="padding: 10px; font-size: 11px; font-weight: 900; color: #059669;">${userProfile.rating ? `${userProfile.rating} / 5 ⭐` : 'ممتاز (5 / 5) ⭐'}</td>
                             </tr>
                             <tr>
-                              <th style="width: 25%; background: #1b4cd3; color: white; padding: 10px; font-size: 11px; text-align: right;">المهارات والتخصصات</th>
+                              <th style="background: #1b4cd3; color: white; padding: 10px; font-size: 11px; text-align: right;">المهارات والتخصصات</th>
                               <td colSpan="3" style="padding: 10px; font-size: 11px; font-weight: 700; color: #334155;">${userProfile.skills?.join(' • ') || 'مهارات قيادية، تنظيم الفعاليات، إدارة التكليفات، العمل الجماعي'}</td>
                             </tr>
                             <tr>
@@ -2154,7 +2154,7 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({
                   <span className="font-semibold opacity-70">{language === 'ar' ? 'الدور القيادي' : 'Role'}</span>
                   <span className={`font-bold uppercase tracking-wider ${isExec ? 'text-amber-400' : 'text-slate-800 dark:text-slate-200'}`}>{userProfile.role}</span>
                 </div>
-                {!['Super Admin', 'Coordinator', 'Deputy Coordinator'].includes(userProfile.role) && userProfile.committee !== 'None' ? (
+                {userProfile.role !== 'Super Admin' && (
                   <>
                     <div className="flex justify-between py-1 border-b border-white/10">
                       <span className="font-semibold opacity-70">{language === 'ar' ? 'اللجنة' : 'Committee'}</span>
@@ -2198,11 +2198,6 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({
                       </div>
                     )}
                   </>
-                ) : (
-                  <div className="flex justify-between py-1 border-b border-white/10">
-                    <span className="font-semibold opacity-70">{language === 'ar' ? 'النطاق الإشرافي' : 'Scope'}</span>
-                    <span className="font-bold text-amber-400">{language === 'ar' ? 'الإدارة العليا (كافة اللجان)' : 'Executive (All Committees)'}</span>
-                  </div>
                 )}
                 <div className="flex justify-between py-1 border-b border-white/10">
                   <span className="font-semibold opacity-70">{language === 'ar' ? 'تاريخ الانضمام' : 'Joined Date'}</span>
@@ -2581,15 +2576,13 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({
                           <h4 className="text-xs sm:text-sm font-black text-white leading-tight truncate drop-shadow-md">{userProfile.fullName}</h4>
                           {currentUser.role !== 'Member' && <p className="text-[9px] font-mono text-amber-300 tracking-wider font-extrabold">ID: {userProfile.membershipCode || 'EYE-1001'}</p>}
                           <p className="text-[9px] font-extrabold text-slate-200/90 leading-none truncate">
-                            {['Coordinator', 'Deputy Coordinator', 'Super Admin'].includes(userProfile.role) || userProfile.committee === 'None'
-                              ? (language === 'ar' ? 'الإدارة العامة والتنفيذية' : 'Executive Management')
-                              : (language === 'ar' 
-                                  ? (userProfile.department && userProfile.department !== 'None' && userProfile.department !== 'Executive'
-                                      ? `${translateCommittee(userProfile.committee)} • ${translateDepartment(userProfile.department)}`
-                                      : translateCommittee(userProfile.committee))
-                                  : (userProfile.department && userProfile.department !== 'None' && userProfile.department !== 'Executive'
-                                      ? `${userProfile.committee} • ${userProfile.department}`
-                                      : userProfile.committee))}
+                            {language === 'ar' 
+                              ? (userProfile.department && userProfile.department !== 'None' 
+                                  ? `${translateCommittee(userProfile.committee)} • ${translateDepartment(userProfile.department)}`
+                                  : translateCommittee(userProfile.committee))
+                              : (userProfile.department && userProfile.department !== 'None'
+                                  ? `${userProfile.committee} • ${userProfile.department}`
+                                  : userProfile.committee)}
                           </p>
                         </div>
                       </div>

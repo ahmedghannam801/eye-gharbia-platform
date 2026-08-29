@@ -252,11 +252,6 @@ export const Auth: React.FC<AuthProps> = ({
       if (codeDetails.governorate) finalGovernorate = codeDetails.governorate;
     }
 
-    if (['Coordinator', 'Deputy Coordinator', 'Super Admin'].includes(finalRole)) {
-      finalCommittee = 'None';
-      finalDepartment = 'Executive';
-    }
-
     if (!finalGovernorate) {
       setErrorMsg(language === 'ar' ? 'يرجى اختيار المحافظة التابع لها أولاً.' : 'Please select your governorate.');
       return;
@@ -287,12 +282,14 @@ export const Auth: React.FC<AuthProps> = ({
       setSuccessMsg(
         language === 'ar'
           ? (isMemberRole
-              ? 'تم تقديم طلب التسجيل بنجاح! يرجى الانتظار لحين اعتماد تفعيل حسابك من قِبل إدارة الكيان.'
+              ? 'تم تقديم طلب التسجيل بنجاح! يرجى الانتظار لحين اعتماد تفعيل حسابك من قِبل إدارة الكيان، ويمكنك تسجيل الدخول بمجرد التفعيل.'
               : `تم تسجيل حسابك بنجاح! كود عضويتك الخاص: ${res.user.membershipCode}`)
           : (isMemberRole
-              ? 'Account created successfully! Please await leadership approval.'
+              ? 'Account created successfully! Please await leadership approval, then sign in.'
               : `Account created successfully! Your membership code: ${res.user.membershipCode}`)
       );
+      setLoginEmail(cleanEmail);
+      setMode('login');
       setRegName(''); setRegEmail(''); setRegPhone('');
       setRegPassword(''); setRegConfirmPassword(''); setRegGovernorate('');
     } else {
