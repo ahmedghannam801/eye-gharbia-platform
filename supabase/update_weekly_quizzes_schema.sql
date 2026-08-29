@@ -7,6 +7,7 @@
 ALTER TABLE IF EXISTS public.weekly_quizzes
   ADD COLUMN IF NOT EXISTS title text DEFAULT 'المسابقة الأسبوعية',
   ADD COLUMN IF NOT EXISTS questions jsonb DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS committee text DEFAULT 'All',
   ADD COLUMN IF NOT EXISTS governorate text DEFAULT 'الغربية';
 
 -- 2. إنشاء جدول تسجيل إجابات ومشاركات الأعضاء في المسابقات (Quiz Submissions)

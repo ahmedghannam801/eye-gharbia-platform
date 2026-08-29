@@ -60,6 +60,8 @@ export const WeeklyTrivia: React.FC<WeeklyTriviaProps> = ({ currentUser }) => {
 
   // Multi-Question Creation form state
   const [quizTitle, setQuizTitle] = useState('');
+  const [quizCommittee, setQuizCommittee] = useState<string>('All');
+  const [adminCommitteeFilter, setAdminCommitteeFilter] = useState<string>('All');
   const [questionsDraft, setQuestionsDraft] = useState<QuestionDraft[]>([
     {
       id: 'q-draft-1',
@@ -71,13 +73,25 @@ export const WeeklyTrivia: React.FC<WeeklyTriviaProps> = ({ currentUser }) => {
     }
   ]);
 
+  const userCommittee = currentUser.committee || 'None';
+
   const load = () => {
     const list = db.getQuizzes();
-    setQuizzes(list);
-    if (list.length > 0) {
-      const activeId = selectedQuizId && list.some(q => q.id === selectedQuizId)
+    
+    // Filter quizzes based on user role and committee
+    let accessibleQuizzes = list;
+    if (!isAdmin) {
+      accessibleQuizzes = list.filter(q => {
+        const comm = q.committee || 'All';
+        return comm === 'All' || comm === userCommittee || (userCommittee === 'HR' && comm === 'HR');
+      });
+    }
+
+    setQuizzes(accessibleQuizzes);
+    if (accessibleQuizzes.length > 0) {
+      const activeId = selectedQuizId && accessibleQuizzes.some(q => q.id === selectedQuizId)
         ? selectedQuizId
-        : list[0].id;
+        : accessibleQuizzes[0].id;
       setSelectedQuizId(activeId);
       setSubmissions(db.getQuizSubmissions(activeId));
     } else {
@@ -90,7 +104,7 @@ export const WeeklyTrivia: React.FC<WeeklyTriviaProps> = ({ currentUser }) => {
     load();
     const unsub = db.onChange(load);
     return () => unsub();
-  }, [selectedQuizId]);
+  }, [selectedQuizId, adminCommitteeFilter]);
 
   const activeQuiz = quizzes.find(q => q.id === selectedQuizId) || quizzes[0];
 
@@ -227,12 +241,14 @@ export const WeeklyTrivia: React.FC<WeeklyTriviaProps> = ({ currentUser }) => {
         title: quizTitle.trim() || (isAr ? 'المسابقة الأسبوعية 🧠' : 'Weekly Trivia Quiz 🧠'),
         questions,
         pointsReward: totalPoints,
+        committee: quizCommittee,
       },
       currentUser
     );
 
     setShowCreate(false);
     setQuizTitle('');
+    setQuizCommittee('All');
     setQuestionsDraft([
       {
         id: 'q-draft-1',
@@ -302,10 +318,25 @@ export const WeeklyTrivia: React.FC<WeeklyTriviaProps> = ({ currentUser }) => {
               {/* Quiz Header & Meta */}
               <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
                 <div className="space-y-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-[11px] font-black bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 px-2.5 py-1 rounded-full uppercase tracking-wider">
                       {isAr ? 'التحدي النشط' : 'Active Challenge'}
                     </span>
+                    {(!activeQuiz.committee || activeQuiz.committee === 'All') ? (
+                      <span className="text-[11px] font-black bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 px-2.5 py-1 rounded-full flex items-center gap-1">
+                        <span>🌐</span>
+                        <span>{isAr ? 'عامة لجميع اللجان' : 'All Committees'}</span>
+                      </span>
+                    ) : (
+                      <span className="text-[11px] font-black bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 px-2.5 py-1 rounded-full flex items-center gap-1">
+                        <span>🎯</span>
+                        <span>
+                          {isAr
+                            ? `موجهة للجنة: ${activeQuiz.committee === 'HR' ? 'الموارد البشرية (HR)' : activeQuiz.committee === 'PR' ? 'العلاقات العامة (PR)' : activeQuiz.committee === 'SM' ? 'السوشيال ميديا (SM)' : activeQuiz.committee === 'OR' ? 'التنظيم والفعاليات (OR)' : activeQuiz.committee}`
+                            : `Target Committee: ${activeQuiz.committee}`}
+                        </span>
+                      </span>
+                    )}
                     <span className="text-[11px] font-bold text-slate-400">
                       {activeQuestions.length} {isAr ? 'أسئلة' : 'Questions'}
                     </span>
@@ -749,6 +780,24 @@ export const WeeklyTrivia: React.FC<WeeklyTriviaProps> = ({ currentUser }) => {
                   placeholder={isAr ? 'مثال: مسابقة الذكاء والتفكير الأسبوعية 🧠🔥' : 'e.g. Weekly Trivia Challenge'}
                   className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-xs font-semibold focus:outline-none focus:border-purple-500"
                 />
+              </div>
+
+              {/* Target Committee */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                  {isAr ? 'توجيه المسابقة للجنة معينة (اختياري):' : 'Target Committee (Optional):'}
+                </label>
+                <select
+                  value={quizCommittee}
+                  onChange={e => setQuizCommittee(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl px-4 py-3 text-xs font-bold focus:outline-none focus:border-purple-500"
+                >
+                  <option value="All">{isAr ? '🌐 عامة لجميع اللجان (متاحة لكل أعضاء المحافظة)' : '🌐 All Committees (General)'}</option>
+                  <option value="HR">{isAr ? '👥 لجنة الموارد البشرية (HR)' : '👥 Human Resources (HR)'}</option>
+                  <option value="PR">{isAr ? '🤝 لجنة العلاقات العامة (PR)' : '🤝 Public Relations (PR)'}</option>
+                  <option value="SM">{isAr ? '📱 لجنة السوشيال ميديا والتسويق (SM)' : '📱 Social Media (SM)'}</option>
+                  <option value="OR">{isAr ? '🎪 لجنة التنظيم والفعاليات (OR)' : '🎪 Organization & Events (OR)'}</option>
+                </select>
               </div>
 
               {/* Questions List */}

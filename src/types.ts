@@ -466,6 +466,7 @@ export interface WeeklyQuiz {
   options: string[];
   correctAnswerIndex: number;
   pointsReward: number;
+  committee?: string;
   status: 'Active' | 'Closed';
   createdAt: string;
   questions?: QuizQuestionItem[];

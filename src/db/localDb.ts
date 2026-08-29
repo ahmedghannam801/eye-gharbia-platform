@@ -1148,6 +1148,7 @@ class SupabaseDatabase {
         options: Array.isArray(r.options) ? r.options : [],
         correctAnswerIndex: r.correct_answer_index ?? 0,
         pointsReward: r.points_reward ?? 50,
+        committee: r.committee || 'All',
         status: r.status || 'Active',
         questions: Array.isArray(r.questions) ? r.questions : undefined,
         createdAt: r.created_at || new Date().toISOString(),
@@ -6034,6 +6035,7 @@ class SupabaseDatabase {
       options: ['5', '10', '20', '100'],
       correctAnswerIndex: 1,
       pointsReward: 50,
+      committee: 'All',
       status: 'Active',
       createdAt: '2026-08-29T12:00:00.000Z',
       questions: [
@@ -6105,7 +6107,7 @@ class SupabaseDatabase {
   }
 
   createQuiz(
-    param1: string | { title?: string; question?: string; options?: string[]; correctAnswerIndex?: number; pointsReward?: number; questions?: QuizQuestionItem[] },
+    param1: string | { title?: string; question?: string; options?: string[]; correctAnswerIndex?: number; pointsReward?: number; committee?: string; questions?: QuizQuestionItem[] },
     param2?: string[] | UserProfile,
     param3?: number,
     param4?: number,
@@ -6145,6 +6147,7 @@ class SupabaseDatabase {
         options: firstQ.options,
         correctAnswerIndex: firstQ.correctAnswerIndex,
         pointsReward: totalPoints,
+        committee: payload.committee || 'All',
         questions: questionsList,
         status: 'Active',
         createdAt: new Date().toISOString(),
@@ -6163,6 +6166,7 @@ class SupabaseDatabase {
         options,
         correctAnswerIndex,
         pointsReward,
+        committee: 'All',
         questions: [{
           id: 'q-1',
           question,
@@ -6188,6 +6192,7 @@ class SupabaseDatabase {
         options: newQuiz.options,
         correct_answer_index: newQuiz.correctAnswerIndex,
         points_reward: newQuiz.pointsReward,
+        committee: newQuiz.committee,
         status: newQuiz.status,
         questions: newQuiz.questions,
         created_at: newQuiz.createdAt,
@@ -6196,7 +6201,7 @@ class SupabaseDatabase {
     }
 
     if (actor) {
-      this.logActivity(actor.id, actor.fullName, actor.role, 'Quiz Created', `Created trivia quiz: "${newQuiz.title || newQuiz.question}"`);
+      this.logActivity(actor.id, actor.fullName, actor.role, 'Quiz Created', `Created trivia quiz: "${newQuiz.title || newQuiz.question}" for committee ${newQuiz.committee || 'All'}`);
     }
     return newQuiz;
   }
