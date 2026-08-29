@@ -431,32 +431,32 @@ export const WeeklyTrivia: React.FC<WeeklyTriviaProps> = ({ currentUser }) => {
                         return (
                           <div
                             key={q.id || qIdx}
-                            className={`p-5 rounded-2xl border transition-all space-y-3 ${
+                            className={`p-5 rounded-2xl border transition-all space-y-3.5 ${
                               isCorrectAnswer
-                                ? 'bg-slate-50/70 dark:bg-slate-850/50 border-emerald-200/80 dark:border-emerald-900/50'
-                                : 'bg-slate-50/70 dark:bg-slate-850/50 border-red-200/80 dark:border-red-900/50'
+                                ? 'bg-emerald-50/40 dark:bg-slate-900 border-emerald-300/80 dark:border-emerald-800/60 shadow-sm'
+                                : 'bg-red-50/40 dark:bg-slate-900 border-red-300/80 dark:border-red-800/60 shadow-sm'
                             }`}
                           >
                             <div className="flex items-start justify-between gap-3">
                               <div className="flex items-start gap-2.5 flex-1">
-                                <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black shrink-0 ${
+                                <span className={`px-2.5 py-0.5 rounded-lg text-[10px] font-black shrink-0 border ${
                                   isCorrectAnswer
-                                    ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300'
-                                    : 'bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300'
+                                    ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                                    : 'bg-red-100 dark:bg-red-950 text-red-800 dark:text-red-300 border-red-200 dark:border-red-800'
                                 }`}>
                                   {isAr ? `سؤال ${qIdx + 1}` : `Q ${qIdx + 1}`}
                                 </span>
-                                <h5 className="text-sm font-bold text-slate-900 dark:text-white leading-relaxed">
+                                <h5 className="text-sm font-bold text-slate-900 dark:text-slate-100 leading-relaxed">
                                   {q.question}
                                 </h5>
                               </div>
                               {isCorrectAnswer ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 text-[10px] font-black shrink-0">
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[10px] font-black shrink-0">
                                   <CheckCircle2 className="w-3.5 h-3.5" />
                                   <span>{isAr ? 'صحيحة' : 'Correct'}</span>
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-950/60 text-red-600 dark:text-red-400 text-[10px] font-black shrink-0">
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-red-100 dark:bg-red-950/80 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800 text-[10px] font-black shrink-0">
                                   <XCircle className="w-3.5 h-3.5" />
                                   <span>{isAr ? 'خاطئة' : 'Wrong'}</span>
                                 </span>
@@ -464,38 +464,43 @@ export const WeeklyTrivia: React.FC<WeeklyTriviaProps> = ({ currentUser }) => {
                             </div>
 
                             {/* Options List */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
                               {q.options.map((opt, optIdx) => {
                                 const isSelectedByMember = selectedIdx === optIdx;
                                 const isCorrectChoice = q.correctAnswerIndex === optIdx;
 
-                                let optStyle = 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400';
+                                let optStyle = 'bg-white dark:bg-slate-800/90 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300';
+                                let numBadgeStyle = 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300';
+
                                 if (isCorrectChoice) {
-                                  optStyle = 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-400 text-emerald-800 dark:text-emerald-300 font-bold';
+                                  optStyle = 'bg-emerald-100/70 dark:bg-emerald-950/70 border-emerald-400 dark:border-emerald-600 text-emerald-900 dark:text-emerald-200 font-bold shadow-sm';
+                                  numBadgeStyle = 'bg-emerald-200 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-100 font-black';
                                 } else if (isSelectedByMember && !isCorrectChoice) {
-                                  optStyle = 'bg-red-50 dark:bg-red-950/40 border-red-300 text-red-700 dark:text-red-400 font-semibold';
+                                  optStyle = 'bg-red-100/70 dark:bg-red-950/70 border-red-400 dark:border-red-600 text-red-900 dark:text-red-200 font-semibold shadow-sm';
+                                  numBadgeStyle = 'bg-red-200 dark:bg-red-800 text-red-900 dark:text-red-100 font-black';
                                 }
 
                                 return (
                                   <div
                                     key={optIdx}
-                                    className={`p-3 rounded-xl border text-xs flex items-center justify-between gap-2 ${optStyle}`}
+                                    className={`p-3 rounded-xl border text-xs flex items-center justify-between gap-2.5 transition-all ${optStyle}`}
                                   >
-                                    <div className="flex items-center gap-2">
-                                      <span className="w-5 h-5 rounded-lg bg-slate-100 dark:bg-slate-700/60 flex items-center justify-center text-[10px] font-bold">
+                                    <div className="flex items-center gap-2.5">
+                                      <span className={`w-5 h-5 rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0 ${numBadgeStyle}`}>
                                         {optIdx + 1}
                                       </span>
-                                      <span>{opt}</span>
+                                      <span className="font-semibold">{opt}</span>
                                     </div>
 
                                     {isCorrectChoice && (
-                                      <span className="text-[10px] font-black text-emerald-600 flex items-center gap-1">
-                                        <Check className="w-3.5 h-3.5" />
+                                      <span className="text-[10px] font-black text-emerald-700 dark:text-emerald-400 flex items-center gap-1 shrink-0">
+                                        <Check className="w-3.5 h-3.5 stroke-[3]" />
                                         {isAr ? 'الإجابة النموذجية' : 'Model Answer'}
                                       </span>
                                     )}
                                     {isSelectedByMember && !isCorrectChoice && (
-                                      <span className="text-[10px] font-bold text-red-500">
+                                      <span className="text-[10px] font-black text-red-700 dark:text-red-400 flex items-center gap-1 shrink-0">
+                                        <XCircle className="w-3.5 h-3.5" />
                                         {isAr ? 'إجابتك' : 'Your Answer'}
                                       </span>
                                     )}
@@ -506,7 +511,7 @@ export const WeeklyTrivia: React.FC<WeeklyTriviaProps> = ({ currentUser }) => {
 
                             {/* Explanation if present */}
                             {q.explanation && (
-                              <div className="p-3 bg-purple-50/60 dark:bg-purple-950/20 border border-purple-200/60 dark:border-purple-900/40 rounded-xl text-xs flex items-start gap-2 text-purple-900 dark:text-purple-300">
+                              <div className="p-3 bg-purple-50/70 dark:bg-purple-950/40 border border-purple-200/80 dark:border-purple-800/60 rounded-xl text-xs flex items-start gap-2 text-purple-950 dark:text-purple-200">
                                 <Info className="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0 mt-0.5" />
                                 <div>
                                   <span className="font-bold">{isAr ? 'التوضيح والتفسير: ' : 'Explanation: '}</span>
@@ -571,7 +576,7 @@ export const WeeklyTrivia: React.FC<WeeklyTriviaProps> = ({ currentUser }) => {
 
                   {/* Active Question Box */}
                   {currentQuestion ? (
-                    <div className="space-y-5 bg-slate-50/50 dark:bg-slate-850/40 p-5 sm:p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800">
+                    <div className="space-y-5 bg-slate-50 dark:bg-slate-900/90 p-5 sm:p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm">
                       <div className="space-y-2">
                         <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 text-[11px] font-black">
                           <span>{isAr ? `السؤال رقم ${currentQIndex + 1}` : `Question #${currentQIndex + 1}`}</span>
