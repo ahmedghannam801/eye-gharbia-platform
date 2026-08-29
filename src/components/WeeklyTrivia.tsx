@@ -293,40 +293,6 @@ export const WeeklyTrivia: React.FC<WeeklyTriviaProps> = ({ currentUser }) => {
         </div>
       </div>
 
-      {/* Quizzes Navigation Bar if multiple quizzes exist */}
-      {quizzes.length > 1 && (
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-thin">
-          <span className="text-xs font-bold text-slate-500 shrink-0 flex items-center gap-1">
-            <Sparkles className="w-3.5 h-3.5 text-purple-500" />
-            {isAr ? 'المسابقات المتاحة:' : 'Available Quizzes:'}
-          </span>
-          {quizzes.map((q, idx) => {
-            const isSelected = q.id === (activeQuiz?.id || '');
-            const isSub = db.getQuizSubmissions(q.id).some(s => s.userId === currentUser.id);
-            return (
-              <button
-                key={q.id}
-                onClick={() => {
-                  setSelectedQuizId(q.id);
-                  setCurrentQIndex(0);
-                  setUserAnswers({});
-                }}
-                className={`px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-2 border ${
-                  isSelected
-                    ? 'bg-purple-600 text-white border-purple-600 shadow-md shadow-purple-500/20 scale-[1.02]'
-                    : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-250 dark:border-slate-800 hover:border-purple-300'
-                }`}
-              >
-                <span>{q.title || `${isAr ? 'مسابقة' : 'Quiz'} #${quizzes.length - idx}`}</span>
-                {isSub && (
-                  <span className={`w-2 h-2 rounded-full ${isSelected ? 'bg-emerald-300' : 'bg-emerald-500'}`} title={isAr ? 'تمت المشاركة' : 'Participated'}></span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      )}
-
       {/* Main Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Active Quiz Card (Takes 2 cols) */}

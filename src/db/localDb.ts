@@ -6083,14 +6083,25 @@ class SupabaseDatabase {
     let list = this._ls<WeeklyQuiz>('eye_weekly_quizzes');
     const deletedIds: string[] = JSON.parse(localStorage.getItem('eye_deleted_quiz_ids') || '[]');
 
-    // If default quiz is not in localStorage and not deleted, insert it
+    // Clean up empty or duplicate placeholder quizzes
+    list = list.filter(q => {
+      if (deletedIds.includes(q.id)) return false;
+      if (q.id === defaultWeeklyQuiz.id) return true;
+      // Filter out legacy generic single placeholders
+      if (!q.questions || q.questions.length === 0) {
+        if (!q.question || q.question === 'السؤال' || q.title === 'مسابقة أسبوعية') return false;
+      }
+      return true;
+    });
+
+    // Ensure default 5-question quiz is present if not deleted
     const hasDefault = list.some(q => q.id === defaultWeeklyQuiz.id);
     if (!hasDefault && !deletedIds.includes(defaultWeeklyQuiz.id)) {
       list = [defaultWeeklyQuiz, ...list];
-      this._lsSave('eye_weekly_quizzes', list);
     }
+    this._lsSave('eye_weekly_quizzes', list);
 
-    return list.filter(q => !deletedIds.includes(q.id));
+    return list;
   }
 
   createQuiz(
