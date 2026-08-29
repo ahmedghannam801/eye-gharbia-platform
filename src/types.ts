@@ -450,14 +450,25 @@ export interface MonthlyPerformance {
 // ─────────────────────────────────────────────
 // WEEKLY QUIZ & TRIVIA
 // ─────────────────────────────────────────────
+export interface QuizQuestionItem {
+  id: string;
+  question: string;
+  options: string[];
+  correctAnswerIndex: number;
+  explanation?: string;
+  pointsReward?: number;
+}
+
 export interface WeeklyQuiz {
   id: string;
+  title?: string;
   question: string;
   options: string[];
   correctAnswerIndex: number;
   pointsReward: number;
   status: 'Active' | 'Closed';
   createdAt: string;
+  questions?: QuizQuestionItem[];
 }
 
 export interface QuizSubmission {
@@ -465,7 +476,12 @@ export interface QuizSubmission {
   quizId: string;
   userId: string;
   userName: string;
-  answerIndex: number;
+  userAvatar?: string;
+  answerIndex?: number;
+  answers?: number[];
+  score?: number;
+  totalQuestions?: number;
+  pointsEarned?: number;
   isCorrect: boolean;
   submittedAt: string;
 }

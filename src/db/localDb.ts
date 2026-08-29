@@ -33,6 +33,7 @@ import {
   FreezeRequest,
   MonthlyPerformance,
   WeeklyQuiz,
+  QuizQuestionItem,
   QuizSubmission,
   PersonalObjective,
   IssuedCertificate,
@@ -807,7 +808,7 @@ class SupabaseDatabase {
       meetings, attendance, workPlans, ideas, evaluations, leaderFeedbacks,
       workshops, excusesFreezes, settings, disciplinaryRecords, memoryWall,
       occasions, issuedPosters, academyCourses, rewardItems, rewardPurchases,
-      weeklyQuizzes, weeklyChallenges
+      weeklyQuizzes, weeklyChallenges, quizSubmissions
     ] = await Promise.all([
       safeFetch(supabase.from('profiles').select('*').order('joined_date', { ascending: false })),
       safeFetch(supabase.from('tasks').select('*').order('created_date', { ascending: false })),
@@ -834,6 +835,7 @@ class SupabaseDatabase {
       safeFetch(supabase.from('reward_purchases').select('*').order('purchased_at', { ascending: false })),
       safeFetch(supabase.from('weekly_quizzes').select('*').order('created_at', { ascending: false })),
       safeFetch(supabase.from('weekly_challenges').select('*').order('created_at', { ascending: false })),
+      safeFetch(supabase.from('quiz_submissions').select('*').order('submitted_at', { ascending: false })),
     ]);
 
     const getDeletedIds = (key: string): string[] => {
@@ -1141,11 +1143,14 @@ class SupabaseDatabase {
     if (weeklyQuizzes && weeklyQuizzes.data) {
       const remoteQuizzes: WeeklyQuiz[] = weeklyQuizzes.data.map(r => ({
         id: r.id,
+        title: r.title || 'مسابقة أسبوعية',
         question: r.question,
         options: Array.isArray(r.options) ? r.options : [],
         correctAnswerIndex: r.correct_answer_index ?? 0,
         pointsReward: r.points_reward ?? 50,
         status: r.status || 'Active',
+        questions: Array.isArray(r.questions) ? r.questions : undefined,
+        createdAt: r.created_at || new Date().toISOString(),
       }));
       const localQuizzes = this._ls<WeeklyQuiz>('eye_weekly_quizzes');
       const mergedQuizzes = mergeById(remoteQuizzes, localQuizzes, deletedQuizIds);
@@ -1166,6 +1171,27 @@ class SupabaseDatabase {
       const localChallenges = this._ls<WeeklyChallenge>('eye_weekly_challenges');
       const mergedChallenges = mergeById(remoteChallenges, localChallenges, deletedWeeklyChallengeIds);
       this._lsSave('eye_weekly_challenges', mergedChallenges);
+    }
+
+    // Quiz Submissions Cloud Sync
+    if (quizSubmissions && quizSubmissions.data) {
+      const remoteSubs: QuizSubmission[] = quizSubmissions.data.map(r => ({
+        id: r.id,
+        quizId: r.quiz_id,
+        userId: r.user_id,
+        userName: r.user_name,
+        userAvatar: r.user_avatar || '',
+        answers: Array.isArray(r.answers) ? r.answers : undefined,
+        answerIndex: r.answer_index ?? 0,
+        score: r.score ?? 0,
+        totalQuestions: r.total_questions ?? 1,
+        pointsEarned: r.points_earned ?? 0,
+        isCorrect: !!r.is_correct,
+        submittedAt: r.submitted_at || new Date().toISOString(),
+      }));
+      const localSubs = this._ls<QuizSubmission>('eye_quiz_submissions');
+      const mergedSubs = mergeById(remoteSubs, localSubs, []);
+      this._lsSave('eye_quiz_submissions', mergedSubs);
     }
 
     // Filter out permanently deleted templates
@@ -6001,21 +6027,143 @@ class SupabaseDatabase {
   // WEEKLY TRIVIA / QUIZZES
   // ═══════════════════════════════════════════════════
   getQuizzes(): WeeklyQuiz[] {
-    const list = this._ls<WeeklyQuiz>('eye_weekly_quizzes');
+    const defaultWeeklyQuiz: WeeklyQuiz = {
+      id: 'quiz-weekly-iq-challenge-1',
+      title: 'تحدي الذكاء والتفكير الأسبوعي 🧠🔥',
+      question: 'الـ100 فيها كام 10؟',
+      options: ['5', '10', '20', '100'],
+      correctAnswerIndex: 1,
+      pointsReward: 50,
+      status: 'Active',
+      createdAt: '2026-08-29T12:00:00.000Z',
+      questions: [
+        {
+          id: 'q-1',
+          question: 'الـ100 فيها كام 10؟',
+          options: ['5', '10', '20', '100'],
+          correctAnswerIndex: 1,
+          pointsReward: 10,
+          explanation: 'الـ 100 تحتوي على 10 عشرات (10 × 10 = 100).'
+        },
+        {
+          id: 'q-2',
+          question: 'معاك 5 تفاحات، أخدت منهم 2. بقى معاك كام تفاحة؟',
+          options: ['2', '3', '5', '7'],
+          correctAnswerIndex: 0,
+          pointsReward: 10,
+          explanation: 'لأنك أخدت 2، فهما اللي بقوا معاك فعلياً.'
+        },
+        {
+          id: 'q-3',
+          question: 'أيه أتقل: كيلو حديد ولا كيلو ريش؟',
+          options: ['الحديد', 'الريش', 'متساويين', 'حسب الحجم'],
+          correctAnswerIndex: 2,
+          pointsReward: 10,
+          explanation: 'الاثنان وزنهما كيلو جرام واحد، فالوزن متساوي تماماً.'
+        },
+        {
+          id: 'q-4',
+          question: 'لو عندك 10 شموع، طفيت 3 منهم. كام شمعة هتفضل؟',
+          options: ['3', '7', '10', '0'],
+          correctAnswerIndex: 2,
+          pointsReward: 10,
+          explanation: 'الـ 10 شموع ما زالوا موجودين (3 مطفأة لم تحترق، و7 ستذوب).'
+        },
+        {
+          id: 'q-5',
+          question: 'أنت في سباق، عديت الشخص اللي في المركز التاني. بقيت في المركز كام؟',
+          options: ['الأول', 'التاني', 'التالت', 'حسب سرعة السباق'],
+          correctAnswerIndex: 1,
+          pointsReward: 10,
+          explanation: 'عندما تتجاوز صاحب المركز الثاني، تأخذ مكانه وتصبح أنت في المركز الثاني.'
+        }
+      ]
+    };
+
+    let list = this._ls<WeeklyQuiz>('eye_weekly_quizzes');
     const deletedIds: string[] = JSON.parse(localStorage.getItem('eye_deleted_quiz_ids') || '[]');
+
+    // If default quiz is not in localStorage and not deleted, insert it
+    const hasDefault = list.some(q => q.id === defaultWeeklyQuiz.id);
+    if (!hasDefault && !deletedIds.includes(defaultWeeklyQuiz.id)) {
+      list = [defaultWeeklyQuiz, ...list];
+      this._lsSave('eye_weekly_quizzes', list);
+    }
+
     return list.filter(q => !deletedIds.includes(q.id));
   }
 
-  createQuiz(question: string, options: string[], correctAnswerIndex: number, pointsReward: number, actor: UserProfile): WeeklyQuiz {
-    const newQuiz: WeeklyQuiz = {
-      id: 'quiz-' + Math.random().toString(36).slice(2, 9),
-      question,
-      options,
-      correctAnswerIndex,
-      pointsReward,
-      status: 'Active',
-      createdAt: new Date().toISOString(),
-    };
+  createQuiz(
+    param1: string | { title?: string; question?: string; options?: string[]; correctAnswerIndex?: number; pointsReward?: number; questions?: QuizQuestionItem[] },
+    param2?: string[] | UserProfile,
+    param3?: number,
+    param4?: number,
+    param5?: UserProfile
+  ): WeeklyQuiz {
+    let newQuiz: WeeklyQuiz;
+    let actor: UserProfile | undefined;
+
+    if (typeof param1 === 'object') {
+      const payload = param1;
+      actor = param2 as UserProfile;
+      const questionsList: QuizQuestionItem[] = (payload.questions && payload.questions.length > 0)
+        ? payload.questions.map((q, idx) => ({
+            id: q.id || `q-${idx + 1}-${Math.random().toString(36).slice(2, 6)}`,
+            question: q.question,
+            options: q.options,
+            correctAnswerIndex: q.correctAnswerIndex ?? 0,
+            pointsReward: q.pointsReward || 10,
+            explanation: q.explanation || ''
+          }))
+        : [{
+            id: 'q-1',
+            question: payload.question || '',
+            options: payload.options || ['', '', '', ''],
+            correctAnswerIndex: payload.correctAnswerIndex ?? 0,
+            pointsReward: payload.pointsReward || 30,
+            explanation: ''
+          }];
+
+      const firstQ = questionsList[0];
+      const totalPoints = payload.pointsReward || questionsList.reduce((sum, q) => sum + (q.pointsReward || 10), 0);
+
+      newQuiz = {
+        id: 'quiz-' + Math.random().toString(36).slice(2, 9),
+        title: payload.title || 'مسابقة أسبوعية جديدة',
+        question: firstQ.question,
+        options: firstQ.options,
+        correctAnswerIndex: firstQ.correctAnswerIndex,
+        pointsReward: totalPoints,
+        questions: questionsList,
+        status: 'Active',
+        createdAt: new Date().toISOString(),
+      };
+    } else {
+      const question = param1;
+      const options = (param2 as string[]) || ['', '', '', ''];
+      const correctAnswerIndex = param3 ?? 0;
+      const pointsReward = param4 ?? 30;
+      actor = param5;
+
+      newQuiz = {
+        id: 'quiz-' + Math.random().toString(36).slice(2, 9),
+        title: question,
+        question,
+        options,
+        correctAnswerIndex,
+        pointsReward,
+        questions: [{
+          id: 'q-1',
+          question,
+          options,
+          correctAnswerIndex,
+          pointsReward,
+        }],
+        status: 'Active',
+        createdAt: new Date().toISOString(),
+      };
+    }
+
     const list = this.getQuizzes();
     const updated = [newQuiz, ...list];
     this._lsSave('eye_weekly_quizzes', updated);
@@ -6024,17 +6172,21 @@ class SupabaseDatabase {
     if (isSupabaseConfigured && supabase) {
       supabase.from('weekly_quizzes').insert({
         id: newQuiz.id,
+        title: newQuiz.title,
         question: newQuiz.question,
         options: newQuiz.options,
         correct_answer_index: newQuiz.correctAnswerIndex,
         points_reward: newQuiz.pointsReward,
         status: newQuiz.status,
+        questions: newQuiz.questions,
         created_at: newQuiz.createdAt,
-        governorate: actor.governorate || 'الغربية',
+        governorate: actor?.governorate || 'الغربية',
       }).then();
     }
 
-    this.logActivity(actor.id, actor.fullName, actor.role, 'Quiz Created', `Created trivia quiz: "${question}"`);
+    if (actor) {
+      this.logActivity(actor.id, actor.fullName, actor.role, 'Quiz Created', `Created trivia quiz: "${newQuiz.title || newQuiz.question}"`);
+    }
     return newQuiz;
   }
 
@@ -6058,49 +6210,119 @@ class SupabaseDatabase {
     return all.filter(s => s.quizId === quizId);
   }
 
-  submitQuizAnswer(quizId: string, answerIndex: number, user: UserProfile): 'correct' | 'wrong' | 'already' {
+  submitQuizAnswer(
+    quizId: string,
+    answerInput: number | number[] | { answers: number[] },
+    user: UserProfile
+  ): { status: 'correct' | 'wrong' | 'partial' | 'already'; score: number; total: number; pointsEarned: number } {
     const quizzes = this.getQuizzes();
     const quiz = quizzes.find(q => q.id === quizId);
-    if (!quiz) return 'wrong';
+    if (!quiz) return { status: 'wrong', score: 0, total: 0, pointsEarned: 0 };
 
     const submissions = this.getQuizSubmissions(quizId);
     const existing = submissions.find(s => s.quizId === quizId && s.userId === user.id);
-    if (existing) return 'already';
+    if (existing) {
+      return {
+        status: 'already',
+        score: existing.score ?? (existing.isCorrect ? 1 : 0),
+        total: existing.totalQuestions ?? 1,
+        pointsEarned: existing.pointsEarned ?? (existing.isCorrect ? quiz.pointsReward : 0)
+      };
+    }
 
-    const isCorrect = answerIndex === quiz.correctAnswerIndex;
+    const questions: QuizQuestionItem[] = (quiz.questions && quiz.questions.length > 0)
+      ? quiz.questions
+      : [{
+          id: 'q-legacy',
+          question: quiz.question,
+          options: quiz.options,
+          correctAnswerIndex: quiz.correctAnswerIndex,
+          pointsReward: quiz.pointsReward
+        }];
+
+    const totalQuestions = questions.length;
+    let userAnswers: number[] = [];
+
+    if (typeof answerInput === 'number') {
+      userAnswers = [answerInput];
+    } else if (Array.isArray(answerInput)) {
+      userAnswers = answerInput;
+    } else if (answerInput && Array.isArray(answerInput.answers)) {
+      userAnswers = answerInput.answers;
+    }
+
+    let score = 0;
+    let pointsEarned = 0;
+
+    questions.forEach((q, idx) => {
+      const ans = userAnswers[idx];
+      const qPts = q.pointsReward ?? Math.max(1, Math.round(quiz.pointsReward / totalQuestions));
+      if (ans !== undefined && ans === q.correctAnswerIndex) {
+        score++;
+        pointsEarned += qPts;
+      }
+    });
+
+    const isAllCorrect = score === totalQuestions;
+    const isAnyCorrect = score > 0;
+    const status: 'correct' | 'wrong' | 'partial' = isAllCorrect ? 'correct' : (isAnyCorrect ? 'partial' : 'wrong');
+
     const newSub: QuizSubmission = {
       id: 'qsub-' + Math.random().toString(36).slice(2, 9),
       quizId,
       userId: user.id,
       userName: user.fullName,
-      answerIndex,
-      isCorrect,
+      userAvatar: (user as any).avatarUrl || (user as any).avatar || '',
+      answerIndex: userAnswers[0] ?? 0,
+      answers: userAnswers,
+      score,
+      totalQuestions,
+      pointsEarned,
+      isCorrect: isAllCorrect,
       submittedAt: new Date().toISOString(),
     };
 
     const allSubs = this._ls<QuizSubmission>('eye_quiz_submissions');
     this._lsSave('eye_quiz_submissions', [...allSubs, newSub]);
 
-    if (isCorrect) {
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('quiz_submissions').insert({
+        id: newSub.id,
+        quiz_id: newSub.quizId,
+        user_id: newSub.userId,
+        user_name: newSub.userName,
+        user_avatar: newSub.userAvatar,
+        answers: newSub.answers,
+        answer_index: newSub.answerIndex,
+        score: newSub.score,
+        total_questions: newSub.totalQuestions,
+        points_earned: newSub.pointsEarned,
+        is_correct: newSub.isCorrect,
+        submitted_at: newSub.submittedAt,
+        governorate: user.governorate || 'الغربية',
+      }).then();
+    }
+
+    if (pointsEarned > 0) {
       const currentBonus = user.bonusPoints || 0;
-      this.updateUserBonusPoints(user.id, currentBonus + quiz.pointsReward);
+      this.updateUserBonusPoints(user.id, currentBonus + pointsEarned);
       this.addNotification(
         user.id,
-        '🎉 إجابة صحيحة في المسابقة الأسبوعية!',
-        `أحسنت! إجابتك صحيحة وحصلت على ${quiz.pointsReward} نقطة تم إضافتها لإجمالي نقاطك.`,
+        isAllCorrect ? '🎉 إجابة مثالية في المسابقة الأسبوعية!' : '👏 نتيجة المسابقة الأسبوعية!',
+        `أحسنت! نتيجتك: ${score} من ${totalQuestions} أسئلة صحيحة، وحصلت على ${pointsEarned} نقطة إضافية.`,
         'success'
       );
     } else {
       this.addNotification(
         user.id,
-        '❌ إجابة غير صحيحة',
-        `حاول مرة أخرى في المسابقة القادمة!`,
+        '❌ نتيجة المسابقة الأسبوعية',
+        `أجبت على 0 من ${totalQuestions} أسئلة بشكل صحيح. حظاً أوفر في المسابقة القادمة!`,
         'warning'
       );
     }
 
     this.notify();
-    return isCorrect ? 'correct' : 'wrong';
+    return { status, score, total: totalQuestions, pointsEarned };
   }
 
   // ═══════════════════════════════════════════════════
