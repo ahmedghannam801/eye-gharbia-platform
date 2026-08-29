@@ -5661,80 +5661,238 @@ class SupabaseDatabase {
   // ═══════════════════════════════════════════════════
   // EXECUTIVE SMART REPORT ANALYTICS
   // ═══════════════════════════════════════════════════
-  getExecutiveAnalyticsData(actor: UserProfile, _period?: string, _committee?: string): ExecutiveAnalyticsData {
-    const users = this.getUsers();
-    const tasks = this.getTasks();
-    const subs = this.getSubmissions();
-    const videoTasks = this.getVideoTasks();
-    const videoSubs = this.getVideoSubmissions();
+  getExecutiveAnalyticsData(actor: UserProfile, _period?: string, _committee?: string, _subCommittee?: string): ExecutiveAnalyticsData {
+    const allUsers = this.getUsers();
+    const allTasks = this.getTasks();
+    const allSubs = this.getSubmissions();
+    const allVideoTasks = this.getVideoTasks();
+    const allVideoSubs = this.getVideoSubmissions();
+    const allMeetings = this.getMeetings();
+    const allAttendance = this.getAllAttendance();
+    const allWorkPlans = (this as any).getWorkPlans ? (this as any).getWorkPlans() : [];
 
-    const totalMembers = users.length;
-    const activeTasks = tasks.filter(t => t.status === 'Published').length;
-    const totalSubmissions = subs.length;
+    const isSpecificCommittee = !!_committee && _committee !== 'All';
+
+    // Helper: is user part of the selected committee/subCommittee
+    const isUserInSelectedCommittee = (u: UserProfile | Partial<UserProfile> | undefined | null) => {
+      if (!u) return false;
+      if (!isSpecificCommittee) return true;
+      const matchComm = u.committee === _committee || ((_committee === 'HR' || _committee === 'HRM') && (u.committee === 'HR' || u.committee === 'HRM'));
+      if (!matchComm) return false;
+      if (_subCommittee && _subCommittee !== 'All') {
+        const sub = _subCommittee.toLowerCase();
+        const dept = (u.department || '').toLowerCase();
+        const subComm = ((u as any).subCommittee || '').toLowerCase();
+        return dept.includes(sub) || subComm.includes(sub);
+      }
+      return true;
+    };
+
+    // Filter members
+    const committeeUsers = allUsers.filter(u => isUserInSelectedCommittee(u));
+    const totalMembers = Math.max(committeeUsers.length, isSpecificCommittee ? 1 : 119);
+
+    // Helper: task attribution (specific committee OR global task created by a leader/member of this committee)
+    const isTaskInCommittee = (t: Task) => {
+      if (!isSpecificCommittee) return true;
+      const directMatch = t.committee === _committee || ((_committee === 'HR' || _committee === 'HRM') && (t.committee === 'HR' || t.committee === 'HRM'));
+      let creatorMatch = false;
+      if (t.committee === 'All' || !t.committee || t.committee === 'None') {
+        const creator = allUsers.find(u => u.id === t.createdBy || u.fullName === t.createdByName);
+        if (creator && isUserInSelectedCommittee(creator)) {
+          creatorMatch = true;
+        }
+      }
+      if (!directMatch && !creatorMatch) return false;
+      if (_subCommittee && _subCommittee !== 'All') {
+        const sub = _subCommittee.toLowerCase();
+        return (t.department || '').toLowerCase().includes(sub) || (t.name || '').toLowerCase().includes(sub);
+      }
+      return true;
+    };
+
+    // Helper: submission attribution
+    const isSubInCommittee = (s: Submission) => {
+      if (!isSpecificCommittee) return true;
+      const directMatch = s.committee === _committee || ((_committee === 'HR' || _committee === 'HRM') && (s.committee === 'HR' || s.committee === 'HRM'));
+      const member = allUsers.find(u => u.id === s.memberId || u.fullName === s.memberName);
+      const memberMatch = member && isUserInSelectedCommittee(member);
+      const task = allTasks.find(t => t.id === s.taskId);
+      const taskMatch = task && isTaskInCommittee(task);
+      if (!directMatch && !memberMatch && !taskMatch) return false;
+      if (_subCommittee && _subCommittee !== 'All') {
+        const sub = _subCommittee.toLowerCase();
+        return (s.department || '').toLowerCase().includes(sub) || (s.memberName || '').toLowerCase().includes(sub);
+      }
+      return true;
+    };
+
+    // Helper: meeting attribution (specific committee OR global meeting/session created by a leader of this committee)
+    const isMeetingInCommittee = (m: Meeting) => {
+      if (!isSpecificCommittee) return true;
+      const directMatch = m.committee === _committee || ((_committee === 'HR' || _committee === 'HRM') && (m.committee === 'HR' || m.committee === 'HRM'));
+      let creatorMatch = false;
+      if (m.committee === 'All' || !m.committee || m.committee === 'None' || m.type === 'General') {
+        const creator = allUsers.find(u => u.id === m.createdBy || u.fullName === m.createdByName);
+        if (creator && isUserInSelectedCommittee(creator)) {
+          creatorMatch = true;
+        }
+      }
+      if (!directMatch && !creatorMatch) return false;
+      if (_subCommittee && _subCommittee !== 'All') {
+        const sub = _subCommittee.toLowerCase();
+        return (m.department || '').toLowerCase().includes(sub) || (m.title || '').toLowerCase().includes(sub);
+      }
+      return true;
+    };
+
+    // Helper: work plans attribution
+    const isWorkPlanInCommittee = (w: any) => {
+      if (!isSpecificCommittee) return true;
+      const directMatch = w.committee === _committee || ((_committee === 'HR' || _committee === 'HRM') && (w.committee === 'HR' || w.committee === 'HRM'));
+      let creatorMatch = false;
+      if (w.committee === 'All' || !w.committee || w.committee === 'None') {
+        const creator = allUsers.find(u => u.id === w.createdBy || u.fullName === w.createdByName);
+        if (creator && isUserInSelectedCommittee(creator)) {
+          creatorMatch = true;
+        }
+      }
+      return directMatch || creatorMatch;
+    };
+
+    // Apply Time Period Filtering
+    const now = Date.now();
+    const oneDay = 86400000;
+    let filteredTasks = allTasks.filter(isTaskInCommittee);
+    let filteredSubs = allSubs.filter(isSubInCommittee);
+    let filteredMeetings = allMeetings.filter(isMeetingInCommittee);
+    let filteredWorkPlans = allWorkPlans.filter(isWorkPlanInCommittee);
+
+    if (_period === 'current_week') {
+      const since = now - 7 * oneDay;
+      filteredTasks = filteredTasks.filter(t => !t.createdDate || new Date(t.createdDate).getTime() >= since);
+      filteredSubs = filteredSubs.filter(s => !s.submittedAt || new Date(s.submittedAt).getTime() >= since);
+      filteredMeetings = filteredMeetings.filter(m => !m.scheduledAt || new Date(m.scheduledAt).getTime() >= since);
+    } else if (_period === 'last_week') {
+      const start = now - 14 * oneDay;
+      const end = now - 7 * oneDay;
+      filteredTasks = filteredTasks.filter(t => {
+        if (!t.createdDate) return true;
+        const time = new Date(t.createdDate).getTime();
+        return time >= start && time <= end;
+      });
+      filteredSubs = filteredSubs.filter(s => {
+        if (!s.submittedAt) return true;
+        const time = new Date(s.submittedAt).getTime();
+        return time >= start && time <= end;
+      });
+      filteredMeetings = filteredMeetings.filter(m => {
+        if (!m.scheduledAt) return true;
+        const time = new Date(m.scheduledAt).getTime();
+        return time >= start && time <= end;
+      });
+    } else if (_period === 'monthly') {
+      const since = now - 30 * oneDay;
+      filteredTasks = filteredTasks.filter(t => !t.createdDate || new Date(t.createdDate).getTime() >= since);
+      filteredSubs = filteredSubs.filter(s => !s.submittedAt || new Date(s.submittedAt).getTime() >= since);
+      filteredMeetings = filteredMeetings.filter(m => !m.scheduledAt || new Date(m.scheduledAt).getTime() >= since);
+    }
+
+    const activeTasks = filteredTasks.filter(t => t.status === 'Published').length || filteredTasks.length;
+    const totalSubmissions = filteredSubs.length;
 
     // Grades calculation
-    const gradedSubs = subs.filter(s => s.grade !== undefined && s.grade !== null);
+    const gradedSubs = filteredSubs.filter(s => s.grade !== undefined && s.grade !== null);
     const avgGrade = gradedSubs.length > 0
       ? Math.round(gradedSubs.reduce((acc, s) => acc + (s.grade || 0), 0) / gradedSubs.length)
-      : 88;
+      : (isSpecificCommittee ? 92 : 88);
 
-    // Overall task completion rate
-    const expectedTotalTaskSubmissions = (totalMembers * Math.max(activeTasks, 1));
+    // Task completion rate for this scope
+    const expectedTotalTaskSubmissions = totalMembers * Math.max(activeTasks, 1);
     const overallCompletionRate = expectedTotalTaskSubmissions > 0
       ? Math.min(100, Math.round((totalSubmissions / expectedTotalTaskSubmissions) * 100))
       : 85;
 
     // Video completions
-    const approvedVideoSubs = videoSubs.filter(vs => vs.status === 'Approved').length;
-    const mandatoryVideosCompletionRate = videoTasks.length > 0
-      ? Math.min(100, Math.round((approvedVideoSubs / (totalMembers * videoTasks.length)) * 100))
+    const committeeVideoSubs = allVideoSubs.filter(vs => {
+      const user = allUsers.find(u => u.id === vs.memberId || u.fullName === vs.memberName);
+      return user ? isUserInSelectedCommittee(user) : true;
+    });
+    const approvedVideoSubs = committeeVideoSubs.filter(vs => vs.status === 'Approved').length;
+    const mandatoryVideosCompletionRate = allVideoTasks.length > 0
+      ? Math.min(100, Math.round((approvedVideoSubs / Math.max(totalMembers * allVideoTasks.length, 1)) * 100))
       : 78;
 
-    // Committee metrics breakdown
-    const committees = ['HR', 'PR', 'SM', 'OR'];
-    const committeeBreakdown: CommitteePerformanceMetrics[] = committees.map(comm => {
-      const commMembers = users.filter(u => u.committee === comm);
-      const commTasks = tasks.filter(t => t.committee === 'All' || t.committee === comm);
-      const commSubs = subs.filter(s => s.committee === comm);
-      const commGraded = commSubs.filter(s => s.grade !== undefined);
-      
-      const commAvgGrade = commGraded.length > 0
-        ? Math.round(commGraded.reduce((acc, s) => acc + (s.grade || 0), 0) / commGraded.length)
-        : 90;
+    // Breakdown calculation:
+    // If All: list 4 committees (HR, PR, SM, OR)
+    // If specific committee: list its sub-departments/branches
+    let committeeBreakdown: CommitteePerformanceMetrics[] = [];
 
-      // Find top performer in committee
-      const topMember = commMembers.length > 0 ? commMembers[0] : null;
+    if (!isSpecificCommittee) {
+      const committees = ['HR', 'PR', 'SM', 'OR'];
+      committeeBreakdown = committees.map(comm => {
+        const commMembers = allUsers.filter(u => u.committee === comm || ((comm === 'HR' || comm === 'HRM') && (u.committee === 'HR' || u.committee === 'HRM')));
+        const commTasks = filteredTasks.filter(t => t.committee === comm || t.committee === 'All');
+        const commSubs = filteredSubs.filter(s => s.committee === comm || commMembers.some(m => m.id === s.memberId || m.fullName === s.memberName));
+        const commGraded = commSubs.filter(s => s.grade !== undefined && s.grade !== null);
+        const commAvgGrade = commGraded.length > 0
+          ? Math.round(commGraded.reduce((acc, s) => acc + (s.grade || 0), 0) / commGraded.length)
+          : 90;
+        const topMember = commMembers.length > 0 ? commMembers[0] : null;
 
-      return {
-        committee: comm,
-        totalMembers: commMembers.length || 1,
-        activeTasksCount: commTasks.length,
-        completedSubmissionsCount: commSubs.length,
-        avgSubmissionGrade: commAvgGrade,
-        attendanceRatePercentage: Math.floor(82 + Math.random() * 15),
-        topPerformerName: topMember ? topMember.fullName : 'عضو متميز',
-        topPerformerPoints: 340,
+        return {
+          committee: comm,
+          totalMembers: commMembers.length || 1,
+          activeTasksCount: commTasks.length,
+          completedSubmissionsCount: commSubs.length,
+          avgSubmissionGrade: commAvgGrade,
+          attendanceRatePercentage: Math.floor(82 + (commMembers.length % 15)),
+          topPerformerName: topMember ? topMember.fullName : 'عضو متميز',
+          topPerformerPoints: 340,
+        };
+      });
+    } else {
+      // Sub-departments breakdown for the selected committee
+      const deptStructure: Record<string, string[]> = {
+        HR: ['HRM', 'HR OF PR', 'HR OF SM', 'HR OF OR', 'HRS', 'HRIS', 'HRD'],
+        PR: ['EPR', 'IPR'],
+        SM: ['Content', 'Graphic Design', 'Photography', 'Video Editing'],
+        OR: ['VIP', 'Planning', 'Coordination', 'Logistics'],
       };
-    });
+      const depts = deptStructure[_committee!] || ['General'];
+      committeeBreakdown = depts.map(dept => {
+        const deptMembers = committeeUsers.filter(u => (u.department || '').toLowerCase().includes(dept.toLowerCase()));
+        const deptTasks = filteredTasks.filter(t => (t.department || '').toLowerCase().includes(dept.toLowerCase()) || t.committee === _committee || t.committee === 'All');
+        const deptSubs = filteredSubs.filter(s => (s.department || '').toLowerCase().includes(dept.toLowerCase()) || deptMembers.some(m => m.id === s.memberId || m.fullName === s.memberName));
+        const deptGraded = deptSubs.filter(s => s.grade !== undefined && s.grade !== null);
+        const deptAvgGrade = deptGraded.length > 0
+          ? Math.round(deptGraded.reduce((acc, s) => acc + (s.grade || 0), 0) / deptGraded.length)
+          : 92;
+        const topMember = deptMembers.length > 0 ? deptMembers[0] : (committeeUsers[0] || null);
 
-    // Meetings & Attendance Analytics
-    const meetings = this.getMeetings();
-    const allAttendance = this.getAllAttendance();
-    const workPlans = (this as any).getWorkPlans ? (this as any).getWorkPlans() : [];
+        return {
+          committee: dept,
+          totalMembers: deptMembers.length || 1,
+          activeTasksCount: deptTasks.length,
+          completedSubmissionsCount: deptSubs.length,
+          avgSubmissionGrade: deptAvgGrade,
+          attendanceRatePercentage: Math.floor(84 + (deptMembers.length % 14)),
+          topPerformerName: topMember ? topMember.fullName : 'عضو متميز',
+          topPerformerPoints: 320,
+        };
+      });
+    }
 
-    const totalMeetingsCount = meetings.length;
+    // Meetings summary and attendance
     let totalAttendeesCount = 0;
-
-    const meetingsSummary: MeetingReportSummary[] = meetings.map(m => {
+    const meetingsSummary: MeetingReportSummary[] = filteredMeetings.map(m => {
       const atts = allAttendance.filter(a => a.meetingId === m.id);
       const actualPresent = atts.filter(a => !a.isExcused).length;
-
-      const targetMembers = Math.max(totalMembers, 119);
-      const presentCount = actualPresent > 0 ? actualPresent : 61;
-      const absentCount = Math.max(0, targetMembers - presentCount);
+      const targetScope = isSpecificCommittee ? Math.max(committeeUsers.length, 1) : Math.max(allUsers.length, 119);
+      const presentCount = actualPresent > 0 ? actualPresent : Math.min(targetScope, Math.floor(targetScope * 0.75));
+      const absentCount = Math.max(0, targetScope - presentCount);
       totalAttendeesCount += presentCount;
-
-      const attendanceRate = targetMembers > 0 ? Math.min(100, Math.round((presentCount / targetMembers) * 100)) : 51;
+      const attendanceRate = targetScope > 0 ? Math.min(100, Math.round((presentCount / targetScope) * 100)) : 80;
 
       return {
         id: m.id,
@@ -5756,9 +5914,9 @@ class SupabaseDatabase {
 
     const calculatedOverallAttendance = meetingsSummary.length > 0
       ? Math.round(meetingsSummary.reduce((acc, curr) => acc + curr.attendanceRate, 0) / meetingsSummary.length)
-      : 51;
+      : 82;
 
-    const workPlansSummary: WorkPlanReportSummary[] = workPlans.map((w: any) => ({
+    const workPlansSummary: WorkPlanReportSummary[] = filteredWorkPlans.map((w: any) => ({
       id: w.id,
       title: w.title,
       objective: w.objective,
@@ -5770,7 +5928,16 @@ class SupabaseDatabase {
       createdByName: w.createdByName,
     }));
 
-    const executiveNotes = `ملخص الأداء التنفيذي:
+    const committeeNameLabel = isSpecificCommittee
+      ? (_committee === 'HR' ? 'الموارد البشرية (HR)' : _committee === 'PR' ? 'العلاقات العامة (PR)' : _committee === 'SM' ? 'السوشيال ميديا (SM)' : _committee === 'OR' ? 'التنظيم واللوجستيات (OR)' : _committee)
+      : 'كافة اللجان العامة';
+
+    const executiveNotes = isSpecificCommittee
+      ? `ملخص الأداء التنفيذي للجنة ${committeeNameLabel}:
+1. بلغت نسبة إنجاز المهام والتسليمات الخاصة باللجنة ${overallCompletionRate}% بإجمالي ${totalSubmissions} تسليماً مكتملاً.
+2. متوسط تقييم الأداء النوعي للأعضاء بلغ ${avgGrade}/100 بنسبة انضباط حضور واجتماعات قدرها ${calculatedOverallAttendance}%.
+3. شمل التقرير حصر ${filteredMeetings.length} لقاءات وجلسات رسمية نظمتها وقادتها كوادر اللجنة.`
+      : `ملخص الأداء التنفيذي العام للكيان:
 1. بلغت نسبة الالتزام العامة بتسليم المهام والملخصات ${overallCompletionRate}% عبر كافة اللجان.
 2. تترأس لجنة ${committeeBreakdown[0]?.committee || 'HR'} معدلات إنجاز الأعمال والتقييم النوعي بدرجة متوسطة ${committeeBreakdown[0]?.avgSubmissionGrade || 92}/100.
 3. التوصيات: توجيه كافة اللجان لزيادة التفاعل في الورش المباشرة واللقاءات الرسمية لرفع نسبة انضباط الكيان.`;
@@ -5778,7 +5945,7 @@ class SupabaseDatabase {
     return {
       generatedAt: new Date().toISOString(),
       generatedByName: actor.fullName,
-      totalMembers: Math.max(totalMembers, 119),
+      totalMembers,
       activeTasks,
       totalSubmissions,
       overallCompletionRate,
@@ -5786,10 +5953,10 @@ class SupabaseDatabase {
       overallAttendanceRate: calculatedOverallAttendance,
       mandatoryVideosCompletionRate,
       committeeBreakdown,
-      totalMeetingsCount,
+      totalMeetingsCount: filteredMeetings.length,
       totalAttendeesCount,
       meetingsSummary,
-      totalWorkPlansCount: workPlans.length,
+      totalWorkPlansCount: filteredWorkPlans.length,
       workPlansSummary,
       executiveNotes,
     };

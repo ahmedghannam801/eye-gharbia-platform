@@ -54,7 +54,7 @@ interface ExecutiveReportBuilderProps {
 }
 
 export const ExecutiveReportBuilder: React.FC<ExecutiveReportBuilderProps> = ({ currentUser }) => {
-  const { isRtl, language, translateCommittee } = useLanguage();
+  const { isRtl, language, translateCommittee, translateDepartment } = useLanguage();
   const isAr = language === 'ar';
 
   const [analytics, setAnalytics] = useState<ExecutiveAnalyticsData | null>(null);
@@ -163,7 +163,7 @@ export const ExecutiveReportBuilder: React.FC<ExecutiveReportBuilderProps> = ({ 
   };
 
   const loadReport = () => {
-    const data = db.getExecutiveAnalyticsData(currentUser, reportPeriod, selectedCommittee);
+    const data = db.getExecutiveAnalyticsData(currentUser, reportPeriod, selectedCommittee, selectedSubCommittee);
     setAnalytics(data);
   };
 
@@ -543,9 +543,7 @@ export const ExecutiveReportBuilder: React.FC<ExecutiveReportBuilderProps> = ({ 
   if (!analytics) return null;
 
   // Filter breakdown if specific committee selected
-  const filteredBreakdown = selectedCommittee === 'All' 
-    ? analytics.committeeBreakdown 
-    : analytics.committeeBreakdown.filter(c => c.committee === selectedCommittee);
+  const filteredBreakdown = analytics.committeeBreakdown;
 
   const reportPresetButtons = [
     { id: 'comprehensive', label: isAr ? 'التقرير الشامل العام' : 'Comprehensive Report' },
@@ -586,9 +584,9 @@ export const ExecutiveReportBuilder: React.FC<ExecutiveReportBuilderProps> = ({ 
           <button
             onClick={() => {
               let fullBodyText = `نطاق وموضوع التقرير: ${customTopic}\n`;
-              fullBodyText += `الفترة الزمنية: ${reportPeriod === 'current_week' ? 'الأسبوع الحالي' : reportPeriod === 'last_week' ? 'الأسبوع الماضي' : reportPeriod === 'monthly' ? 'التقييم الشهري الشامل' : 'التقرير الشامل التراكمي'}  |  نطاق اللجنة: ${selectedCommittee === 'All' ? 'جميع اللجان' : `لجنة ${selectedCommittee}`}\n\n`;
+              fullBodyText += `الفترة الزمنية: ${reportPeriod === 'current_week' ? 'الأسبوع الحالي' : reportPeriod === 'last_week' ? 'الأسبوع الماضي' : reportPeriod === 'monthly' ? 'التقييم الشهري الشامل' : 'التقرير الشامل التراكمي'}  |  نطاق اللجنة: ${selectedCommittee === 'All' ? 'جميع اللجان' : translateCommittee(selectedCommittee)}\n\n`;
 
-              fullBodyText += `المؤشرات الكلية والأرقام القياسية للكيان:\n`;
+              fullBodyText += `المؤشرات الكلية والأرقام القياسية:\n`;
               const kpis = {
                 members: analytics.totalMembers,
                 tasks: analytics.activeTasks,
@@ -599,11 +597,20 @@ export const ExecutiveReportBuilder: React.FC<ExecutiveReportBuilderProps> = ({ 
               };
               fullBodyText += `[KPI_CARDS_JSON]${JSON.stringify(kpis)}\n\n`;
 
-              fullBodyText += `حصر وتقييم أداء اللجان الرسمية:\n`;
-              const committeeHeaders = ['اللجنة', 'عدد الأعضاء', 'المهام النشطة', 'التسليمات المكتملة', 'متوسط الدرجات', 'نسبة الحضور', 'المتفوق الأبرز'];
+              const isSpecific = selectedCommittee !== 'All';
+              fullBodyText += `حصر وتقييم أداء ${isSpecific ? `فروع وأقسام ${translateCommittee(selectedCommittee)}` : 'اللجان الرسمية'}:\n`;
+              const committeeHeaders = [
+                isSpecific ? (isAr ? 'الفرع / القسم' : 'Branch / Dept') : (isAr ? 'اللجنة' : 'Committee'),
+                isAr ? 'عدد الأعضاء' : 'Members',
+                isAr ? 'المهام النشطة' : 'Active Tasks',
+                isAr ? 'التسليمات المكتملة' : 'Submissions',
+                isAr ? 'متوسط الدرجات' : 'Avg Grade',
+                isAr ? 'نسبة الحضور' : 'Attendance %',
+                isAr ? 'المتفوق الأبرز' : 'Top Performer'
+              ];
               const committeeRows = filteredBreakdown.map((c) => [
-                `لجنة ${c.committee}`,
-                `${c.totalMembers} عضو`,
+                isSpecific ? (isAr ? translateDepartment(c.committee) : c.committee) : (isAr ? `لجنة ${translateCommittee(c.committee)}` : `${c.committee} Committee`),
+                `${c.totalMembers} ${isAr ? 'عضو' : 'members'}`,
                 `${c.activeTasksCount}`,
                 `${c.completedSubmissionsCount}`,
                 `${c.avgSubmissionGrade}%`,
@@ -1065,14 +1072,18 @@ export const ExecutiveReportBuilder: React.FC<ExecutiveReportBuilderProps> = ({ 
         <div className="space-y-3">
           <h3 className="text-sm font-black text-slate-900 dark:text-white print:text-black flex items-center gap-2">
             <FileText className="w-4 h-4 text-indigo-600" />
-            <span>{isAr ? 'تفاصيل ومؤشرات أداء اللجان المختصة (Committee Breakdown)' : 'Committee Breakdown & Analytics'}</span>
+            <span>
+              {selectedCommittee === 'All'
+                ? (isAr ? 'تفاصيل ومؤشرات أداء اللجان المختصة (Committee Breakdown)' : 'Committee Breakdown & Analytics')
+                : (isAr ? `تفاصيل ومؤشرات أداء فروع وأقسام ${translateCommittee(selectedCommittee)}` : `${selectedCommittee} Department Breakdown`)}
+            </span>
           </h3>
 
           <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-2xl print:border-gray-300">
             <table className="w-full min-w-[650px] text-start text-xs font-semibold">
               <thead>
                 <tr className="bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 uppercase text-[10px] tracking-wider print:bg-gray-100 print:text-black">
-                  <th className="py-3 px-4 text-start">{isAr ? 'اللجنة' : 'Committee'}</th>
+                  <th className="py-3 px-4 text-start">{selectedCommittee === 'All' ? (isAr ? 'اللجنة' : 'Committee') : (isAr ? 'الفرع / القسم' : 'Branch / Department')}</th>
                   <th className="py-3 px-4 text-start">{isAr ? 'عدد الأعضاء' : 'Members'}</th>
                   <th className="py-3 px-4 text-start">{isAr ? 'المهام والتسليمات' : 'Tasks & Submissions'}</th>
                   <th className="py-3 px-4 text-start">{isAr ? 'متوسط الدرجات' : 'Avg Grade'}</th>
@@ -1083,7 +1094,11 @@ export const ExecutiveReportBuilder: React.FC<ExecutiveReportBuilderProps> = ({ 
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-800 dark:text-slate-200 print:divide-gray-300 print:text-black">
                 {filteredBreakdown.map(c => (
                   <tr key={c.committee} className="hover:bg-slate-50 dark:hover:bg-slate-850">
-                    <td className="py-3.5 px-4 font-black text-indigo-600 dark:text-indigo-400 print:text-black">{c.committee} Committee</td>
+                    <td className="py-3.5 px-4 font-black text-indigo-600 dark:text-indigo-400 print:text-black">
+                      {selectedCommittee === 'All'
+                        ? (isAr ? `لجنة ${translateCommittee(c.committee)}` : `${c.committee} Committee`)
+                        : (isAr ? translateDepartment(c.committee) : c.committee)}
+                    </td>
                     <td className="py-3.5 px-4 font-bold">{c.totalMembers} {isAr ? 'عضو' : 'members'}</td>
                     <td className="py-3.5 px-4">{c.completedSubmissionsCount} / {c.activeTasksCount} {isAr ? 'تسليم' : 'subs'}</td>
                     <td className="py-3.5 px-4 font-bold text-amber-600 dark:text-amber-400 print:text-black">{c.avgSubmissionGrade}/100</td>
