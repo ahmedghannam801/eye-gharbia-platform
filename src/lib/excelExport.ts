@@ -45,32 +45,24 @@ export const classifyAttendeeSubGroup = (
   };
   committeeLabelAr = commMap[rawComm] || rawComm;
 
-  // HR Division logic
-  if (rawComm.toUpperCase() === 'HR' || combined.includes('HRM') || combined.includes('HR OF')) {
+  // HR Division logic: 4 main sub-committees (HRM, HRD, HRS, HRIS)
+  if (rawComm.toUpperCase() === 'HR' || combined.includes('HRM') || combined.includes('HR OF') || combined.includes('HRD') || combined.includes('HRS') || combined.includes('HRIS')) {
     committee = 'HR';
     committeeLabelAr = 'الموارد البشرية (HR)';
 
-    if (combined.includes('HR OF PR') || combined.includes('OF PR')) {
-      subGroup = 'HRM - HR OF PR';
-      subGroupLabelAr = 'إدارة HRM - فرع العلاقات العامة (HR OF PR)';
-    } else if (combined.includes('HR OF SM') || combined.includes('OF SM')) {
-      subGroup = 'HRM - HR OF SM';
-      subGroupLabelAr = 'إدارة HRM - فرع السوشيال ميديا (HR OF SM)';
-    } else if (combined.includes('HR OF OR') || combined.includes('OF OR')) {
-      subGroup = 'HRM - HR OF OR';
-      subGroupLabelAr = 'إدارة HRM - فرع التنظيم (HR OF OR)';
-    } else if (combined.includes('HRD') || rawDept === 'HRD') {
+    if (combined.includes('HRD') || rawDept === 'HRD') {
       subGroup = 'HRD';
-      subGroupLabelAr = 'قسم التطوير والتدريب (HRD)';
+      subGroupLabelAr = 'HRD — التطوير والتدريب';
     } else if (combined.includes('HRS') || rawDept === 'HRS') {
       subGroup = 'HRS';
-      subGroupLabelAr = 'قسم الدعم والمساندة (HRS)';
+      subGroupLabelAr = 'HRS — الدعم والمساندة';
     } else if (combined.includes('HRIS') || rawDept === 'HRIS') {
       subGroup = 'HRIS';
-      subGroupLabelAr = 'قسم نظم المعلومات (HRIS)';
+      subGroupLabelAr = 'HRIS — نظم المعلومات';
     } else {
+      // All other HR members belong to HRM
       subGroup = 'HRM';
-      subGroupLabelAr = 'إدارة الموارد البشرية العامة (HRM)';
+      subGroupLabelAr = 'HRM — إدارة الموارد البشرية';
     }
   } else if (rawComm.toUpperCase() === 'PR') {
     committee = 'PR';

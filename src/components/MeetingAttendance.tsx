@@ -249,14 +249,27 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
               };
             });
 
-            // Extract unique sub-groups for filter tabs
-            const subGroupsSet = new Map<string, { label: string; count: number; committeeLabel: string }>();
+            // Extract unique sub-groups for filter tabs with clean ordering
+            const subGroupsSet = new Map<string, { code: string; label: string; count: number; committeeLabel: string }>();
             enrichedAttendees.forEach(item => {
               const key = `${item.committee}:::${item.subGroup}`;
               if (!subGroupsSet.has(key)) {
-                subGroupsSet.set(key, { label: item.subGroupLabelAr, count: 0, committeeLabel: item.committeeLabelAr });
+                subGroupsSet.set(key, {
+                  code: item.subGroup,
+                  label: item.subGroupLabelAr,
+                  count: 0,
+                  committeeLabel: item.committeeLabelAr
+                });
               }
               subGroupsSet.get(key)!.count++;
+            });
+
+            // Sort sub-groups so HRM, HRD, HRS, HRIS are in clean priority order
+            const subPriority: Record<string, number> = { HRM: 1, HRD: 2, HRS: 3, HRIS: 4, EPR: 10, IPR: 11, Content: 20, 'Graphic Design': 21, Photography: 22, 'Video Editing': 23, VIP: 30, Planning: 31, Coordination: 32, Logistics: 33 };
+            const sortedSubGroups = Array.from(subGroupsSet.entries()).sort(([aKey, aVal], [bKey, bVal]) => {
+              const pA = subPriority[aVal.code] || 99;
+              const pB = subPriority[bVal.code] || 99;
+              return pA - pB;
             });
 
             // Filter attendees by sub-group & search
@@ -270,7 +283,7 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
               return matchFilter && matchSearch;
             });
 
-            // Group filtered attendees
+            // Group filtered attendees in clean order
             const groupedSections: Record<string, typeof enrichedAttendees> = {};
             filteredAttendees.forEach(item => {
               const key = `${item.committee}:::${item.subGroup}`;
@@ -664,31 +677,31 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
                           </div>
 
                           {/* Filter Tabs / Pills */}
-                          {subGroupsSet.size > 1 && (
-                            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-1 no-scrollbar">
+                          {sortedSubGroups.length > 1 && (
+                            <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-1 no-scrollbar flex-wrap">
                               <button
                                 onClick={() => setSubGroupFilterMap(prev => ({ ...prev, [mtg.id]: 'all' }))}
-                                className={`px-3 py-1 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer ${
+                                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer ${
                                   currentFilter === 'all'
                                     ? 'bg-indigo-600 text-white shadow-sm'
-                                    : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50'
+                                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50'
                                 }`}
                               >
                                 {isAr ? `الكل (${enrichedAttendees.length})` : `All (${enrichedAttendees.length})`}
                               </button>
 
-                              {Array.from(subGroupsSet.entries()).map(([key, data]) => (
+                              {sortedSubGroups.map(([key, data]) => (
                                 <button
                                   key={key}
                                   onClick={() => setSubGroupFilterMap(prev => ({ ...prev, [mtg.id]: key }))}
-                                  className={`px-3 py-1 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer flex items-center gap-1.5 ${
+                                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer flex items-center gap-1.5 ${
                                     currentFilter === key
                                       ? 'bg-indigo-600 text-white shadow-sm'
-                                      : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50'
+                                      : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50'
                                   }`}
                                 >
                                   <span>{data.label}</span>
-                                  <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
                                     currentFilter === key ? 'bg-indigo-700 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
                                   }`}>
                                     {data.count}
