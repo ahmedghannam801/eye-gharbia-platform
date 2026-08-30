@@ -76,26 +76,26 @@ const getEmbeddableVideoInfo = (url?: string): EmbeddableVideoInfo | null => {
   // Normalize protocol
   const fullUrl = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
 
-  // 1. YouTube (standard watch, short youtu.be, shorts, live, embed)
+  // 1. YouTube (standard watch, short youtu.be, shorts, live, embed, mobile)
   const ytMatch = fullUrl.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=|shorts\/|live\/)|youtu\.be\/)([^"&?\/ ]{11})/i);
   if (ytMatch && ytMatch[1]) {
     const videoId = ytMatch[1];
     return {
       type: 'youtube',
-      embedUrl: `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=0&rel=0&enablejsapi=1`,
+      embedUrl: `https://www.youtube.com/embed/${videoId}?autoplay=0&rel=0`,
       directUrl: fullUrl,
       platformName: fullUrl.includes('/shorts/') ? 'YouTube Shorts' : 'YouTube',
     };
   }
 
-  // 2. Google Drive
-  const gdriveMatch = fullUrl.match(/drive\.google\.com\/(?:file\/d\/([a-zA-Z0-9_-]+)|open\?id=([a-zA-Z0-9_-]+))/i);
+  // 2. Google Drive (file/d, open?id, uc?id, docs.google)
+  const gdriveMatch = fullUrl.match(/(?:drive|docs)\.google\.com\/(?:file\/d\/([a-zA-Z0-9_-]+)|open\?id=([a-zA-Z0-9_-]+)|uc\?id=([a-zA-Z0-9_-]+))/i);
   if (gdriveMatch) {
-    const fileId = gdriveMatch[1] || gdriveMatch[2];
+    const fileId = gdriveMatch[1] || gdriveMatch[2] || gdriveMatch[3];
     return {
       type: 'gdrive',
       embedUrl: `https://drive.google.com/file/d/${fileId}/preview`,
-      directUrl: fullUrl,
+      directUrl: `https://drive.google.com/file/d/${fileId}/view`,
       platformName: 'Google Drive',
     };
   }
@@ -124,8 +124,8 @@ const getEmbeddableVideoInfo = (url?: string): EmbeddableVideoInfo | null => {
     };
   }
 
-  // 5. Direct Video Files (.mp4, .webm, .ogg, .mov, etc. or storage video URLs)
-  if (/\.(mp4|webm|ogg|mov|m4v)(\?.*)?$/i.test(fullUrl) || fullUrl.includes('/storage/v1/object/public/')) {
+  // 5. Direct Video Files (.mp4, .webm, .ogg, .mov, .m4v, .mkv, storage video URLs)
+  if (/\.(mp4|webm|ogg|mov|m4v|mkv)(\?.*)?$/i.test(fullUrl) || fullUrl.includes('/storage/v1/object/public/') || fullUrl.startsWith('blob:')) {
     return {
       type: 'direct',
       embedUrl: fullUrl,
@@ -134,12 +134,20 @@ const getEmbeddableVideoInfo = (url?: string): EmbeddableVideoInfo | null => {
     };
   }
 
-  // 6. Generic web video / URL
+  // 6. Social Platforms & Cloud drives (Facebook, TikTok, OneDrive, Dropbox, etc.)
+  let platform = 'Video Link';
+  if (/facebook\.com|fb\.watch/i.test(fullUrl)) platform = 'Facebook Video';
+  else if (/tiktok\.com/i.test(fullUrl)) platform = 'TikTok Video';
+  else if (/instagram\.com/i.test(fullUrl)) platform = 'Instagram Reel';
+  else if (/dropbox\.com/i.test(fullUrl)) platform = 'Dropbox Video';
+  else if (/onedrive|1drv\.ms/i.test(fullUrl)) platform = 'OneDrive Video';
+  else if (/t\.me|telegram/i.test(fullUrl)) platform = 'Telegram Video';
+
   return {
     type: 'other',
     embedUrl: fullUrl,
     directUrl: fullUrl,
-    platformName: 'Video Link',
+    platformName: platform,
   };
 };
 
@@ -154,12 +162,155 @@ const extractVideoUrlFromTask = (task?: Task | null): string | undefined => {
   if (matches) {
     for (const match of matches) {
       const info = getEmbeddableVideoInfo(match);
-      if (info && info.type !== 'other') {
+      if (info) {
         return match;
       }
     }
   }
   return undefined;
+};
+
+// Safe, Resilience-First Task Video Player Component
+const TaskVideoPlayer: React.FC<{ task: Task; language: string }> = ({ task, language }) => {
+  const effectiveVideoUrl = extractVideoUrlFromTask(task);
+  const videoInfo = getEmbeddableVideoInfo(effectiveVideoUrl);
+  const [copied, setCopied] = useState(false);
+  const [useFallbackCard, setUseFallbackCard] = useState(false);
+  const isAr = language === 'ar';
+
+  if (!effectiveVideoUrl || !videoInfo) return null;
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(videoInfo.directUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  };
+
+  return (
+    <div className="space-y-3 border-t border-slate-150 dark:border-slate-800 pt-4 mt-4 animate-fadeIn">
+      {/* Header with Title & Platform Badge */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-xs font-black text-red-600 dark:text-red-400">
+          <div className="w-6 h-6 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-500">
+            <Video className="w-3.5 h-3.5" />
+          </div>
+          <span>
+            {task.isVideoTask
+              ? (isAr ? 'فيديو الشرح والتوجيه الإلزامي للمهمة' : 'Mandatory Task Explanation Video')
+              : (isAr ? 'فيديو توضيحي وشرح للمهمة' : 'Task Explanation Video')}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 font-mono">
+            {videoInfo.platformName}
+          </span>
+          {task.isVideoTask && (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300 border border-red-300 dark:border-red-800">
+              {isAr ? 'إلزامي 🔴' : 'Mandatory 🔴'}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Video Viewport Container */}
+      <div className="aspect-video w-full rounded-2xl overflow-hidden shadow-xl border border-slate-200 dark:border-slate-800 bg-slate-950 relative group flex items-center justify-center">
+        {useFallbackCard || videoInfo.type === 'other' ? (
+          <div className="p-6 text-center flex flex-col items-center justify-center gap-3 w-full h-full bg-gradient-to-br from-slate-900 via-slate-950 to-blue-950 text-white">
+            <div className="w-14 h-14 rounded-2xl bg-red-500/20 border border-red-500/30 flex items-center justify-center text-red-400">
+              <Video className="w-7 h-7" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-black text-white">
+                {isAr ? 'مشاهدة فيديو الشرح مباشرة' : 'Watch Task Video'}
+              </p>
+              <p className="text-xs text-slate-400">
+                {videoInfo.platformName} • {isAr ? 'انقر على الزر للمشاهدة بأعلى جودة' : 'Click below to watch directly'}
+              </p>
+            </div>
+            <a
+              href={videoInfo.directUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-1 px-6 py-2.5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white rounded-xl text-xs font-black shadow-lg shadow-red-600/30 flex items-center gap-2 transition-all cursor-pointer"
+            >
+              <ExternalLink className="w-4 h-4" />
+              <span>{isAr ? 'تشغيل الفيديو في نافذة مستقلة 🚀' : 'Open Video in New Tab 🚀'}</span>
+            </a>
+          </div>
+        ) : videoInfo.type === 'direct' ? (
+          <video
+            src={videoInfo.directUrl}
+            controls
+            playsInline
+            preload="metadata"
+            className="w-full h-full object-contain"
+          />
+        ) : (
+          <iframe
+            src={videoInfo.embedUrl}
+            title={task.name}
+            className="w-full h-full border-0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            referrerPolicy="origin"
+            allowFullScreen
+          />
+        )}
+      </div>
+
+      {/* Action Bar & Quick Open Buttons */}
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
+        <div className="flex flex-wrap items-center gap-2">
+          <a
+            href={videoInfo.directUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/50 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 font-bold transition-all text-[11px]"
+          >
+            <ExternalLink className="w-3.5 h-3.5 text-blue-500" />
+            <span>{isAr ? 'فتح الفيديو في نافذة مستقلة ↗️' : 'Open in New Window ↗️'}</span>
+          </a>
+
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold transition-all text-[11px] cursor-pointer"
+          >
+            {copied ? (
+              <>
+                <Check className="w-3.5 h-3.5 text-emerald-500" />
+                <span className="text-emerald-600 dark:text-emerald-400">{isAr ? 'تم نسخ الرابط!' : 'Copied!'}</span>
+              </>
+            ) : (
+              <>
+                <Copy className="w-3.5 h-3.5 text-slate-400" />
+                <span>{isAr ? 'نسخ الرابط' : 'Copy Link'}</span>
+              </>
+            )}
+          </button>
+
+          {videoInfo.type !== 'other' && (
+            <button
+              type="button"
+              onClick={() => setUseFallbackCard(!useFallbackCard)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 font-semibold transition-all text-[10px] cursor-pointer"
+              title={isAr ? 'تبديل وضع العرض' : 'Toggle view mode'}
+            >
+              <RefreshCw className="w-3 h-3" />
+              <span>{useFallbackCard ? (isAr ? 'عرض المشغل المدمج' : 'Embedded Player') : (isAr ? 'إذا ظهرت شاشة بيضاء اضغط هنا' : 'If blank, click here')}</span>
+            </button>
+          )}
+        </div>
+
+        {videoInfo.type === 'gdrive' && (
+          <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1">
+            <span>💡</span>
+            <span>{isAr ? 'تأكد من فتح صلاحية المشاهدة للجميع على جوجل درايف' : 'Ensure Google Drive is public'}</span>
+          </span>
+        )}
+      </div>
+    </div>
+  );
 };
 
 const getCountdown = (deadline?: string) => {
@@ -1182,103 +1333,8 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
               </div>
             )}
 
-            {/* Universal Video Player */}
-            {(() => {
-              const effectiveVideoUrl = extractVideoUrlFromTask(selectedTask);
-              const videoInfo = getEmbeddableVideoInfo(effectiveVideoUrl);
-              if (!effectiveVideoUrl || !videoInfo) return null;
-
-              return (
-                <div className="space-y-3 border-t border-slate-100 dark:border-slate-800 pt-4 mt-4 animate-fadeIn">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2 text-xs font-black text-red-600 dark:text-red-400">
-                      <div className="w-6 h-6 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-500">
-                        <Video className="w-3.5 h-3.5" />
-                      </div>
-                      <span>
-                        {selectedTask.isVideoTask
-                          ? (language === 'ar' ? 'فيديو الشرح الإلزامي للتكليف' : 'Mandatory Explanation Video')
-                          : (language === 'ar' ? 'فيديو توضيحي وشرح للمهمة' : 'Task Explanation Video')}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-1.5">
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-mono">
-                        {videoInfo.platformName}
-                      </span>
-                      {selectedTask.isVideoTask && (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400 border border-red-200 dark:border-red-800">
-                          {language === 'ar' ? 'إلزامي' : 'Mandatory'}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="aspect-video w-full rounded-2xl overflow-hidden shadow-lg border border-slate-200 dark:border-slate-800 bg-black relative group">
-                    {videoInfo.type === 'direct' ? (
-                      <video
-                        src={videoInfo.directUrl}
-                        controls
-                        playsInline
-                        preload="metadata"
-                        className="w-full h-full object-contain"
-                      />
-                    ) : (
-                      <iframe
-                        src={videoInfo.embedUrl}
-                        title={selectedTask.name}
-                        className="w-full h-full border-0"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                        allowFullScreen
-                      />
-                    )}
-                  </div>
-
-                  {/* Video Actions & External Link Helper */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
-                    <div className="flex items-center gap-2">
-                      <a
-                        href={videoInfo.directUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold transition-all text-[11px]"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5 text-amber-500" />
-                        <span>{language === 'ar' ? 'مشاهدة في نافذة خارجية' : 'Open in New Tab'}</span>
-                      </a>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText(videoInfo.directUrl);
-                          setCopiedVideoUrl(videoInfo.directUrl);
-                          setTimeout(() => setCopiedVideoUrl(null), 2500);
-                        }}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold transition-all text-[11px] cursor-pointer"
-                      >
-                        {copiedVideoUrl === videoInfo.directUrl ? (
-                          <>
-                            <Check className="w-3.5 h-3.5 text-emerald-500" />
-                            <span className="text-emerald-600 dark:text-emerald-400">{language === 'ar' ? 'تم نسخ الرابط!' : 'Copied!'}</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-3.5 h-3.5 text-slate-400" />
-                            <span>{language === 'ar' ? 'نسخ الرابط' : 'Copy Link'}</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-
-                    {videoInfo.type === 'gdrive' && (
-                      <span className="text-[10px] text-slate-400">
-                        {language === 'ar' ? '💡 تأكد من تفعيل صلاحية المشاركة للجميع على جوجل درايف' : 'Ensure Google Drive sharing is set to anyone with link'}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              );
-            })()}
+            {/* Universal Safe Video Player */}
+            <TaskVideoPlayer task={selectedTask} language={language} />
           </div>
         </div>
 
