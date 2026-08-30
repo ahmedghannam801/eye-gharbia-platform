@@ -575,9 +575,7 @@ export const getUserRoleTitle = (
     HR: { ar: 'الموارد البشرية', en: 'Human Resources' },
     PR: { ar: 'العلاقات العامة', en: 'Public Relations' },
     SM: { ar: 'السوشيال ميديا والتسويق', en: 'Social Media & Marketing' },
-    OR: { ar: 'التنظيم والفعاليات', en: 'Organization & Events' },
-    LOG: { ar: 'اللوجستيات والمعارض', en: 'Logistics' },
-    MED: { ar: 'الإعلام والإنتاج', en: 'Media Production' },
+    OR: { ar: 'التنظيم واللوجستيات', en: 'Organization & Logistics' },
   };
 
   const commKey = user.committee || '';

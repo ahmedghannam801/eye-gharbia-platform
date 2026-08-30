@@ -12,6 +12,7 @@ import { useLanguage } from '../lib/LanguageContext';
 import { getEmailQueue, retryQueuedEmails, clearEmailQueue, QueuedEmail } from '../lib/emailService';
 import { sendTestPushNotification } from '../lib/pushNotifications';
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
+import { matchesSearch } from '../lib/searchUtils';
 
 interface SettingsPanelProps {
   currentUser: UserProfile;
@@ -128,9 +129,39 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
     refreshQueue();
   };
 
+  const [isAuditing, setIsAuditing] = useState(false);
+
+  const handleAutoAuditProfiles = async () => {
+    setIsAuditing(true);
+    try {
+      const res = await db.autoAuditAndFixProfiles();
+      showFeedback(
+        ar
+          ? `✅ تم فحص وتحديث قاعدة البيانات: (${res.fixedEventsCount} تصحيح لجان، ${res.generatedCodesCount} توليد أكواد عضوية، ${res.notifiedNoCommitteeCount} إشعار لغير المسكنين، ${res.notifiedIncompleteCount} إشعار استكمال بيانات)`
+          : `✅ Audit completed: (${res.fixedEventsCount} fixed, ${res.generatedCodesCount} codes generated, ${res.notifiedNoCommitteeCount} unassigned notified, ${res.notifiedIncompleteCount} incomplete notified)`,
+        true
+      );
+      setRefreshKey(k => k + 1);
+    } catch (e: any) {
+      showFeedback(e?.message || 'حدث خطأ أثناء الفحص والتحديث', false);
+    } finally {
+      setIsAuditing(false);
+    }
+  };
+
   const filtered = useMemo(() => {
     return allUsers.filter(u => {
-      const matchSearch = !search || u.fullName.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase()) || (u.membershipCode || '').toLowerCase().includes(search.toLowerCase());
+      const matchSearch = matchesSearch([
+        u?.fullName,
+        u?.email,
+        u?.phoneNumber,
+        u?.membershipCode,
+        u?.committee,
+        u?.department,
+        u?.role,
+        u?.governorate
+      ], search);
+
       const matchRole = roleFilter === 'all' || u.role === roleFilter;
       const matchStatus = statusFilter === 'all' || u.status === statusFilter;
       const isHrm = committeeFilter === 'HR' || committeeFilter === 'HRM';
@@ -148,13 +179,12 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
 
   const filteredLogs = useMemo(() => {
     if (!logSearch) return logs;
-    const q = logSearch.toLowerCase();
-    return logs.filter(l => l.userName.toLowerCase().includes(q) || l.action.toLowerCase().includes(q) || l.details.toLowerCase().includes(q));
+    return logs.filter(l => matchesSearch([l?.userName, l?.action, l?.details], logSearch));
   }, [logs, logSearch]);
 
   const showFeedback = (msg: string, ok: boolean) => {
     setActionFeedback({ msg, ok });
-    setTimeout(() => setActionFeedback(null), 3000);
+    setTimeout(() => setActionFeedback(null), 5000);
   };
 
   const handleDelete = (userId: string) => {
@@ -536,6 +566,16 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
         </div>
 
         <div className="flex flex-wrap items-center gap-2 shrink-0 relative z-10">
+          <button
+            onClick={handleAutoAuditProfiles}
+            disabled={isAuditing}
+            className="flex items-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-black rounded-2xl text-xs transition-all shadow-md cursor-pointer"
+            title={ar ? 'فحص بيانات الأعضاء، توليد الأكواد الناقصة، وإرسال إشعارات التحديث للمستهدفين فقط' : 'Audit profiles, generate missing codes & send targeted notices'}
+          >
+            {isAuditing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+            <span>{isAuditing ? (ar ? 'جاري الفحص والتحديث...' : 'Auditing...') : (ar ? 'فحص وتحديث العضويات تلقائياً ⚡' : 'Auto-Audit & Notify ⚡')}</span>
+          </button>
+
           <button
             onClick={handleResetAllPoints}
             className="flex items-center gap-2 px-4 py-2.5 bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-500/40 rounded-2xl text-xs font-bold transition-all shadow-md cursor-pointer"

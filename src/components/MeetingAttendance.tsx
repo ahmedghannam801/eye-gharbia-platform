@@ -8,6 +8,7 @@ import {
   downloadExcelFile,
   classifyAttendeeSubGroup
 } from '../lib/excelExport';
+import { matchesSearch } from '../lib/searchUtils';
 import {
   CalendarDays, Users, Plus, CheckCircle2, XCircle, Clock, Lock, Unlock,
   MapPin, Trash2, ChevronDown, ChevronUp, QrCode, UserCheck, AlertCircle,
@@ -275,11 +276,15 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
             // Filter attendees by sub-group & search
             const filteredAttendees = enrichedAttendees.filter(item => {
               const matchFilter = currentFilter === 'all' || `${item.committee}:::${item.subGroup}` === currentFilter;
-              const nameMatch = (item.record.memberName || '').toLowerCase().includes(searchKeyword);
-              const codeMatch = (item.user?.membershipCode || '').toLowerCase().includes(searchKeyword);
-              const emailMatch = (item.record.memberEmail || '').toLowerCase().includes(searchKeyword);
-              const deptMatch = (item.subGroupLabelAr || '').toLowerCase().includes(searchKeyword);
-              const matchSearch = !searchKeyword || nameMatch || codeMatch || emailMatch || deptMatch;
+              const matchSearch = matchesSearch([
+                item.record.memberName,
+                item.user?.membershipCode,
+                item.record.memberEmail,
+                item.user?.phoneNumber,
+                item.subGroupLabelAr,
+                item.committee,
+                item.subGroup
+              ], searchKeyword);
               return matchFilter && matchSearch;
             });
 

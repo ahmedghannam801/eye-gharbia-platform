@@ -5,6 +5,7 @@ import { Trophy, Star, Zap, Flame, Award, Medal, Crown, TrendingUp, Users, Shiel
 import { useLanguage } from '../lib/LanguageContext';
 import { BadgesSystem } from './BadgesSystem';
 import { GoogleSheetSyncModal } from './GoogleSheetSync';
+import { matchesSearch } from '../lib/searchUtils';
 
 interface LeaderboardProps {
   currentUser: UserProfile;
@@ -158,8 +159,15 @@ const AllMembersEvaluationsView: React.FC<{
         !['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM'].includes(item.user.role);
       if (!isTargetable) return false;
 
-      const matchesSearch = item.user.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                            item.user.membershipCode.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesSearchQuery = matchesSearch([
+        item.user.fullName,
+        item.user.membershipCode,
+        item.user.email,
+        item.user.phoneNumber,
+        item.user.committee,
+        item.user.department
+      ], searchQuery);
+      if (!matchesSearchQuery) return false;
       const isHrm = committeeFilter === 'HR' || committeeFilter === 'HRM';
       const matchesCommittee = committeeFilter === 'all' || item.user.committee === committeeFilter || (isHrm && (item.user.committee === 'HR' || item.user.committee === 'HRM'));
       const matchesDept = departmentFilter === 'all' ||
@@ -622,9 +630,9 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ currentUser, onNavigat
       }
 
       if (rankSearchQuery.trim()) {
-        const q = rankSearchQuery.toLowerCase().trim();
-        const matchSearch = u.fullName.toLowerCase().includes(q) || (u.membershipCode && u.membershipCode.toLowerCase().includes(q));
-        if (!matchSearch) return false;
+        if (!matchesSearch([u.fullName, u.membershipCode, u.phoneNumber, u.email, u.committee, u.department], rankSearchQuery)) {
+          return false;
+        }
       }
 
       return true;

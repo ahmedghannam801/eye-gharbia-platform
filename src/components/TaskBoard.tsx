@@ -13,6 +13,7 @@ import { useLanguage } from '../lib/LanguageContext';
 import { downloadCertificate } from '../lib/certificateGenerator';
 import { exportTaskSubmissionsToExcel, downloadExcelFile } from '../lib/excelExport';
 import { TaskComments } from './TaskComments';
+import { matchesSearch } from '../lib/searchUtils';
 
 interface TaskBoardProps {
   currentUser: UserProfile;
@@ -1002,10 +1003,9 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
     }
     if (filterPriority !== 'All' && task.priority !== filterPriority) return false;
     if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      const matchName = (task.name || '').toLowerCase().includes(q);
-      const matchDesc = (task.description || '').toLowerCase().includes(q);
-      if (!matchName && !matchDesc) return false;
+      if (!matchesSearch([task.name, task.description, task.instructions, task.committee, task.department], searchQuery)) {
+        return false;
+      }
     }
     return true;
   });
@@ -2523,12 +2523,7 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
                     {(() => {
                       const allMembers = db.getUsers().filter(u => u.status === 'Active');
                       const filtered = allMembers.filter(m => {
-                        if (!memberSearchQuery.trim()) return true;
-                        const q = memberSearchQuery.toLowerCase();
-                        return (m.fullName || '').toLowerCase().includes(q) ||
-                          (m.membershipCode || '').toLowerCase().includes(q) ||
-                          (m.committee || '').toLowerCase().includes(q) ||
-                          (m.department || '').toLowerCase().includes(q);
+                        return matchesSearch([m.fullName, m.membershipCode, m.committee, m.department, m.phoneNumber, m.email], memberSearchQuery);
                       });
 
                       if (filtered.length === 0) {

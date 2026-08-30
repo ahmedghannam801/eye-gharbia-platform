@@ -6,6 +6,7 @@ import { useLanguage } from '../lib/LanguageContext';
 import { useTheme } from '../lib/ThemeContext';
 import { MinistryLogo } from './EyeLogo';
 import { sendTestPushNotification } from '../lib/pushNotifications';
+import { matchesSearch } from '../lib/searchUtils';
 
 
 interface HeaderProps {
@@ -385,42 +386,56 @@ export const Header: React.FC<HeaderProps> = ({
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, [showNotifPanel]);
 
-  // Handle Search Queries dynamically across all objects
+  // Handle Search Queries dynamically across all objects safely
   useEffect(() => {
-    if (searchQuery.trim().length === 0) {
+    if (!searchQuery || searchQuery.trim().length === 0) {
       setSearchResults({ users: [], tasks: [], submissions: [] });
       return;
     }
 
-    const query = searchQuery.toLowerCase();
+    const query = searchQuery.trim();
     
-    // Search users
+    // Search users safely with Arabic normalization
     const allUsers = db.getUsers();
     const matchedUsers = allUsers.filter(u => 
-      u.fullName.toLowerCase().includes(query) ||
-      u.email.toLowerCase().includes(query) ||
-      u.phoneNumber.toLowerCase().includes(query) ||
-      u.membershipCode.toLowerCase().includes(query) ||
-      u.committee.toLowerCase().includes(query) ||
-      u.department.toLowerCase().includes(query)
+      matchesSearch([
+        u?.fullName,
+        u?.email,
+        u?.phoneNumber,
+        u?.membershipCode,
+        u?.committee,
+        u?.department,
+        u?.role,
+        u?.governorate
+      ], query)
     );
 
-    // Search tasks
+    // Search tasks safely
     const allTasks = db.getTasks();
     const matchedTasks = allTasks.filter(t => 
-      t.name.toLowerCase().includes(query) ||
-      t.description.toLowerCase().includes(query) ||
-      t.committee.toLowerCase().includes(query) ||
-      t.department.toLowerCase().includes(query)
+      matchesSearch([
+        t?.name,
+        t?.description,
+        t?.instructions,
+        t?.committee,
+        t?.department,
+        t?.priority,
+        t?.status
+      ], query)
     );
 
-    // Search submissions
+    // Search submissions safely
     const allSubs = db.getSubmissions();
     const matchedSubs = allSubs.filter(s => 
-      s.submissionIdCode.toLowerCase().includes(query) ||
-      s.taskName.toLowerCase().includes(query) ||
-      s.memberName.toLowerCase().includes(query) ||
-      s.memberEmail.toLowerCase().includes(query)
+      matchesSearch([
+        s?.submissionIdCode,
+        s?.taskName,
+        s?.memberName,
+        s?.memberEmail,
+        s?.committee,
+        s?.department,
+        s?.status
+      ], query)
     );
 
     setSearchResults({
@@ -726,22 +741,22 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* --- GLOBAL SEARCH MODAL PANEL --- */}
       {showSearchModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex justify-center pt-24 px-4">
-          <div className="w-full max-w-2xl bg-white border border-slate-200 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[500px]">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex justify-center pt-20 px-4 animate-fadeIn">
+          <div className="w-full max-w-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[550px] text-start">
             {/* Search inputs */}
-            <div className="p-4 border-b border-slate-200 flex items-center justify-between gap-3 bg-slate-50">
-              <Search className="w-5 h-5 text-eye-brand shrink-0" />
+            <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3 bg-slate-50 dark:bg-slate-850">
+              <Search className="w-5 h-5 text-amber-500 shrink-0" />
               <input
                 type="text"
                 autoFocus
-                placeholder="Search by name, email, committee, department, task or submission ID..."
+                placeholder={language === 'ar' ? 'ابحث بالاسم، الإيميل، الهاتف، كود العضوية، اللجنة، أو التكليفات...' : 'Search by name, email, phone, membership code, committee, tasks...'}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-transparent text-sm text-slate-800 focus:outline-none placeholder-slate-400"
+                className="w-full bg-transparent text-sm text-slate-800 dark:text-slate-100 focus:outline-none placeholder-slate-400 font-semibold"
               />
               <button
                 onClick={() => { setShowSearchModal(false); setSearchQuery(''); }}
-                className="p-1.5 rounded-lg bg-slate-100 text-slate-500 hover:text-slate-800"
+                className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -751,22 +766,22 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {searchQuery.trim().length === 0 ? (
                 <div className="text-center py-12 text-slate-400 space-y-2">
-                  <Search className="w-8 h-8 text-slate-300 mx-auto" />
-                  <p className="text-xs">Search database of EYE Gharbia hub in real-time.</p>
-                  <p className="text-[10px] text-slate-400 font-mono">Search matching terms: Member names, EPR, Task IDs, Codes</p>
+                  <Search className="w-8 h-8 text-slate-300 dark:text-slate-700 mx-auto" />
+                  <p className="text-xs font-bold">{language === 'ar' ? 'البحث الشامل والذكي في منصة EYE' : 'Smart Universal Search across EYE Hub'}</p>
+                  <p className="text-[10px] text-slate-400 font-mono">{language === 'ar' ? 'يمكنك البحث عن: أسماء الأعضاء، أرقام الهواتف، اللجان، أكواد المهام' : 'Search members, phone numbers, committees, task IDs'}</p>
                 </div>
               ) : (searchResults.users.length === 0 && searchResults.tasks.length === 0 && searchResults.submissions.length === 0) ? (
-                <div className="text-center py-12 text-slate-400 text-xs">
-                  No matching results found for "{searchQuery}"
+                <div className="text-center py-12 text-slate-400 text-xs font-semibold">
+                  {language === 'ar' ? `لا توجد نتائج مطابقة لـ "${searchQuery}"` : `No matching results found for "${searchQuery}"`}
                 </div>
               ) : (
                 <div className="space-y-4">
                   {/* Matching Users */}
                   {searchResults.users.length > 0 && (
                     <div className="space-y-2">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-eye-brand flex items-center gap-1.5">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
                         <User className="w-3.5 h-3.5" />
-                        Members & Leaders ({searchResults.users.length})
+                        {language === 'ar' ? `الأعضاء والمسؤولين (${searchResults.users.length})` : `Members & Leaders (${searchResults.users.length})`}
                       </span>
                       <div className="space-y-1.5">
                         {searchResults.users.map(user => (
@@ -776,20 +791,20 @@ export const Header: React.FC<HeaderProps> = ({
                               setShowSearchModal(false);
                               onNavigateToView('profile', user.id);
                             }}
-                            className="p-3 bg-slate-50 hover:bg-slate-100 border border-slate-200/60 rounded-xl cursor-pointer flex items-center justify-between gap-3 group"
+                            className="p-3 bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200/60 dark:border-slate-700 rounded-xl cursor-pointer flex items-center justify-between gap-3 group transition-all"
                           >
                             <div className="flex items-center gap-2.5">
                               <img src={user.avatarUrl || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(user.fullName)}`} alt="" className="w-8 h-8 rounded-lg object-cover" />
                               <div>
-                                <p className="text-xs font-bold text-slate-800 group-hover:text-eye-brand">{user.fullName}</p>
-                                <p className="text-[10px] text-slate-500">{user.email} • {user.phoneNumber}</p>
+                                <p className="text-xs font-bold text-slate-800 dark:text-slate-100 group-hover:text-amber-500">{user.fullName}</p>
+                                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">{user.email} • {user.phoneNumber || 'بدون هاتف'}</p>
                               </div>
                             </div>
                             <div className="text-end">
-                              <span className="inline-block px-1.5 py-0.5 text-[9px] font-bold bg-slate-200 text-slate-700 rounded border border-slate-300 uppercase">
+                              <span className="inline-block px-1.5 py-0.5 text-[9px] font-bold bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded border border-slate-300 dark:border-slate-600 uppercase">
                                 {user.role}
                               </span>
-                              {currentUser.role !== 'Member' && <p className="text-[9px] text-slate-400 mt-0.5 font-mono">{user.membershipCode}</p>}
+                              {currentUser.role !== 'Member' && <p className="text-[9px] text-slate-400 mt-0.5 font-mono">{user.membershipCode || 'بدون كود'}</p>}
                             </div>
                           </div>
                         ))}
@@ -802,7 +817,7 @@ export const Header: React.FC<HeaderProps> = ({
                     <div className="space-y-2">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-amber-500 flex items-center gap-1.5">
                         <FolderKanban className="w-3.5 h-3.5" />
-                        Tasks & Objectives ({searchResults.tasks.length})
+                        {language === 'ar' ? `المهام والتكليفات (${searchResults.tasks.length})` : `Tasks & Objectives (${searchResults.tasks.length})`}
                       </span>
                       <div className="space-y-1.5">
                         {searchResults.tasks.map(task => (
@@ -812,14 +827,14 @@ export const Header: React.FC<HeaderProps> = ({
                               setShowSearchModal(false);
                               onNavigateToView('tasks', task.id);
                             }}
-                            className="p-3 bg-slate-50 hover:bg-slate-100 border border-slate-200/60 rounded-xl cursor-pointer flex items-center justify-between gap-3 group"
+                            className="p-3 bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200/60 dark:border-slate-700 rounded-xl cursor-pointer flex items-center justify-between gap-3 group transition-all"
                           >
                             <div>
-                              <p className="text-xs font-bold text-slate-800 group-hover:text-eye-brand">{task.name}</p>
-                              <p className="text-[10px] text-slate-500 truncate max-w-md">{task.description}</p>
+                              <p className="text-xs font-bold text-slate-800 dark:text-slate-100 group-hover:text-amber-500">{task.name}</p>
+                              <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate max-w-md">{task.description}</p>
                             </div>
                             <div className="text-end">
-                              <span className="inline-block px-1.5 py-0.5 text-[9px] font-bold bg-amber-50 text-amber-600 rounded border border-amber-250 uppercase">
+                              <span className="inline-block px-1.5 py-0.5 text-[9px] font-bold bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 rounded border border-amber-200 dark:border-amber-800 uppercase">
                                 {task.priority}
                               </span>
                               <p className="text-[9px] text-slate-400 mt-0.5 font-mono">{task.department}</p>
@@ -833,9 +848,9 @@ export const Header: React.FC<HeaderProps> = ({
                   {/* Matching Submissions */}
                   {searchResults.submissions.length > 0 && (
                     <div className="space-y-2">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 flex items-center gap-1.5">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
                         <Check className="w-3.5 h-3.5" />
-                        Submissions & Files ({searchResults.submissions.length})
+                        {language === 'ar' ? `التسليمات والحلول (${searchResults.submissions.length})` : `Submissions & Files (${searchResults.submissions.length})`}
                       </span>
                       <div className="space-y-1.5">
                         {searchResults.submissions.map(sub => (
@@ -845,14 +860,14 @@ export const Header: React.FC<HeaderProps> = ({
                               setShowSearchModal(false);
                               onNavigateToView('tasks', sub.taskId);
                             }}
-                            className="p-3 bg-slate-50 hover:bg-slate-100 border border-slate-200/60 rounded-xl cursor-pointer flex items-center justify-between gap-3 group"
+                            className="p-3 bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200/60 dark:border-slate-700 rounded-xl cursor-pointer flex items-center justify-between gap-3 group transition-all"
                           >
                             <div>
-                              <p className="text-xs font-bold text-slate-800 group-hover:text-eye-brand">{sub.fileName}</p>
-                              <p className="text-[10px] text-slate-500">Task: {sub.taskName} • Owner: {sub.memberName}</p>
+                              <p className="text-xs font-bold text-slate-800 dark:text-slate-100 group-hover:text-amber-500">{sub.fileName || sub.submissionIdCode}</p>
+                              <p className="text-[10px] text-slate-500 dark:text-slate-400">Task: {sub.taskName} • Owner: {sub.memberName}</p>
                             </div>
                             <div className="text-end">
-                              <span className="inline-block px-1.5 py-0.5 text-[9px] font-bold bg-slate-100 text-emerald-600 rounded border border-emerald-200 uppercase font-mono">
+                              <span className="inline-block px-1.5 py-0.5 text-[9px] font-bold bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 rounded border border-emerald-200 dark:border-emerald-800 uppercase font-mono">
                                 {sub.submissionIdCode}
                               </span>
                               <p className="text-[9px] text-slate-400 mt-0.5 font-mono">{sub.status}</p>

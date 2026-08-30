@@ -934,6 +934,7 @@ class SupabaseDatabase {
     }
 
     this.fixSpecificMemberRoles();
+    this.autoAuditAndFixProfiles().catch(() => {});
 
     if (tasks.data) {
       const remoteTasks = tasks.data.map(taskFromRow);
@@ -2473,6 +2474,137 @@ class SupabaseDatabase {
       console.error('[resetAllUsersPoints Error]:', err);
       return false;
     }
+  }
+
+  /**
+   * Automated Profile Audit, Cleanup & Targeted Notification Routine:
+   * 1. Fixes invalid/unofficial committee values (e.g. 'Events' -> 'OR').
+   * 2. Automatically generates and assigns membership codes to any active user missing a code.
+   * 3. Sends a targeted notification to members who are NOT in any committee (excluding top executive roles).
+   * 4. Sends a targeted notification ONLY to members whose essential profile data is incomplete.
+   * 5. Automatically updates Supabase and local cache.
+   */
+  async autoAuditAndFixProfiles(): Promise<{
+    fixedEventsCount: number;
+    generatedCodesCount: number;
+    notifiedNoCommitteeCount: number;
+    notifiedIncompleteCount: number;
+  }> {
+    const results = {
+      fixedEventsCount: 0,
+      generatedCodesCount: 0,
+      notifiedNoCommitteeCount: 0,
+      notifiedIncompleteCount: 0,
+    };
+
+    const activeUsers = this.cache.users.filter(u => u.status === 'Active');
+
+    // 1. Collect and generate unique codes for those missing them
+    const existingCodes = new Set(
+      this.cache.users
+        .map(u => u.membershipCode?.trim())
+        .filter((c): c is string => Boolean(c && c !== 'TEMP' && c !== 'MEMBER' && !c.startsWith('tmp-')))
+    );
+
+    let nextCodeNum = 1001;
+
+    for (let i = 0; i < activeUsers.length; i++) {
+      const user = activeUsers[i];
+      let needsDbUpdate = false;
+      const updates: Partial<UserProfile> = {};
+      const supabaseUpdates: Record<string, any> = {};
+
+      // A) Fix committee 'Events' or invalid committee
+      if (user.committee === 'Events' || (user.committee as any) === 'Event') {
+        updates.committee = 'OR';
+        if (!user.department || user.department === 'Events' || user.department === 'None') {
+          updates.department = 'Planning';
+        }
+        supabaseUpdates.committee = 'OR';
+        supabaseUpdates.department = updates.department;
+        needsDbUpdate = true;
+        results.fixedEventsCount++;
+      }
+
+      // B) Fix missing / placeholder membership codes
+      const code = user.membershipCode?.trim();
+      const isMissingCode = !code || code === 'TEMP' || code === 'MEMBER' || code.startsWith('tmp-') || code.length < 3;
+      if (isMissingCode) {
+        while (existingCodes.has(`EYE-GH-${nextCodeNum}`)) {
+          nextCodeNum++;
+        }
+        const newCode = `EYE-GH-${nextCodeNum}`;
+        existingCodes.add(newCode);
+        updates.membershipCode = newCode;
+        supabaseUpdates.membership_code = newCode;
+        needsDbUpdate = true;
+        results.generatedCodesCount++;
+        nextCodeNum++;
+      }
+
+      // Apply updates to local cache
+      if (needsDbUpdate) {
+        const userIdx = this.cache.users.findIndex(u => u.id === user.id);
+        if (userIdx !== -1) {
+          this.cache.users[userIdx] = { ...this.cache.users[userIdx], ...updates };
+        }
+        if (this.cache.currentUser?.id === user.id) {
+          this.cache.currentUser = { ...this.cache.currentUser, ...updates };
+        }
+        // Push update to Supabase
+        if (isSupabaseConfigured && supabase && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user.id)) {
+          supabase.from('profiles').update(supabaseUpdates).eq('id', user.id).then();
+        }
+      }
+
+      // C) Send Targeted Notification ONLY to people NOT in any committee
+      // (Exclude Executive Leadership: Super Admin, Coordinator, Deputy Coordinator)
+      const isExec = user.role === 'Super Admin' || user.role === 'Coordinator' || user.role === 'Deputy Coordinator';
+      const hasNoCommittee = !user.committee || user.committee === 'None' || user.committee.trim() === '' || user.committee === 'General';
+
+      if (!isExec && hasNoCommittee) {
+        const dedupKey = `notif_dedup_no_comm_${user.id}`;
+        const alreadyNotified = localStorage.getItem(dedupKey);
+        // Only notify once every 24 hours per user
+        if (!alreadyNotified || Date.now() - Number(alreadyNotified) > 86400000) {
+          localStorage.setItem(dedupKey, String(Date.now()));
+          this.addNotification(
+            user.id,
+            '⚠️ تعيين اللجنة والقسم التابع لك',
+            `مرحباً ${user.fullName}، تم رصد أن حسابك غير مسكن في لجنة محددة. يرجى التوجه لملفك الشخصي واختيار لجنتك وقسمك لتبدأ في استلام المهام والمشاركة الفعالة.`,
+            'warning'
+          );
+          results.notifiedNoCommitteeCount++;
+        }
+      }
+
+      // D) Send Targeted Notification ONLY to people with incomplete essential data
+      const isNameIncomplete = !user.fullName || !user.fullName.trim().includes(' ') || /\d/.test(user.fullName);
+      const isPhoneIncomplete = !user.phoneNumber || user.phoneNumber === '+201000000000' || user.phoneNumber.trim().length < 8;
+      const isDobIncomplete = !user.dateOfBirth;
+
+      if (isNameIncomplete || isPhoneIncomplete || isDobIncomplete) {
+        const dedupKey = `notif_dedup_incomplete_${user.id}`;
+        const alreadyNotified = localStorage.getItem(dedupKey);
+        if (!alreadyNotified || Date.now() - Number(alreadyNotified) > 86400000) {
+          localStorage.setItem(dedupKey, String(Date.now()));
+          this.addNotification(
+            user.id,
+            '📋 استكمال وتحديث بيانات الملف الشخصي',
+            `مرحباً ${user.fullName}، يرجى التكرم بالدخول للملف الشخصي واستكمال بياناتك الأساسية (الاسم الكامل، رقم الهاتف الصحيح، تاريخ الميلاد) لضمان توثيق عضويتك واستخراج الشهادات بدقة.`,
+            'info'
+          );
+          results.notifiedIncompleteCount++;
+        }
+      }
+    }
+
+    if (results.fixedEventsCount > 0 || results.generatedCodesCount > 0) {
+      this._lsSave('eye_users', this.cache.users);
+      this.notify();
+    }
+
+    return results;
   }
 
   async importUsers(usersToImport: Partial<UserProfile>[], updater: UserProfile): Promise<number> {

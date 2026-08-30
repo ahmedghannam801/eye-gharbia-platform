@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { UserProfile, getActiveGovernorate, formatGovernorateWelcomeAr } from '../types';
+import { UserProfile, getActiveGovernorate, formatGovernorateWelcomeAr, COMMITTEE_STRUCTURE } from '../types';
 import { db } from '../db/localDb';
 import { supabase } from '../lib/supabaseClient';
 import { User, Phone, Briefcase, Building2, CheckCircle2, X, AlertTriangle, Loader2 } from 'lucide-react';
@@ -9,13 +9,8 @@ interface Props {
   onComplete: (updated: UserProfile) => void;
 }
 
-const COMMITTEES = ['HR', 'PR', 'OR', 'SM'];
-const DEPARTMENTS: Record<string, string[]> = {
-  HR: ['HRM', 'Training', 'Recruitment'],
-  PR: ['Media', 'Design', 'Content'],
-  OR: ['Events', 'Logistics', 'Partnerships'],
-  SM: ['Social Media', 'Marketing', 'Outreach'],
-};
+const COMMITTEES = Object.keys(COMMITTEE_STRUCTURE);
+const DEPARTMENTS = COMMITTEE_STRUCTURE;
 
 const STORAGE_KEY = 'eye_profile_completed_v1';
 
