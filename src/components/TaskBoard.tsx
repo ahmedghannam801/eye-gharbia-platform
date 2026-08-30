@@ -1499,6 +1499,7 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
                                           <th className="py-2 text-start">الملف</th>
                                           <th className="py-2 text-start">تاريخ التسليم</th>
                                           <th className="py-2 text-start">الدرجة</th>
+                                          <th className="py-2 text-start">المُقيِّم والفيدباك</th>
                                           <th className="py-2 text-start">الحالة</th>
                                           <th className="py-2 text-end">الإجراء</th>
                                         </tr>
@@ -1511,7 +1512,12 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
                                                 <div className="w-6 h-6 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-black flex items-center justify-center shrink-0 border border-amber-500/30">
                                                   {sub.memberName ? sub.memberName.slice(0, 1) : 'ع'}
                                                 </div>
-                                                <span>{sub.memberName}</span>
+                                                <div>
+                                                  <p className="font-bold text-white text-xs">{sub.memberName}</p>
+                                                  {sub.submissionIdCode && (
+                                                    <span className="text-[9px] font-mono text-slate-500">{sub.submissionIdCode}</span>
+                                                  )}
+                                                </div>
                                               </div>
                                             </td>
                                             <td className="py-2.5">
@@ -1538,6 +1544,22 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
                                                 </span>
                                               ) : (
                                                 <span className="text-slate-500 text-[10px] font-mono">لم يُرصد</span>
+                                              )}
+                                            </td>
+                                            <td className="py-2.5 text-[10px]">
+                                              {sub.reviewedBy ? (
+                                                <div className="space-y-0.5">
+                                                  <p className="font-bold text-amber-300 flex items-center gap-1">
+                                                    <span>👤 {sub.reviewedBy}</span>
+                                                  </p>
+                                                  {(sub.comment || sub.rejectionReason) && (
+                                                    <p className="text-slate-400 truncate max-w-[180px]" title={sub.comment || sub.rejectionReason}>
+                                                      💬 {sub.comment || sub.rejectionReason}
+                                                    </p>
+                                                  )}
+                                                </div>
+                                              ) : (
+                                                <span className="text-slate-500 font-mono">لم يُراجع بعد</span>
                                               )}
                                             </td>
                                             <td className="py-2.5">
@@ -1608,6 +1630,7 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
                         <th className="py-2 text-start">الملف</th>
                         <th className="py-2 text-start">تاريخ التسليم</th>
                         <th className="py-2 text-start">الدرجة</th>
+                        <th className="py-2 text-start">المُقيِّم والفيدباك</th>
                         <th className="py-2 text-start">الحالة</th>
                         <th className="py-2 text-end">الإجراءات</th>
                       </tr>
@@ -1620,7 +1643,12 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
                               <div className="w-6 h-6 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-black flex items-center justify-center shrink-0 border border-amber-500/30">
                                 {sub.memberName ? sub.memberName.slice(0, 1) : 'ع'}
                               </div>
-                              <span>{sub.memberName}</span>
+                              <div>
+                                <p className="font-bold text-white text-xs">{sub.memberName}</p>
+                                {sub.submissionIdCode && (
+                                  <span className="text-[9px] font-mono text-slate-500">{sub.submissionIdCode}</span>
+                                )}
+                              </div>
                             </div>
                           </td>
                           <td className="py-3">
@@ -1630,7 +1658,7 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
                           </td>
                           <td className="py-3">
                             <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-800 text-amber-300 border border-amber-500/30 font-mono">
-                              {sub.department || 'عام'}
+                              {translateDepartment(sub.department || 'عام')}
                             </span>
                           </td>
                           <td className="py-3">
@@ -1655,6 +1683,22 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
                               </span>
                             ) : (
                               <span className="text-slate-500 text-[10px] font-mono">-</span>
+                            )}
+                          </td>
+                          <td className="py-3 text-[10px]">
+                            {sub.reviewedBy ? (
+                              <div className="space-y-0.5">
+                                <p className="font-bold text-amber-300 flex items-center gap-1">
+                                  <span>👤 {sub.reviewedBy}</span>
+                                </p>
+                                {(sub.comment || sub.rejectionReason) && (
+                                  <p className="text-slate-400 truncate max-w-[180px]" title={sub.comment || sub.rejectionReason}>
+                                    💬 {sub.comment || sub.rejectionReason}
+                                  </p>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-slate-500 font-mono">لم يُراجع بعد</span>
                             )}
                           </td>
                           <td className="py-3">

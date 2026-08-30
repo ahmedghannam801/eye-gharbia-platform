@@ -181,6 +181,8 @@ const submissionFromRow = (r: any): Submission => ({
   submissionIdCode: r.submission_id_code,
   grade: r.grade,
   gradingCriteria: r.grading_criteria || undefined,
+  reviewedBy: r.reviewed_by || undefined,
+  reviewedAt: r.reviewed_at || undefined,
   completedSubtasks: r.completed_subtasks || [],
   history: r.history || [],
 });
@@ -3072,6 +3074,8 @@ class SupabaseDatabase {
           history: this.cache.submissions[idx].history,
           grade: grade !== undefined ? grade : this.cache.submissions[idx].grade,
           grading_criteria: gradingCriteria !== undefined ? gradingCriteria : this.cache.submissions[idx].gradingCriteria,
+          reviewed_by: reviewer.fullName,
+          reviewed_at: new Date().toISOString(),
         })
         .eq('id', subId)
         .then(({ error }) => {
@@ -3089,16 +3093,19 @@ class SupabaseDatabase {
     );
 
     let notificationType: 'info' | 'success' | 'warning' | 'error' = 'info';
-    let titleMessage = 'Submission Reviewed';
-    if (status === 'Accepted') { notificationType = 'success'; titleMessage = 'Task Submission Accepted!'; }
-    else if (status === 'Rejected') { notificationType = 'error'; titleMessage = 'Submission Rejected'; }
-    else if (status === 'Resubmission Requested') { notificationType = 'warning'; titleMessage = 'Resubmission Requested'; }
+    let titleMessage = 'تم تقييم تسليمك للمهمة 📝';
+    if (status === 'Accepted') { notificationType = 'success'; titleMessage = 'تم قبول تسليم المهمة! ✅'; }
+    else if (status === 'Rejected') { notificationType = 'error'; titleMessage = 'تم رفض تسليم المهمة ❌'; }
+    else if (status === 'Resubmission Requested') { notificationType = 'warning'; titleMessage = 'مطلوب إعادة تسليم المهمة ⚠️'; }
 
-    const gradeMsg = grade !== undefined ? ` درجتك: ${grade}/100.` : '';
+    const gradeMsg = grade !== undefined ? ` • الدرجة: ${grade}/100` : '';
+    const commentMsg = comment ? `\n💬 ملاحظات القائد: "${comment}"` : '';
+    const reasonMsg = reason ? `\n⚠️ سبب الرفض: "${reason}"` : '';
+
     this.addNotification(
       this.cache.submissions[idx].memberId,
       titleMessage,
-      `Your submission for "${this.cache.submissions[idx].taskName}" has been updated to ${status}.${reason ? ' Reason: ' + reason : ''}${gradeMsg}`,
+      `قام ${reviewer.fullName} بمراجعة وتقييم تسليمك لمهمة "${this.cache.submissions[idx].taskName}".${gradeMsg}${commentMsg}${reasonMsg}`,
       notificationType,
       this.cache.submissions[idx].taskId  // ◀── task id (so TaskBoard can open the task detail)
     );
@@ -4863,6 +4870,41 @@ class SupabaseDatabase {
     const all = this._ls<import('../types').TaskComment>('eye_task_comments');
     this._lsSave('eye_task_comments', [...all, comment]);
     this.notify();
+
+    // Send notifications to relevant participants
+    try {
+      const task = this.cache.tasks.find(t => t.id === taskId);
+      const recipientIds = new Set<string>();
+
+      // 1. Notify task creator
+      if (task?.createdBy && task.createdBy !== author.id) {
+        recipientIds.add(task.createdBy);
+      }
+
+      // 2. If author is a leader/admin, notify members who submitted on this task
+      const isLeader = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader', 'HRM'].includes(author.role) || (task && task.createdBy === author.id);
+      if (isLeader) {
+        const taskSubs = this.cache.submissions.filter(s => s.taskId === taskId && s.memberId !== author.id);
+        taskSubs.forEach(s => recipientIds.add(s.memberId));
+      }
+
+      // 3. Notify other commenters
+      all.filter(c => c.taskId === taskId && c.authorId !== author.id).forEach(c => recipientIds.add(c.authorId));
+
+      const snippet = text.trim().length > 90 ? text.trim().slice(0, 87) + '...' : text.trim();
+      recipientIds.forEach(recId => {
+        this.addNotification(
+          recId,
+          `💬 تعليق جديد على مهمة: ${task?.name || 'مهمة'}`,
+          `كتب ${author.fullName}: "${snippet}"`,
+          'info',
+          taskId
+        );
+      });
+    } catch (e) {
+      console.warn('Could not dispatch comment notification', e);
+    }
+
     return comment;
   }
 

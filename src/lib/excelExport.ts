@@ -778,7 +778,7 @@ export const exportTaskSubmissionsToExcel = async (
   });
 
   // 1. Task Title Banner (Row 1)
-  ws1.mergeCells('A1:K1');
+  ws1.mergeCells('A1:L1');
   const titleCell = ws1.getCell('A1');
   titleCell.value = `EYE Organization — كشف تسليمات مهمة: ${task.name}`;
   titleCell.font = { name: 'Calibri', size: 15, bold: true, color: { argb: 'FFFFFFFF' } };
@@ -829,7 +829,7 @@ export const exportTaskSubmissionsToExcel = async (
     ws1.mergeCells(`A${rowNum}:B${rowNum}`);
     ws1.mergeCells(`C${rowNum}:E${rowNum}`);
     ws1.mergeCells(`F${rowNum}:G${rowNum}`);
-    ws1.mergeCells(`H${rowNum}:K${rowNum}`);
+    ws1.mergeCells(`H${rowNum}:L${rowNum}`);
 
     const lbl1 = ws1.getCell(`A${rowNum}`);
     lbl1.value = pair[0].label;
@@ -869,8 +869,9 @@ export const exportTaskSubmissionsToExcel = async (
     'وقت التسليم / Submitted At',
     'حالة التسليم / Status',
     'الدرجة / Grade',
+    'المُقيِّم / Evaluator (Leader)',
     'معايير التقييم / Criteria',
-    'ملاحظات القائد / Leader Feedback',
+    'ملاحظات وتعليقات القائد / Leader Feedback',
     'اسم ورابط الملف / File Attachment'
   ];
 
@@ -906,6 +907,8 @@ export const exportTaskSubmissionsToExcel = async (
       criteriaStr = `جودة: ${s.gradingCriteria.quality || 0} • التزام: ${s.gradingCriteria.timeliness || 0} • ابتكار: ${s.gradingCriteria.innovation || 0} • اكتمال: ${s.gradingCriteria.completeness || 0}`;
     }
 
+    const reviewerName = s.reviewedBy || (s.history && s.history.length > 0 ? (usersMap.get(s.history[s.history.length - 1].changedBy)?.fullName || s.history[s.history.length - 1].changedBy) : '') || (s.status !== 'Pending' ? (task.createdByName || 'القائد المسؤول') : 'لم يُراجع بعد');
+
     const row = ws1.addRow([
       i + 1,
       s.memberName || u?.fullName || 'عضو',
@@ -915,6 +918,7 @@ export const exportTaskSubmissionsToExcel = async (
       submittedDateStr,
       statusAr,
       gradeStr,
+      reviewerName,
       criteriaStr,
       s.comment || s.rejectionReason || '—',
       s.fileName || s.fileUrl || '—'
@@ -933,7 +937,7 @@ export const exportTaskSubmissionsToExcel = async (
 
       if (colNumber === 1 || colNumber === 3 || colNumber === 6 || colNumber === 7 || colNumber === 8) {
         cell.alignment = { vertical: 'middle', horizontal: 'center' };
-      } else if (colNumber === 2 || colNumber === 4 || colNumber === 5 || colNumber === 9 || colNumber === 10 || colNumber === 11) {
+      } else if (colNumber === 2 || colNumber === 4 || colNumber === 5 || colNumber === 9 || colNumber === 10 || colNumber === 11 || colNumber === 12) {
         cell.alignment = { vertical: 'middle', horizontal: 'right', wrapText: true };
       } else {
         cell.alignment = { vertical: 'middle', horizontal: 'center' };
@@ -960,8 +964,9 @@ export const exportTaskSubmissionsToExcel = async (
     { width: 22 },  // Submitted At
     { width: 18 },  // Status
     { width: 14 },  // Grade
+    { width: 24 },  // Evaluator
     { width: 34 },  // Criteria
-    { width: 36 },  // Leader Feedback
+    { width: 38 },  // Leader Feedback
     { width: 30 },  // File
   ];
 
