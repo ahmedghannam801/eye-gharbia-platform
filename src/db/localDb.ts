@@ -590,6 +590,10 @@ class SupabaseDatabase {
     return () => this.listeners.delete(cb);
   }
 
+  subscribe(cb: () => void): () => void {
+    return this.onChange(cb);
+  }
+
   notify() {
     this.listeners.forEach((cb) => cb());
   }

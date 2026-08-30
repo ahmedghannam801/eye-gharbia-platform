@@ -82,10 +82,14 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
 
   useEffect(() => {
     loadData();
-    const unsub = db.subscribe(loadData);
+    const unsub = typeof db.onChange === 'function' 
+      ? db.onChange(loadData) 
+      : typeof (db as any).subscribe === 'function' 
+      ? (db as any).subscribe(loadData) 
+      : () => {};
     const interval = setInterval(loadData, 4000);
     return () => {
-      unsub();
+      if (typeof unsub === 'function') unsub();
       clearInterval(interval);
     };
   }, []);
