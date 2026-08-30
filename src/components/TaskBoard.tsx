@@ -869,11 +869,18 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
       return;
     }
 
+    // Allow all standard formats including images, documents, archives, spreadsheets, audio and video
     const taskAllowedTypes = selectedTask.allowedFileTypes || [];
+    const isImageExt = ['png', 'jpg', 'jpeg', 'webp', 'heic', 'gif', 'svg', 'bmp', 'tiff'].includes(cleanExt);
+    
+    // If specific task file restrictions are set, always allow images as well or match type
     if (taskAllowedTypes.length > 0 && !taskAllowedTypes.includes('all') && !taskAllowedTypes.includes('*')) {
-      const isAllowed = taskAllowedTypes.some(t => t.toLowerCase() === cleanExt || t.toLowerCase() === `.${cleanExt}`);
+      const isAllowed = isImageExt || taskAllowedTypes.some(t => {
+        const cleanT = t.toLowerCase().replace(/^\./, '');
+        return cleanT === cleanExt || (cleanT === 'images' && isImageExt) || (cleanT === 'image' && isImageExt);
+      });
       if (!isAllowed) {
-        setUploadError(language === 'ar' ? `يرجى رفع ملف بصيغة مدعومة: ${taskAllowedTypes.join(', ')}` : `Please upload an allowed file format: ${taskAllowedTypes.join(', ')}`);
+        setUploadError(language === 'ar' ? `يرجى رفع ملف بصيغة مدعومة أو صورة: ${taskAllowedTypes.join(', ')}` : `Please upload an allowed file format or image: ${taskAllowedTypes.join(', ')}`);
         return;
       }
     }
@@ -1387,17 +1394,39 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
                 className={`relative border-2 border-dashed rounded-2xl p-8 text-center flex flex-col items-center justify-center gap-3 transition-colors ${dragActive ? 'border-amber-500 bg-amber-50/20' : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950'
                   }`}
               >
-                <input type="file" id="member-file-upload" onChange={handleFileChange} className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
+                <input 
+                  type="file" 
+                  id="member-file-upload" 
+                  accept="image/*, .pdf, .docx, .doc, .zip, .rar, .7z, .xlsx, .pptx, .txt, .mp4, .mov, *" 
+                  onChange={handleFileChange} 
+                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10" 
+                />
                 <UploadCloud className="w-10 h-10 text-slate-400" />
                 {uploadFile ? (
-                  <div className="space-y-1">
-                    <p className="text-xs font-bold text-slate-800 dark:text-slate-100">{customFileName}</p>
-                    <p className="text-[10px] text-slate-400 font-mono">{customFileSize}</p>
+                  <div className="space-y-2 flex flex-col items-center">
+                    {uploadFile.type.startsWith('image/') ? (
+                      <img
+                        src={URL.createObjectURL(uploadFile)}
+                        alt="Preview"
+                        className="w-24 h-24 object-cover rounded-xl border-2 border-amber-500 shadow-md"
+                      />
+                    ) : null}
+                    <div className="space-y-0.5 text-center">
+                      <p className="text-xs font-bold text-slate-800 dark:text-slate-100">{customFileName}</p>
+                      <p className="text-[10px] text-slate-400 font-mono">{customFileSize}</p>
+                    </div>
                   </div>
                 ) : (
                   <div className="space-y-1">
-                    <p className="text-xs font-bold text-slate-600 dark:text-slate-400">اسحب وأفلت ملف الحل هنا أو <span className="text-amber-600 underline">تصفح جهازك</span></p>
-                    <p className="text-[10px] text-slate-400">الصيغ المدعومة: {allowedTypes.join(', ').toUpperCase()}</p>
+                    <p className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                      {language === 'ar' ? 'اسحب وأفلت صورة أو ملف الحل هنا أو ' : 'Drag and drop your solution image/file or '}
+                      <span className="text-amber-600 underline">{language === 'ar' ? 'تصفح جهازك' : 'browse'}</span>
+                    </p>
+                    <p className="text-[10px] text-slate-400">
+                      {language === 'ar' 
+                        ? 'متاح رفع جميع الصيغ: صور (PNG, JPG, WebP), مستندات (PDF, Word), ملفات مضغوطة وفيديو'
+                        : 'All formats supported: Images (PNG, JPG, WebP), PDF, Word, Excel, Archives & Video'}
+                    </p>
                   </div>
                 )}
               </div>
