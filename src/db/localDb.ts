@@ -156,8 +156,8 @@ const taskFromRow = (r: any): Task => ({
   attachments: (r.attachments || []).map((att: any) => typeof att === 'string' ? getPermanentStorageUrl(att) : att),
   subtasks: r.subtasks || [],
   isTeamTask: r.is_team_task || false,
-  isVideoTask: r.is_video_task || false,
-  videoUrl: r.video_url || undefined,
+  isVideoTask: r.is_video_task ?? r.isVideoTask ?? false,
+  videoUrl: r.video_url || r.videoUrl || undefined,
   assignedMemberIds: r.assigned_member_ids || r.assignedMemberIds || [],
   targetAudience: r.target_audience || r.targetAudience || undefined,
 });
@@ -2851,7 +2851,28 @@ class SupabaseDatabase {
 
     // Update Supabase if configured
     if (isSupabaseConfigured && supabase) {
-      supabase.from('tasks').update(updates).eq('id', taskId).then(() => {
+      const supabaseUpdates: Record<string, any> = {};
+      if (updates.name !== undefined) supabaseUpdates.name = updates.name;
+      if (updates.description !== undefined) supabaseUpdates.description = updates.description;
+      if (updates.instructions !== undefined) supabaseUpdates.instructions = updates.instructions;
+      if (updates.priority !== undefined) supabaseUpdates.priority = updates.priority;
+      if (updates.deadline !== undefined) supabaseUpdates.deadline = updates.deadline;
+      if (updates.committee !== undefined) supabaseUpdates.committee = updates.committee;
+      if (updates.department !== undefined) supabaseUpdates.department = updates.department;
+      if (updates.status !== undefined) supabaseUpdates.status = updates.status;
+      if (updates.allowedFileTypes !== undefined) supabaseUpdates.allowed_file_types = updates.allowedFileTypes;
+      if (updates.maxUploadSizeMb !== undefined) supabaseUpdates.max_upload_size_mb = updates.maxUploadSizeMb;
+      if (updates.allowResubmission !== undefined) supabaseUpdates.allow_resubmission = updates.allowResubmission;
+      if (updates.attachments !== undefined) supabaseUpdates.attachments = updates.attachments;
+      if (updates.subtasks !== undefined) supabaseUpdates.subtasks = updates.subtasks;
+      if (updates.isTeamTask !== undefined) supabaseUpdates.is_team_task = updates.isTeamTask;
+      if (updates.isVideoTask !== undefined) supabaseUpdates.is_video_task = updates.isVideoTask;
+      if (updates.videoUrl !== undefined) supabaseUpdates.video_url = updates.videoUrl || null;
+      if (updates.assignedMemberIds !== undefined) supabaseUpdates.assigned_member_ids = updates.assignedMemberIds;
+      if (updates.targetAudience !== undefined) supabaseUpdates.target_audience = updates.targetAudience;
+      if (updates.governorate !== undefined) supabaseUpdates.governorate = updates.governorate;
+
+      supabase.from('tasks').update(supabaseUpdates).eq('id', taskId).then(() => {
         // Successfully updated Supabase
       }).catch(err => {
         console.error('Supabase task update failed:', err);

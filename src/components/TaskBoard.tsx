@@ -7,7 +7,7 @@ import {
   UploadCloud, CheckCircle2, XCircle, RefreshCw, Send, Paperclip, MessageSquare,
   AlertTriangle, File, HelpCircle, ChevronRight, CornerDownRight, Download, Trash2, Search,
   Star, Award, Users, Video, Target, UserCheck, Check, Clock, Eye, Layers, Filter, X,
-  FileSpreadsheet, Loader2
+  FileSpreadsheet, Loader2, Edit3, ExternalLink, Copy
 } from 'lucide-react';
 import { useLanguage } from '../lib/LanguageContext';
 import { downloadCertificate } from '../lib/certificateGenerator';
@@ -60,13 +60,105 @@ class TaskBoardErrorBoundary extends Component<{ children: ReactNode; language: 
   }
 }
 
-const getYouTubeEmbedUrl = (url?: string) => {
-  if (!url) return '';
-  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
-  const match = url.match(regExp);
-  return (match && match[2].length === 11)
-    ? `https://www.youtube.com/embed/${match[2]}?autoplay=0&rel=0`
-    : url;
+interface EmbeddableVideoInfo {
+  type: 'youtube' | 'gdrive' | 'loom' | 'vimeo' | 'direct' | 'other';
+  embedUrl: string;
+  directUrl: string;
+  platformName: string;
+}
+
+const getEmbeddableVideoInfo = (url?: string): EmbeddableVideoInfo | null => {
+  if (!url) return null;
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+
+  // Normalize protocol
+  const fullUrl = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+
+  // 1. YouTube (standard watch, short youtu.be, shorts, live, embed)
+  const ytMatch = fullUrl.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=|shorts\/|live\/)|youtu\.be\/)([^"&?\/ ]{11})/i);
+  if (ytMatch && ytMatch[1]) {
+    const videoId = ytMatch[1];
+    return {
+      type: 'youtube',
+      embedUrl: `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=0&rel=0&enablejsapi=1`,
+      directUrl: fullUrl,
+      platformName: fullUrl.includes('/shorts/') ? 'YouTube Shorts' : 'YouTube',
+    };
+  }
+
+  // 2. Google Drive
+  const gdriveMatch = fullUrl.match(/drive\.google\.com\/(?:file\/d\/([a-zA-Z0-9_-]+)|open\?id=([a-zA-Z0-9_-]+))/i);
+  if (gdriveMatch) {
+    const fileId = gdriveMatch[1] || gdriveMatch[2];
+    return {
+      type: 'gdrive',
+      embedUrl: `https://drive.google.com/file/d/${fileId}/preview`,
+      directUrl: fullUrl,
+      platformName: 'Google Drive',
+    };
+  }
+
+  // 3. Loom
+  const loomMatch = fullUrl.match(/loom\.com\/(?:share|embed)\/([a-zA-Z0-9_-]+)/i);
+  if (loomMatch && loomMatch[1]) {
+    const loomId = loomMatch[1];
+    return {
+      type: 'loom',
+      embedUrl: `https://www.loom.com/embed/${loomId}`,
+      directUrl: fullUrl,
+      platformName: 'Loom',
+    };
+  }
+
+  // 4. Vimeo
+  const vimeoMatch = fullUrl.match(/vimeo\.com\/(?:video\/)?([0-9]+)/i);
+  if (vimeoMatch && vimeoMatch[1]) {
+    const vimeoId = vimeoMatch[1];
+    return {
+      type: 'vimeo',
+      embedUrl: `https://player.vimeo.com/video/${vimeoId}`,
+      directUrl: fullUrl,
+      platformName: 'Vimeo',
+    };
+  }
+
+  // 5. Direct Video Files (.mp4, .webm, .ogg, .mov, etc. or storage video URLs)
+  if (/\.(mp4|webm|ogg|mov|m4v)(\?.*)?$/i.test(fullUrl) || fullUrl.includes('/storage/v1/object/public/')) {
+    return {
+      type: 'direct',
+      embedUrl: fullUrl,
+      directUrl: fullUrl,
+      platformName: 'Direct Video (MP4)',
+    };
+  }
+
+  // 6. Generic web video / URL
+  return {
+    type: 'other',
+    embedUrl: fullUrl,
+    directUrl: fullUrl,
+    platformName: 'Video Link',
+  };
+};
+
+const extractVideoUrlFromTask = (task?: Task | null): string | undefined => {
+  if (!task) return undefined;
+  if (task.videoUrl && task.videoUrl.trim()) return task.videoUrl.trim();
+
+  // Search description and instructions for a video link if not explicitly set
+  const textToScan = `${task.description || ''} ${task.instructions || ''}`;
+  const urlRegex = /(https?:\/\/[^\s<]+)/gi;
+  const matches = textToScan.match(urlRegex);
+  if (matches) {
+    for (const match of matches) {
+      const info = getEmbeddableVideoInfo(match);
+      if (info && info.type !== 'other') {
+        return match;
+      }
+    }
+  }
+  return undefined;
 };
 
 const getCountdown = (deadline?: string) => {
@@ -162,6 +254,19 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
   const [isNewTaskTeam, setIsNewTaskTeam] = useState(false);
   const [newTaskSubtasks, setNewTaskSubtasks] = useState<string[]>([]);
   const [tempSubtaskText, setTempSubtaskText] = useState('');
+
+  // Video and Task Editing States
+  const [copiedVideoUrl, setCopiedVideoUrl] = useState<string | null>(null);
+  const [showEditTaskModal, setShowEditTaskModal] = useState(false);
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editTaskName, setEditTaskName] = useState('');
+  const [editTaskDesc, setEditTaskDesc] = useState('');
+  const [editTaskInst, setEditTaskInst] = useState('');
+  const [editTaskPriority, setEditTaskPriority] = useState<TaskPriority>('Medium');
+  const [editTaskDeadline, setEditTaskDeadline] = useState('');
+  const [editTaskIsVideo, setEditTaskIsVideo] = useState(false);
+  const [editTaskVideoUrl, setEditTaskVideoUrl] = useState('');
+  const [isUpdatingTask, setIsUpdatingTask] = useState(false);
 
   // Target Audience States
   const [targetAudienceMode, setTargetAudienceMode] = useState<'all_committee' | 'department' | 'specific_members'>('all_committee');
@@ -434,12 +539,11 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
       allowResubmission: newTaskResubmit,
       subtasks: newTaskSubtasks.map((text, idx) => ({ id: `sub-${idx}-${Date.now()}`, text })),
       isTeamTask: isNewTaskTeam,
-      isVideoTask: newTaskIsVideo,
+      isVideoTask: newTaskIsVideo || Boolean(newTaskVideoUrl.trim()),
       videoUrl: newTaskVideoUrl.trim() || undefined,
       assignedMemberIds: targetAudienceMode === 'specific_members' ? selectedMemberIds : [],
       targetAudience: targetAudienceMode,
     }, currentUser);
-
 
     setShowCreateTaskModal(false);
     setNewTaskName('');
@@ -454,6 +558,53 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
     setSelectedMemberIds([]);
     setMemberSearchQuery('');
     loadData();
+  };
+
+  const openEditTaskModal = (task: Task) => {
+    setEditingTaskId(task.id);
+    setEditTaskName(task.name || '');
+    setEditTaskDesc(task.description || '');
+    setEditTaskInst(task.instructions || '');
+    setEditTaskPriority(task.priority || 'Medium');
+    setEditTaskDeadline(task.deadline ? new Date(task.deadline).toISOString().slice(0, 16) : '');
+    setEditTaskIsVideo(Boolean(task.isVideoTask));
+    setEditTaskVideoUrl(task.videoUrl || extractVideoUrlFromTask(task) || '');
+    setShowEditTaskModal(true);
+  };
+
+  const handleUpdateTaskSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTaskId || !editTaskName.trim()) return;
+
+    setIsUpdatingTask(true);
+    const effectiveVideoUrl = editTaskVideoUrl.trim();
+    const isVideo = editTaskIsVideo || Boolean(effectiveVideoUrl);
+    const deadlineIso = editTaskDeadline ? new Date(editTaskDeadline).toISOString() : undefined;
+
+    try {
+      const updates = {
+        name: editTaskName.trim(),
+        description: editTaskDesc.trim(),
+        instructions: editTaskInst.trim(),
+        priority: editTaskPriority,
+        deadline: deadlineIso,
+        isVideoTask: isVideo,
+        videoUrl: effectiveVideoUrl || undefined,
+      };
+
+      // 1. Update in local db cache and Supabase
+      db.updateTask(editingTaskId, updates, currentUser);
+
+      // 2. Update selectedTask in-place if currently viewed
+      setSelectedTask(prev => prev && prev.id === editingTaskId ? { ...prev, ...updates } : prev);
+
+      setShowEditTaskModal(false);
+      await loadData();
+    } catch (err) {
+      console.error('Failed to update task:', err);
+    } finally {
+      setIsUpdatingTask(false);
+    }
   };
 
   const handleReviewSubmission = async (e: React.FormEvent) => {
@@ -897,13 +1048,22 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
 
             <div className="flex items-center gap-2">
               {canManageTask && (
-                <button
-                  onClick={() => handleDeleteTask(selectedTask.id)}
-                  className="p-2 rounded-xl bg-red-50 hover:bg-red-500 text-red-500 hover:text-white border border-red-100 dark:bg-red-950/20 dark:border-red-900 transition-colors cursor-pointer"
-                  title="Delete Task"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                <>
+                  <button
+                    onClick={() => openEditTaskModal(selectedTask)}
+                    className="p-2 rounded-xl bg-amber-50 hover:bg-amber-500 text-amber-600 hover:text-white border border-amber-200 dark:bg-amber-950/20 dark:border-amber-800 transition-colors cursor-pointer"
+                    title={language === 'ar' ? 'تعديل بيانات المهمة والفيديو' : 'Edit Task & Video'}
+                  >
+                    <Edit3 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteTask(selectedTask.id)}
+                    className="p-2 rounded-xl bg-red-50 hover:bg-red-500 text-red-500 hover:text-white border border-red-100 dark:bg-red-950/20 dark:border-red-900 transition-colors cursor-pointer"
+                    title="Delete Task"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </>
               )}
               <span className={`px-3 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider ${selectedTask.status === 'Published' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900' : 'bg-slate-100 text-slate-500 border border-slate-150 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
                 }`}>
@@ -1022,24 +1182,103 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
               </div>
             )}
 
-            {/* Video Player */}
-            {(selectedTask.isVideoTask || selectedTask.videoUrl) && selectedTask.videoUrl && (
-              <div className="space-y-3 border-t border-slate-100 dark:border-slate-800 pt-4 mt-4">
-                <div className="flex items-center gap-2 text-xs font-black text-red-600 dark:text-red-400">
-                  <Video className="w-4 h-4" />
-                  <span>{language === 'ar' ? 'فيديو الشرح الإلزامي للتكليف' : 'Mandatory Explanation Video'}</span>
+            {/* Universal Video Player */}
+            {(() => {
+              const effectiveVideoUrl = extractVideoUrlFromTask(selectedTask);
+              const videoInfo = getEmbeddableVideoInfo(effectiveVideoUrl);
+              if (!effectiveVideoUrl || !videoInfo) return null;
+
+              return (
+                <div className="space-y-3 border-t border-slate-100 dark:border-slate-800 pt-4 mt-4 animate-fadeIn">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 text-xs font-black text-red-600 dark:text-red-400">
+                      <div className="w-6 h-6 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-500">
+                        <Video className="w-3.5 h-3.5" />
+                      </div>
+                      <span>
+                        {selectedTask.isVideoTask
+                          ? (language === 'ar' ? 'فيديو الشرح الإلزامي للتكليف' : 'Mandatory Explanation Video')
+                          : (language === 'ar' ? 'فيديو توضيحي وشرح للمهمة' : 'Task Explanation Video')}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-mono">
+                        {videoInfo.platformName}
+                      </span>
+                      {selectedTask.isVideoTask && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400 border border-red-200 dark:border-red-800">
+                          {language === 'ar' ? 'إلزامي' : 'Mandatory'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="aspect-video w-full rounded-2xl overflow-hidden shadow-lg border border-slate-200 dark:border-slate-800 bg-black relative group">
+                    {videoInfo.type === 'direct' ? (
+                      <video
+                        src={videoInfo.directUrl}
+                        controls
+                        playsInline
+                        preload="metadata"
+                        className="w-full h-full object-contain"
+                      />
+                    ) : (
+                      <iframe
+                        src={videoInfo.embedUrl}
+                        title={selectedTask.name}
+                        className="w-full h-full border-0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                        allowFullScreen
+                      />
+                    )}
+                  </div>
+
+                  {/* Video Actions & External Link Helper */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={videoInfo.directUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold transition-all text-[11px]"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5 text-amber-500" />
+                        <span>{language === 'ar' ? 'مشاهدة في نافذة خارجية' : 'Open in New Tab'}</span>
+                      </a>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(videoInfo.directUrl);
+                          setCopiedVideoUrl(videoInfo.directUrl);
+                          setTimeout(() => setCopiedVideoUrl(null), 2500);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold transition-all text-[11px] cursor-pointer"
+                      >
+                        {copiedVideoUrl === videoInfo.directUrl ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-500" />
+                            <span className="text-emerald-600 dark:text-emerald-400">{language === 'ar' ? 'تم نسخ الرابط!' : 'Copied!'}</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5 text-slate-400" />
+                            <span>{language === 'ar' ? 'نسخ الرابط' : 'Copy Link'}</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    {videoInfo.type === 'gdrive' && (
+                      <span className="text-[10px] text-slate-400">
+                        {language === 'ar' ? '💡 تأكد من تفعيل صلاحية المشاركة للجميع على جوجل درايف' : 'Ensure Google Drive sharing is set to anyone with link'}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <div className="aspect-video w-full rounded-2xl overflow-hidden shadow-lg border border-slate-200 dark:border-slate-800 bg-black">
-                  <iframe
-                    src={getYouTubeEmbedUrl(selectedTask.videoUrl)}
-                    title={selectedTask.name}
-                    className="w-full h-full"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                  />
-                </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
         </div>
 
@@ -1894,7 +2133,15 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
                           <span>{translateCommittee(t.committee)}</span>
                           <span className={getCountdown(t.deadline).className}>{getCountdown(t.deadline).text}</span>
                         </div>
-                        <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 leading-tight">{t.name}</h4>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 leading-tight">{t.name}</h4>
+                          {Boolean(t.videoUrl || t.isVideoTask || extractVideoUrlFromTask(t)) && (
+                            <span className="text-[9px] bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400 border border-red-200 dark:border-red-800 px-1.5 py-0.2 rounded font-bold flex items-center gap-1 shrink-0">
+                              <Video className="w-2.5 h-2.5" />
+                              <span>{t.isVideoTask ? (language === 'ar' ? 'فيديو إلزامي' : 'Mandatory') : (language === 'ar' ? 'فيديو شرح' : 'Video')}</span>
+                            </span>
+                          )}
+                        </div>
                         <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2">{t.description}</p>
                       </div>
                     ))
@@ -1951,10 +2198,18 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
                         </div>
                       </div>
 
-                      <h4 className={`text-xs font-bold leading-tight mb-1 flex items-center gap-1.5 ${isActive ? 'text-amber-700 dark:text-amber-400' : 'text-slate-800 dark:text-slate-200'}`}>
-                        {task.isTeamTask && <Users className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
-                        <span>{task.name}</span>
-                      </h4>
+                      <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                        <h4 className={`text-xs font-bold leading-tight flex items-center gap-1.5 ${isActive ? 'text-amber-700 dark:text-amber-400' : 'text-slate-800 dark:text-slate-200'}`}>
+                          {task.isTeamTask && <Users className="w-3.5 h-3.5 text-amber-500 shrink-0" />}
+                          <span>{task.name}</span>
+                        </h4>
+                        {Boolean(task.videoUrl || task.isVideoTask || extractVideoUrlFromTask(task)) && (
+                          <span className="text-[9px] bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400 border border-red-200 dark:border-red-800 px-1.5 py-0.2 rounded font-bold flex items-center gap-1 shrink-0">
+                            <Video className="w-2.5 h-2.5" />
+                            <span>{task.isVideoTask ? (language === 'ar' ? 'فيديو إلزامي' : 'Mandatory') : (language === 'ar' ? 'فيديو شرح' : 'Video')}</span>
+                          </span>
+                        )}
+                      </div>
 
                       <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 pt-2 border-t border-slate-100 dark:border-slate-800 mt-2 font-mono">
                         <div className="flex flex-col gap-0.5">
@@ -2316,6 +2571,36 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
                 </div>
               )}
 
+              {/* Video Section */}
+              <div className="space-y-2 border-t border-slate-100 dark:border-slate-800 pt-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-bold text-red-500 uppercase tracking-widest flex items-center gap-1.5">
+                    <Video className="w-3.5 h-3.5" />
+                    <span>{language === 'ar' ? 'فيديو الشرح والتوضيح للمهمة (اختياري / إلزامي)' : 'Task Explanation Video (Optional / Mandatory)'}</span>
+                  </label>
+                  {newTaskVideoUrl.trim() && (() => {
+                    const info = getEmbeddableVideoInfo(newTaskVideoUrl);
+                    return info ? (
+                      <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400 border border-red-200 dark:border-red-800 font-mono">
+                        ✓ {info.platformName}
+                      </span>
+                    ) : null;
+                  })()}
+                </div>
+                <input
+                  type="url"
+                  value={newTaskVideoUrl}
+                  onChange={(e) => setNewTaskVideoUrl(e.target.value)}
+                  placeholder={language === 'ar' ? 'رابط يوتيوب، شورتس، جوجل درايف، لوم، أو رابط فيديو مباشر...' : 'YouTube, Shorts, Google Drive, Loom, Vimeo, or MP4 URL...'}
+                  className="w-full bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:border-red-500 text-slate-800 dark:text-slate-100 font-mono"
+                />
+                <p className="text-[10px] text-slate-400">
+                  {language === 'ar'
+                    ? 'يدعم المنصة تلقائياً: YouTube, YouTube Shorts, Google Drive, Loom, Vimeo, والروابط المباشرة.'
+                    : 'Auto-detects YouTube, Shorts, Google Drive, Loom, Vimeo, and direct video links.'}
+                </p>
+              </div>
+
               {/* Policies & Video */}
               <div className="space-y-2 border-t border-slate-100 dark:border-slate-800 pt-3">
                 <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">سياسات وإعدادات التسليم</label>
@@ -2346,19 +2631,6 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
                   </label>
                 </div>
               </div>
-
-              {newTaskIsVideo && (
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-red-500 uppercase tracking-widest">رابط فيديو الشرح (YouTube)</label>
-                  <input
-                    type="url"
-                    value={newTaskVideoUrl}
-                    onChange={(e) => setNewTaskVideoUrl(e.target.value)}
-                    placeholder="https://www.youtube.com/watch?v=..."
-                    className="w-full bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:border-red-500"
-                  />
-                </div>
-              )}
 
               <button
                 type="submit"
@@ -2475,6 +2747,149 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
                 <button
                   type="button"
                   onClick={() => setShowExtendDeadlineModal(false)}
+                  className="px-4 py-3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold hover:bg-slate-200 transition-colors cursor-pointer"
+                >
+                  {language === 'ar' ? 'إلغاء' : 'Cancel'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT TASK MODAL */}
+      {showEditTaskModal && editingTaskId && (
+        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 text-start animate-fadeIn max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+                  <Edit3 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm text-slate-900 dark:text-white">
+                    {language === 'ar' ? 'تعديل بيانات التكليف والفيديو' : 'Edit Task & Video'}
+                  </h3>
+                  <p className="text-[10px] text-slate-400 truncate max-w-xs">{editTaskName || editingTaskId}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowEditTaskModal(false)}
+                className="p-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateTaskSubmit} className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{language === 'ar' ? 'عنوان المهمة' : 'Task Title'}</label>
+                <input
+                  type="text"
+                  required
+                  value={editTaskName}
+                  onChange={(e) => setEditTaskName(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-800 dark:text-slate-100 font-bold focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{language === 'ar' ? 'تفاصيل وشرح المهمة' : 'Description'}</label>
+                <textarea
+                  required
+                  rows={3}
+                  value={editTaskDesc}
+                  onChange={(e) => setEditTaskDesc(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{language === 'ar' ? 'إرشادات التسليم' : 'Instructions'}</label>
+                <textarea
+                  rows={2}
+                  value={editTaskInst}
+                  onChange={(e) => setEditTaskInst(e.target.value)}
+                  className="w-full bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              {/* Video URL & Format Detection */}
+              <div className="space-y-2 border-t border-slate-100 dark:border-slate-800 pt-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-bold text-red-500 uppercase tracking-widest flex items-center gap-1.5">
+                    <Video className="w-3.5 h-3.5" />
+                    <span>{language === 'ar' ? 'رابط فيديو الشرح (YouTube, Shorts, Drive, Loom, MP4...)' : 'Explanation Video URL'}</span>
+                  </label>
+                  {editTaskVideoUrl.trim() && (() => {
+                    const info = getEmbeddableVideoInfo(editTaskVideoUrl);
+                    return info ? (
+                      <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400 border border-red-200 dark:border-red-800 font-mono">
+                        ✓ {info.platformName}
+                      </span>
+                    ) : null;
+                  })()}
+                </div>
+                <input
+                  type="url"
+                  value={editTaskVideoUrl}
+                  onChange={(e) => setEditTaskVideoUrl(e.target.value)}
+                  placeholder="https://www.youtube.com/watch?v=..."
+                  className="w-full bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:border-red-500 text-slate-800 dark:text-slate-100 font-mono"
+                />
+                <label className="flex items-center gap-2 cursor-pointer pt-1">
+                  <input
+                    type="checkbox"
+                    checked={editTaskIsVideo}
+                    onChange={(e) => setEditTaskIsVideo(e.target.checked)}
+                    className="accent-amber-500"
+                  />
+                  <span className="text-xs font-semibold text-red-500">{language === 'ar' ? 'فيديو إلزامي للمهمة' : 'Mandatory Video'}</span>
+                </label>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 border-t border-slate-100 dark:border-slate-800 pt-3">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{language === 'ar' ? 'الأولوية' : 'Priority'}</label>
+                  <select
+                    value={editTaskPriority}
+                    onChange={(e) => setEditTaskPriority(e.target.value as any)}
+                    className="w-full bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-800 dark:text-slate-100 font-bold"
+                  >
+                    <option value="Low">{language === 'ar' ? 'منخفضة' : 'Low'}</option>
+                    <option value="Medium">{language === 'ar' ? 'متوسطة' : 'Medium'}</option>
+                    <option value="High">{language === 'ar' ? 'عالية' : 'High'}</option>
+                    <option value="Urgent">{language === 'ar' ? 'عاجلة' : 'Urgent'}</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{language === 'ar' ? 'الموعد النهائي' : 'Deadline'}</label>
+                  <input
+                    type="datetime-local"
+                    value={editTaskDeadline}
+                    onChange={(e) => setEditTaskDeadline(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-800 dark:text-slate-100 font-bold"
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="submit"
+                  disabled={isUpdatingTask}
+                  className="flex-1 py-3 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {isUpdatingTask ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Check className="w-4 h-4" />
+                  )}
+                  <span>{isUpdatingTask ? (language === 'ar' ? 'جاري الحفظ...' : 'Saving...') : (language === 'ar' ? 'حفظ التعديلات' : 'Save Changes')}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowEditTaskModal(false)}
                   className="px-4 py-3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold hover:bg-slate-200 transition-colors cursor-pointer"
                 >
                   {language === 'ar' ? 'إلغاء' : 'Cancel'}
