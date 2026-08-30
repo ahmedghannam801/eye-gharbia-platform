@@ -7,7 +7,7 @@ import {
   UploadCloud, CheckCircle2, XCircle, RefreshCw, Send, Paperclip, MessageSquare,
   AlertTriangle, File, HelpCircle, ChevronRight, CornerDownRight, Download, Trash2, Search,
   Star, Award, Users, Video, Target, UserCheck, Check, Clock, Eye, Layers, Filter, X,
-  FileSpreadsheet, Loader2, Edit3, ExternalLink, Copy
+  FileSpreadsheet, Loader2, Edit3, ExternalLink, Copy, Play
 } from 'lucide-react';
 import { useLanguage } from '../lib/LanguageContext';
 import { downloadCertificate } from '../lib/certificateGenerator';
