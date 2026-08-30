@@ -170,12 +170,12 @@ const extractVideoUrlFromTask = (task?: Task | null): string | undefined => {
   return undefined;
 };
 
-// Safe, Resilience-First Task Video Player Component with Mobile Optimization
+// Safe, Resilience-First Task Video Player Component with HD Thumbnail Facade & Mobile Playback
 const TaskVideoPlayer: React.FC<{ task: Task; language: string }> = ({ task, language }) => {
   const effectiveVideoUrl = extractVideoUrlFromTask(task);
   const videoInfo = getEmbeddableVideoInfo(effectiveVideoUrl);
   const [copied, setCopied] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(true);
+  const [isActivated, setIsActivated] = useState(false);
   const isAr = language === 'ar';
 
   if (!effectiveVideoUrl || !videoInfo) return null;
@@ -189,6 +189,7 @@ const TaskVideoPlayer: React.FC<{ task: Task; language: string }> = ({ task, lan
   // YouTube specific video ID
   const ytMatch = effectiveVideoUrl.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=|shorts\/|live\/)|youtu\.be\/)([^"&?\/ ]{11})/i);
   const ytVideoId = ytMatch ? ytMatch[1] : null;
+  const ytThumbnail = ytVideoId ? `https://img.youtube.com/vi/${ytVideoId}/hqdefault.jpg` : null;
 
   return (
     <div className="space-y-3 border-t border-slate-150 dark:border-slate-800 pt-4 mt-4 animate-fadeIn">
@@ -219,8 +220,8 @@ const TaskVideoPlayer: React.FC<{ task: Task; language: string }> = ({ task, lan
 
       {/* Video Viewport Container */}
       <div 
-        className="aspect-video w-full rounded-2xl overflow-hidden shadow-2xl border border-slate-700/50 bg-black relative group flex items-center justify-center"
-        style={{ backgroundColor: '#000000', minHeight: '200px' }}
+        className="aspect-video w-full rounded-2xl overflow-hidden shadow-2xl border border-slate-800 bg-slate-950 relative group flex items-center justify-center"
+        style={{ backgroundColor: '#090d16', minHeight: '200px' }}
       >
         {videoInfo.type === 'direct' ? (
           <video
@@ -231,32 +232,37 @@ const TaskVideoPlayer: React.FC<{ task: Task; language: string }> = ({ task, lan
             className="w-full h-full object-contain"
             style={{ backgroundColor: '#000000' }}
           />
-        ) : videoInfo.type === 'other' ? (
-          <div className="p-6 text-center flex flex-col items-center justify-center gap-3 w-full h-full bg-gradient-to-br from-slate-900 via-slate-950 to-blue-950 text-white">
-            <div className="w-14 h-14 rounded-2xl bg-red-500/20 border border-red-500/30 flex items-center justify-center text-red-400">
-              <Video className="w-7 h-7" />
+        ) : ytVideoId && !isActivated ? (
+          // YouTube Interactive Poster Facade (100% immune to white screen)
+          <div 
+            onClick={() => setIsActivated(true)}
+            className="w-full h-full relative cursor-pointer group flex items-center justify-center overflow-hidden"
+            style={{ backgroundColor: '#090d16' }}
+          >
+            {ytThumbnail && (
+              <img 
+                src={ytThumbnail} 
+                alt="Video Thumbnail" 
+                className="w-full h-full object-cover opacity-80 group-hover:opacity-95 group-hover:scale-105 transition-all duration-300"
+              />
+            )}
+            <div className="absolute inset-0 bg-black/40 group-hover:bg-black/20 transition-all flex items-center justify-center">
+              <div className="w-16 h-16 rounded-full bg-red-600 hover:bg-red-500 text-white flex items-center justify-center shadow-2xl shadow-red-600/60 group-hover:scale-110 transition-transform cursor-pointer border-2 border-white/40">
+                <Play className="w-8 h-8 fill-current ml-1" />
+              </div>
             </div>
-            <div className="space-y-1">
-              <p className="text-sm font-black text-white">
-                {isAr ? 'مشاهدة فيديو الشرح مباشرة' : 'Watch Task Video'}
-              </p>
-              <p className="text-xs text-slate-400">
-                {videoInfo.platformName} • {isAr ? 'انقر على الزر للمشاهدة بأعلى جودة' : 'Click below to watch directly'}
-              </p>
+            <div className="absolute bottom-3 right-3 left-3 flex items-center justify-between pointer-events-none">
+              <span className="text-[11px] font-bold text-white bg-black/75 backdrop-blur-md px-3 py-1 rounded-xl border border-white/10">
+                ▶️ {isAr ? 'اضغط للتشغيل الفوري داخل المنصة' : 'Click to Play Inside Platform'}
+              </span>
+              <span className="text-[10px] font-mono text-white/90 bg-red-600/90 px-2 py-0.5 rounded-lg">
+                YouTube
+              </span>
             </div>
-            <a
-              href={videoInfo.directUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-1 px-6 py-2.5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white rounded-xl text-xs font-black shadow-lg shadow-red-600/30 flex items-center gap-2 transition-all cursor-pointer"
-            >
-              <ExternalLink className="w-4 h-4" />
-              <span>{isAr ? 'تشغيل الفيديو في نافذة مستقلة 🚀' : 'Open Video in New Tab 🚀'}</span>
-            </a>
           </div>
         ) : (
           <iframe
-            src={videoInfo.embedUrl}
+            src={ytVideoId ? `https://www.youtube.com/embed/${ytVideoId}?autoplay=1&playsinline=1&rel=0&modestbranding=1&enablejsapi=1` : videoInfo.embedUrl}
             title={task.name}
             style={{ width: '100%', height: '100%', border: 0, backgroundColor: '#000000' }}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
@@ -268,6 +274,17 @@ const TaskVideoPlayer: React.FC<{ task: Task; language: string }> = ({ task, lan
       {/* Action Bar & Quick Open Buttons */}
       <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
         <div className="flex flex-wrap items-center gap-2">
+          {ytVideoId && isActivated && (
+            <button
+              type="button"
+              onClick={() => setIsActivated(false)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold transition-all text-[11px] cursor-pointer"
+            >
+              <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
+              <span>{isAr ? 'إعادة ضبط المشغل' : 'Reset Player'}</span>
+            </button>
+          )}
+
           <a
             href={videoInfo.directUrl}
             target="_blank"
