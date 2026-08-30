@@ -297,6 +297,8 @@ const attendanceFromRow = (r: any): AttendanceRecord => ({
   checkedInAt: r.checked_in_at,
   isExcused: r.is_excused ?? false,
   excuseReason: r.excuse_reason || undefined,
+  feedback: r.feedback || undefined,
+  rating: r.rating || undefined,
 });
 
 const workPlanFromRow = (r: any): WorkPlan => ({
@@ -1726,6 +1728,7 @@ class SupabaseDatabase {
 
     // Check existing in local cache / DB
     const allUsers = this.getUsers();
+    const isFirstUser = allUsers.length === 0;
     const existingLocal = allUsers.find(u => u.email?.toLowerCase().trim() === email);
     if (existingLocal) {
       return { success: false, error: 'يوجد حساب آخر مسجل بهذا البريد الإلكتروني بالفعل.' };

@@ -896,7 +896,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
         // Weekly Quizzes / Trivia Data
         const allQuizzes = db.getQuizzes();
         const activeQuiz = allQuizzes[0] || null;
-        const quizSubs = db.getQuizSubmissions ? db.getQuizSubmissions() : [];
+        const quizSubs = activeQuiz && (db as any).getQuizSubmissions ? (db as any).getQuizSubmissions(activeQuiz.id) : [];
         const hasSolvedActiveQuiz = activeQuiz ? quizSubs.some((s: any) => s.quizId === activeQuiz.id && s.userId === currentUser.id) : false;
 
         return (
@@ -951,7 +951,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs font-black text-slate-900 dark:text-white truncate">{language === 'ar' ? 'لوحة الصدارة والرتب' : 'Leaderboard'}</p>
-                  <p className="text-[10px] text-amber-700 dark:text-amber-400 font-bold">{currentUser.points || 0} {language === 'ar' ? 'نقطة تميز' : 'pts'}</p>
+                  <p className="text-[10px] text-amber-700 dark:text-amber-400 font-bold">{(currentUser as any).points || (currentUser as any).bonusPoints || 0} {language === 'ar' ? 'نقطة تميز' : 'pts'}</p>
                 </div>
               </button>
 
