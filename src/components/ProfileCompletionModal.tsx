@@ -44,8 +44,11 @@ const DEPARTMENTS = COMMITTEE_STRUCTURE;
 
 const STORAGE_KEY = 'eye_profile_completed_v2';
 
-/** Returns true if the profile is missing critical fields or has legacy generic values */
+/** Returns true if the profile is missing critical fields or has legacy generic values (Members only) */
 export function isProfileIncomplete(user: UserProfile): boolean {
+  // Leaders and executive roles are strictly exempt from profile completion prompts
+  if (!user || user.role !== 'Member') return false;
+
   // 1. Name Check: Must have at least two parts and no digits
   const trimmedName = (user.fullName || '').trim();
   const nameBad = !trimmedName || !trimmedName.includes(' ') || /\d/.test(trimmedName);

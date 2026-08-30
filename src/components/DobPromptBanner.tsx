@@ -13,8 +13,8 @@ export const DobPromptBanner: React.FC<DobPromptBannerProps> = ({ currentUser, o
   const [isDismissed, setIsDismissed] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
 
-  // If user already has a DOB or user manually dismissed, hide
-  if (currentUser.dateOfBirth || isDismissed) return null;
+  // If user is not a regular member, already has a DOB, or manually dismissed, hide
+  if (currentUser.role !== 'Member' || currentUser.dateOfBirth || isDismissed) return null;
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();

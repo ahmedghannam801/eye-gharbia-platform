@@ -2561,12 +2561,12 @@ class SupabaseDatabase {
         }
       }
 
-      // C) Send Targeted Notification ONLY to people NOT in any committee
-      // (Exclude Executive Leadership: Super Admin, Coordinator, Deputy Coordinator)
-      const isExec = user.role === 'Super Admin' || user.role === 'Coordinator' || user.role === 'Deputy Coordinator';
+      // C) Send Targeted Notification ONLY to regular members NOT in any committee
+      // (Leaders, Heads, Vices, Coordinators, Super Admins are strictly exempt)
+      const isRegularMember = user.role === 'Member';
       const hasNoCommittee = !user.committee || user.committee === 'None' || user.committee.trim() === '' || user.committee === 'General';
 
-      if (!isExec && hasNoCommittee) {
+      if (isRegularMember && hasNoCommittee) {
         const dedupKey = `notif_dedup_no_comm_${user.id}`;
         const alreadyNotified = localStorage.getItem(dedupKey);
         // Only notify once every 24 hours per user
@@ -2582,9 +2582,9 @@ class SupabaseDatabase {
         }
       }
 
-      // D) Send Targeted Notification to HR members who only selected generic HRM without sub-branch
+      // D) Send Targeted Notification to regular HR members who only selected generic HRM without sub-branch
       const isGenericHrm = user.committee === 'HR' && (!user.department || user.department === 'HRM' || user.department === 'None' || user.department === 'General');
-      if (!isExec && isGenericHrm && user.role === 'Member') {
+      if (isRegularMember && isGenericHrm) {
         const dedupKey = `notif_dedup_hrm_branch_${user.id}`;
         const alreadyNotified = localStorage.getItem(dedupKey);
         if (!alreadyNotified || Date.now() - Number(alreadyNotified) > 86400000) {
@@ -2599,12 +2599,12 @@ class SupabaseDatabase {
         }
       }
 
-      // E) Send Targeted Notification ONLY to people with incomplete essential data
+      // E) Send Targeted Notification ONLY to regular members with incomplete essential data
       const isNameIncomplete = !user.fullName || !user.fullName.trim().includes(' ') || /\d/.test(user.fullName);
       const isPhoneIncomplete = !user.phoneNumber || user.phoneNumber === '+201000000000' || user.phoneNumber.trim().length < 8;
       const isDobIncomplete = !user.dateOfBirth;
 
-      if (isNameIncomplete || isPhoneIncomplete || isDobIncomplete) {
+      if (isRegularMember && (isNameIncomplete || isPhoneIncomplete || isDobIncomplete)) {
         const dedupKey = `notif_dedup_incomplete_${user.id}`;
         const alreadyNotified = localStorage.getItem(dedupKey);
         if (!alreadyNotified || Date.now() - Number(alreadyNotified) > 86400000) {
