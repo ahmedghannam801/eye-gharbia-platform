@@ -13,7 +13,7 @@ import { CareerCompass } from './CareerCompass';
 
 const COMMITTEES_OPTIONS = ['HR', 'PR', 'SM', 'OR'];
 const COMMITTEE_DEPTS_MAPPING: Record<string, string[]> = {
-  HR: ['HRM', 'HRS', 'HRIS', 'HRD'],
+  HR: ['HR OF PR', 'HR OF SM', 'HR OF OR', 'HRD', 'HRS', 'HRIS'],
   PR: ['EPR', 'IPR'],
   SM: ['Content', 'Graphic Design', 'Photography', 'Video Editing'],
   OR: ['VIP', 'Planning', 'Coordination', 'Logistics'],

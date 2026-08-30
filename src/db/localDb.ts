@@ -2578,7 +2578,24 @@ class SupabaseDatabase {
         }
       }
 
-      // D) Send Targeted Notification ONLY to people with incomplete essential data
+      // D) Send Targeted Notification to HR members who only selected generic HRM without sub-branch
+      const isGenericHrm = user.committee === 'HR' && (!user.department || user.department === 'HRM' || user.department === 'None' || user.department === 'General');
+      if (!isExec && isGenericHrm && user.role === 'Member') {
+        const dedupKey = `notif_dedup_hrm_branch_${user.id}`;
+        const alreadyNotified = localStorage.getItem(dedupKey);
+        if (!alreadyNotified || Date.now() - Number(alreadyNotified) > 86400000) {
+          localStorage.setItem(dedupKey, String(Date.now()));
+          this.addNotification(
+            user.id,
+            '⚠️ تحديد فرعك في لجنة الموارد البشرية',
+            `مرحباً ${user.fullName}، لجنة الموارد البشرية تنقسم إلى فروع تنفيذية (HR OF PR / HR OF SM / HR OF OR). يرجى التوجه لملفك الشخصي واختيار فرعك التابع له لتصلك المهام والتقييمات الخاصة به بدقة.`,
+            'warning'
+          );
+          results.notifiedIncompleteCount++;
+        }
+      }
+
+      // E) Send Targeted Notification ONLY to people with incomplete essential data
       const isNameIncomplete = !user.fullName || !user.fullName.trim().includes(' ') || /\d/.test(user.fullName);
       const isPhoneIncomplete = !user.phoneNumber || user.phoneNumber === '+201000000000' || user.phoneNumber.trim().length < 8;
       const isDobIncomplete = !user.dateOfBirth;
