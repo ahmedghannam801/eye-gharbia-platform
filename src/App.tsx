@@ -21,34 +21,66 @@ import { OzyAIAssistant } from './components/OzyAIAssistant';
 import { DeveloperWatermark } from './components/DeveloperWatermark';
 import { playRoyalNotificationSound } from './lib/notificationSound';
 
-// Heavy Workspace Views - Lazy Loaded for Maximum Page Speed & Performance
-const TaskBoard = lazy(() => import('./components/TaskBoard').then(m => ({ default: m.TaskBoard })));
-const Announcements = lazy(() => import('./components/Announcements').then(m => ({ default: m.Announcements })));
-const MemberProfile = lazy(() => import('./components/MemberProfile').then(m => ({ default: m.MemberProfile })));
-const SettingsPanel = lazy(() => import('./components/SettingsPanel').then(m => ({ default: m.SettingsPanel })));
-const Leaderboard = lazy(() => import('./components/Leaderboard').then(m => ({ default: m.Leaderboard })));
-const SocialMediaView = lazy(() => import('./components/SocialMediaView').then(m => ({ default: m.SocialMediaView })));
-const MeetingAttendance = lazy(() => import('./components/MeetingAttendance').then(m => ({ default: m.MeetingAttendance })));
-const FeedbackSystem = lazy(() => import('./components/FeedbackSystem').then(m => ({ default: m.FeedbackSystem })));
-const WorkPlansOKR = lazy(() => import('./components/WorkPlansOKR').then(m => ({ default: m.WorkPlansOKR })));
-const IdeaBank = lazy(() => import('./components/IdeaBank').then(m => ({ default: m.IdeaBank })));
-const InternalAcademy = lazy(() => import('./components/InternalAcademy').then(m => ({ default: m.InternalAcademy })));
-const ExecutiveReportBuilder = lazy(() => import('./components/ExecutiveReportBuilder').then(m => ({ default: m.ExecutiveReportBuilder })));
-const CommitteeChat = lazy(() => import('./components/CommitteeChat').then(m => ({ default: m.CommitteeChat })));
-const WeeklyChallenges = lazy(() => import('./components/WeeklyChallenges').then(m => ({ default: m.WeeklyChallenges })));
-const TemplatesHub = lazy(() => import('./components/TemplatesHub').then(m => ({ default: m.TemplatesHub })));
-const RewardsShop = lazy(() => import('./components/RewardsShop').then(m => ({ default: m.RewardsShop })));
-const PerformanceRadar = lazy(() => import('./components/PerformanceRadar').then(m => ({ default: m.PerformanceRadar })));
-const WeeklyTrivia = lazy(() => import('./components/WeeklyTrivia').then(m => ({ default: m.WeeklyTrivia })));
-const CertificateGenerator = lazy(() => import('./components/CertificateGenerator').then(m => ({ default: m.CertificateGenerator })));
-const ExcusesAndFreezeModal = lazy(() => import('./components/ExcusesAndFreezeModal').then(m => ({ default: m.ExcusesAndFreezeModal })));
-const PollsManager = lazy(() => import('./components/PollsManager').then(m => ({ default: m.PollsManager })));
-const RulesAndBylaws = lazy(() => import('./components/RulesAndBylaws').then(m => ({ default: m.RulesAndBylaws })));
-const MemoryWall = lazy(() => import('./components/MemoryWall').then(m => ({ default: m.MemoryWall })));
-const MemberOfTheMonth = lazy(() => import('./components/MemberOfTheMonth').then(m => ({ default: m.MemberOfTheMonth })));
-const DigitalPortfolio = lazy(() => import('./components/DigitalPortfolio').then(m => ({ default: m.DigitalPortfolio })));
-const DisciplinaryRecords = lazy(() => import('./components/DisciplinaryRecords').then(m => ({ default: m.DisciplinaryRecords })));
-const SocialPosterMaker = lazy(() => import('./components/SocialPosterMaker').then(m => ({ default: m.SocialPosterMaker })));
+import { ErrorBoundary } from './components/ErrorBoundary';
+
+// Helper for safe lazy loading with auto-recovery on new deployment chunk changes
+function safeLazy<T extends React.ComponentType<any>>(
+  factory: () => Promise<{ default: T } | any>,
+  componentName?: string
+) {
+  return lazy(async () => {
+    try {
+      const module = await factory();
+      if (module && module.default) return { default: module.default };
+      if (componentName && module && module[componentName]) return { default: module[componentName] };
+      return module;
+    } catch (error: any) {
+      console.warn(`[safeLazy] Chunk load error for ${componentName || 'component'}, reloading...`, error);
+      const isChunkFailure =
+        error?.message?.includes('Failed to fetch dynamically imported module') ||
+        error?.message?.includes('Importing a module script failed') ||
+        error?.name === 'ChunkLoadError';
+      if (isChunkFailure) {
+        const key = `chunk_reload_${componentName || 'view'}`;
+        const lastAttempt = sessionStorage.getItem(key);
+        if (!lastAttempt || Date.now() - Number(lastAttempt) > 6000) {
+          sessionStorage.setItem(key, String(Date.now()));
+          window.location.reload();
+        }
+      }
+      throw error;
+    }
+  });
+}
+
+// Heavy Workspace Views - Lazy Loaded with Safe Auto-Recovery
+const TaskBoard = safeLazy(() => import('./components/TaskBoard').then(m => ({ default: m.TaskBoard })), 'TaskBoard');
+const Announcements = safeLazy(() => import('./components/Announcements').then(m => ({ default: m.Announcements })), 'Announcements');
+const MemberProfile = safeLazy(() => import('./components/MemberProfile').then(m => ({ default: m.MemberProfile })), 'MemberProfile');
+const SettingsPanel = safeLazy(() => import('./components/SettingsPanel').then(m => ({ default: m.SettingsPanel })), 'SettingsPanel');
+const Leaderboard = safeLazy(() => import('./components/Leaderboard').then(m => ({ default: m.Leaderboard })), 'Leaderboard');
+const SocialMediaView = safeLazy(() => import('./components/SocialMediaView').then(m => ({ default: m.SocialMediaView })), 'SocialMediaView');
+const MeetingAttendance = safeLazy(() => import('./components/MeetingAttendance').then(m => ({ default: m.MeetingAttendance })), 'MeetingAttendance');
+const FeedbackSystem = safeLazy(() => import('./components/FeedbackSystem').then(m => ({ default: m.FeedbackSystem })), 'FeedbackSystem');
+const WorkPlansOKR = safeLazy(() => import('./components/WorkPlansOKR').then(m => ({ default: m.WorkPlansOKR })), 'WorkPlansOKR');
+const IdeaBank = safeLazy(() => import('./components/IdeaBank').then(m => ({ default: m.IdeaBank })), 'IdeaBank');
+const InternalAcademy = safeLazy(() => import('./components/InternalAcademy').then(m => ({ default: m.InternalAcademy })), 'InternalAcademy');
+const ExecutiveReportBuilder = safeLazy(() => import('./components/ExecutiveReportBuilder').then(m => ({ default: m.ExecutiveReportBuilder })), 'ExecutiveReportBuilder');
+const CommitteeChat = safeLazy(() => import('./components/CommitteeChat').then(m => ({ default: m.CommitteeChat })), 'CommitteeChat');
+const WeeklyChallenges = safeLazy(() => import('./components/WeeklyChallenges').then(m => ({ default: m.WeeklyChallenges })), 'WeeklyChallenges');
+const TemplatesHub = safeLazy(() => import('./components/TemplatesHub').then(m => ({ default: m.TemplatesHub })), 'TemplatesHub');
+const RewardsShop = safeLazy(() => import('./components/RewardsShop').then(m => ({ default: m.RewardsShop })), 'RewardsShop');
+const PerformanceRadar = safeLazy(() => import('./components/PerformanceRadar').then(m => ({ default: m.PerformanceRadar })), 'PerformanceRadar');
+const WeeklyTrivia = safeLazy(() => import('./components/WeeklyTrivia').then(m => ({ default: m.WeeklyTrivia })), 'WeeklyTrivia');
+const CertificateGenerator = safeLazy(() => import('./components/CertificateGenerator').then(m => ({ default: m.CertificateGenerator })), 'CertificateGenerator');
+const ExcusesAndFreezeModal = safeLazy(() => import('./components/ExcusesAndFreezeModal').then(m => ({ default: m.ExcusesAndFreezeModal })), 'ExcusesAndFreezeModal');
+const PollsManager = safeLazy(() => import('./components/PollsManager').then(m => ({ default: m.PollsManager })), 'PollsManager');
+const RulesAndBylaws = safeLazy(() => import('./components/RulesAndBylaws').then(m => ({ default: m.RulesAndBylaws })), 'RulesAndBylaws');
+const MemoryWall = safeLazy(() => import('./components/MemoryWall').then(m => ({ default: m.MemoryWall })), 'MemoryWall');
+const MemberOfTheMonth = safeLazy(() => import('./components/MemberOfTheMonth').then(m => ({ default: m.MemberOfTheMonth })), 'MemberOfTheMonth');
+const DigitalPortfolio = safeLazy(() => import('./components/DigitalPortfolio').then(m => ({ default: m.DigitalPortfolio })), 'DigitalPortfolio');
+const DisciplinaryRecords = safeLazy(() => import('./components/DisciplinaryRecords').then(m => ({ default: m.DisciplinaryRecords })), 'DisciplinaryRecords');
+const SocialPosterMaker = safeLazy(() => import('./components/SocialPosterMaker').then(m => ({ default: m.SocialPosterMaker })), 'SocialPosterMaker');
 
 const ViewSkeletonLoader = () => (
   <div className="p-6 space-y-6 animate-pulse">
@@ -564,9 +596,11 @@ export default function App() {
           <OccasionBanner currentUser={currentUser} />
 
           <div key={currentView} className="animate-page-enter min-h-full">
-            <Suspense fallback={<ViewSkeletonLoader />}>
-              {renderWorkspaceView()}
-            </Suspense>
+            <ErrorBoundary fallbackTitle="تعذر تحميل محتوى هذه الصفحة">
+              <Suspense fallback={<ViewSkeletonLoader />}>
+                {renderWorkspaceView()}
+              </Suspense>
+            </ErrorBoundary>
           </div>
         </main>
       </div>
