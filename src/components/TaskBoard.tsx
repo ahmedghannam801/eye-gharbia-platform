@@ -170,12 +170,12 @@ const extractVideoUrlFromTask = (task?: Task | null): string | undefined => {
   return undefined;
 };
 
-// Safe, Resilience-First Task Video Player Component
+// Safe, Resilience-First Task Video Player Component with Mobile Optimization
 const TaskVideoPlayer: React.FC<{ task: Task; language: string }> = ({ task, language }) => {
   const effectiveVideoUrl = extractVideoUrlFromTask(task);
   const videoInfo = getEmbeddableVideoInfo(effectiveVideoUrl);
   const [copied, setCopied] = useState(false);
-  const [useFallbackCard, setUseFallbackCard] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(true);
   const isAr = language === 'ar';
 
   if (!effectiveVideoUrl || !videoInfo) return null;
@@ -185,6 +185,10 @@ const TaskVideoPlayer: React.FC<{ task: Task; language: string }> = ({ task, lan
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   };
+
+  // YouTube specific video ID
+  const ytMatch = effectiveVideoUrl.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=|shorts\/|live\/)|youtu\.be\/)([^"&?\/ ]{11})/i);
+  const ytVideoId = ytMatch ? ytMatch[1] : null;
 
   return (
     <div className="space-y-3 border-t border-slate-150 dark:border-slate-800 pt-4 mt-4 animate-fadeIn">
@@ -214,8 +218,20 @@ const TaskVideoPlayer: React.FC<{ task: Task; language: string }> = ({ task, lan
       </div>
 
       {/* Video Viewport Container */}
-      <div className="aspect-video w-full rounded-2xl overflow-hidden shadow-xl border border-slate-200 dark:border-slate-800 bg-slate-950 relative group flex items-center justify-center">
-        {useFallbackCard || videoInfo.type === 'other' ? (
+      <div 
+        className="aspect-video w-full rounded-2xl overflow-hidden shadow-2xl border border-slate-700/50 bg-black relative group flex items-center justify-center"
+        style={{ backgroundColor: '#000000', minHeight: '200px' }}
+      >
+        {videoInfo.type === 'direct' ? (
+          <video
+            src={videoInfo.directUrl}
+            controls
+            playsInline
+            preload="metadata"
+            className="w-full h-full object-contain"
+            style={{ backgroundColor: '#000000' }}
+          />
+        ) : videoInfo.type === 'other' ? (
           <div className="p-6 text-center flex flex-col items-center justify-center gap-3 w-full h-full bg-gradient-to-br from-slate-900 via-slate-950 to-blue-950 text-white">
             <div className="w-14 h-14 rounded-2xl bg-red-500/20 border border-red-500/30 flex items-center justify-center text-red-400">
               <Video className="w-7 h-7" />
@@ -238,21 +254,12 @@ const TaskVideoPlayer: React.FC<{ task: Task; language: string }> = ({ task, lan
               <span>{isAr ? 'تشغيل الفيديو في نافذة مستقلة 🚀' : 'Open Video in New Tab 🚀'}</span>
             </a>
           </div>
-        ) : videoInfo.type === 'direct' ? (
-          <video
-            src={videoInfo.directUrl}
-            controls
-            playsInline
-            preload="metadata"
-            className="w-full h-full object-contain"
-          />
         ) : (
           <iframe
             src={videoInfo.embedUrl}
             title={task.name}
-            className="w-full h-full border-0"
+            style={{ width: '100%', height: '100%', border: 0, backgroundColor: '#000000' }}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            referrerPolicy="origin"
             allowFullScreen
           />
         )}
@@ -265,10 +272,10 @@ const TaskVideoPlayer: React.FC<{ task: Task; language: string }> = ({ task, lan
             href={videoInfo.directUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/50 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 font-bold transition-all text-[11px]"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold transition-all text-[11px] shadow-sm cursor-pointer"
           >
-            <ExternalLink className="w-3.5 h-3.5 text-blue-500" />
-            <span>{isAr ? 'فتح الفيديو في نافذة مستقلة ↗️' : 'Open in New Window ↗️'}</span>
+            <ExternalLink className="w-3.5 h-3.5" />
+            <span>{isAr ? 'مشاهدة على ' + videoInfo.platformName + ' ↗️' : 'Watch on ' + videoInfo.platformName}</span>
           </a>
 
           <button
@@ -288,18 +295,6 @@ const TaskVideoPlayer: React.FC<{ task: Task; language: string }> = ({ task, lan
               </>
             )}
           </button>
-
-          {videoInfo.type !== 'other' && (
-            <button
-              type="button"
-              onClick={() => setUseFallbackCard(!useFallbackCard)}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 font-semibold transition-all text-[10px] cursor-pointer"
-              title={isAr ? 'تبديل وضع العرض' : 'Toggle view mode'}
-            >
-              <RefreshCw className="w-3 h-3" />
-              <span>{useFallbackCard ? (isAr ? 'عرض المشغل المدمج' : 'Embedded Player') : (isAr ? 'إذا ظهرت شاشة بيضاء اضغط هنا' : 'If blank, click here')}</span>
-            </button>
-          )}
         </div>
 
         {videoInfo.type === 'gdrive' && (
