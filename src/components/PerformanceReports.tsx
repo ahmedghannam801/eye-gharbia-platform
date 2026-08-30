@@ -371,7 +371,7 @@ export const PerformanceReports: React.FC<PerformanceReportsProps> = ({ currentU
             <span className="text-[11px] font-black text-amber-700 dark:text-amber-300 px-1">
               {ar ? 'أقسام وفروع HR:' : 'HR Departments:'}
             </span>
-            {['all', 'HRM', 'HR OF PR', 'HR OF SM', 'HR OF OR', 'HRS', 'HRIS', 'HRD'].map(sub => (
+            {['all', 'HRM', 'HRD', 'HRS', 'HRIS'].map(sub => (
               <button
                 key={sub}
                 onClick={() => setFilterSubCommittee(sub)}

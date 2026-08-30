@@ -727,14 +727,11 @@ export const SocialPosterMaker: React.FC<SocialPosterMakerProps> = ({ currentUse
                       onChange={e => setSubCommitteeFilter(e.target.value)}
                       className="w-full bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-xl p-2 text-xs font-bold text-amber-900 dark:text-amber-200"
                     >
-                      <option value="all">{isAr ? '🏢 كل فروع وأقسام HR' : 'All HR Departments'}</option>
-                      <option value="HRM">إدارة HRM العامة</option>
-                      <option value="HR OF PR">HR OF PR</option>
-                      <option value="HR OF SM">HR OF SM</option>
-                      <option value="HR OF OR">HR OF OR</option>
-                      <option value="HRS">HRS (الدعم)</option>
-                      <option value="HRIS">HRIS (نظم المعلومات)</option>
-                      <option value="HRD">HRD (التدريب)</option>
+                      <option value="all">{isAr ? '🏢 كل أقسام وفروع HR' : 'All HR Departments'}</option>
+                      <option value="HRM">{isAr ? 'HRM — إدارة الموارد البشرية' : 'HR Management (HRM)'}</option>
+                      <option value="HRD">{isAr ? 'HRD — التطوير والتدريب' : 'HR Development (HRD)'}</option>
+                      <option value="HRS">{isAr ? 'HRS — الدعم والمساندة' : 'HR Support (HRS)'}</option>
+                      <option value="HRIS">{isAr ? 'HRIS — نظم المعلومات' : 'HR Info Systems (HRIS)'}</option>
                     </select>
                   </div>
                 )}

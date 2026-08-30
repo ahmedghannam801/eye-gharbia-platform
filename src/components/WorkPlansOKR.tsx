@@ -322,7 +322,7 @@ export const WorkPlansOKR: React.FC<WorkPlansProps> = ({ currentUser }) => {
                   className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-2 text-xs font-bold focus:outline-none focus:border-teal-500">
                   <option value="All">All Depts</option>
                   {formCommittee === 'HR' || formCommittee === 'HRM' ? (
-                    ['HRM', 'HR OF PR', 'HR OF SM', 'HR OF OR', 'HRS', 'HRIS', 'HRD'].map(d => <option key={d} value={d}>{d}</option>)
+                    ['HRM', 'HRD', 'HRS', 'HRIS'].map(d => <option key={d} value={d}>{d}</option>)
                   ) : (
                     (COMMITTEE_STRUCTURE[formCommittee] || []).map(d => <option key={d} value={d}>{d}</option>)
                   )}

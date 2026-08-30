@@ -12,7 +12,7 @@ interface ExcusesAndFreezeProps {
 
 const COMMITTEES_LIST = ['HR', 'PR', 'SM', 'OR'];
 const COMMITTEE_DEPTS_MAP: Record<string, string[]> = {
-  HR: ['HR OF PR', 'HR OF SM', 'HR OF OR', 'HRM', 'HRS', 'HRIS', 'HRD'],
+  HR: ['HRM', 'HRD', 'HRS', 'HRIS'],
   PR: ['EPR', 'IPR', 'FR', 'CR', 'IR'],
   SM: ['Content Writing', 'Graphic Design', 'Photography', 'Video Editing', 'Media Coverage'],
   OR: ['VIP', 'Protocol', 'Planning', 'Event Management', 'Coordination'],

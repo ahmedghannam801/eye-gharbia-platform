@@ -803,14 +803,11 @@ export const ExecutiveReportBuilder: React.FC<ExecutiveReportBuilderProps> = ({ 
                 onChange={(e: any) => setSelectedSubCommittee(e.target.value)}
                 className="w-full bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-xl px-3 py-2.5 text-xs font-bold text-amber-900 dark:text-amber-200 focus:outline-none focus:border-amber-500 cursor-pointer"
               >
-                <option value="All">{isAr ? 'كل أقسام وفروع إدارة HR' : 'All HR Departments'}</option>
-                <option value="HRM">{isAr ? 'إدارة الموارد البشرية العامة (HRM)' : 'HR Management (HRM)'}</option>
-                <option value="HR OF PR">HR OF PR ({isAr ? 'العلاقات العامة' : 'PR'})</option>
-                <option value="HR OF SM">HR OF SM ({isAr ? 'السوشيال ميديا' : 'SM'})</option>
-                <option value="HR OF OR">HR OF OR ({isAr ? 'التنظيم' : 'OR'})</option>
-                <option value="HRS">{isAr ? 'لجنة الدعم والمساندة (HRS)' : 'HR Support (HRS)'}</option>
-                <option value="HRIS">{isAr ? 'نظم معلومات الموارد البشرية (HRIS)' : 'HR Information Systems (HRIS)'}</option>
-                <option value="HRD">{isAr ? 'التطوير والتدريب (HRD)' : 'HR Development (HRD)'}</option>
+                <option value="All">{isAr ? 'كل أقسام ولجان HR' : 'All HR Departments'}</option>
+                <option value="HRM">{isAr ? 'HRM — إدارة الموارد البشرية' : 'HR Management (HRM)'}</option>
+                <option value="HRD">{isAr ? 'HRD — التطوير والتدريب' : 'HR Development (HRD)'}</option>
+                <option value="HRS">{isAr ? 'HRS — الدعم والمساندة' : 'HR Support (HRS)'}</option>
+                <option value="HRIS">{isAr ? 'HRIS — نظم المعلومات' : 'HR Information Systems (HRIS)'}</option>
               </select>
             </div>
           )}

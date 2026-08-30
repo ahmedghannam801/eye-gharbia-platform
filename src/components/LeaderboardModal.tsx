@@ -111,7 +111,7 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({ isOpen, onCl
               <span className="text-[11px] font-black text-amber-700 dark:text-amber-300 whitespace-nowrap px-1">
                 {ar ? 'أقسام وفروع HR:' : 'HR Departments:'}
               </span>
-              {['All', 'HRM', 'HR OF PR', 'HR OF SM', 'HR OF OR', 'HRS', 'HRIS', 'HRD'].map(sub => (
+              {['All', 'HRM', 'HRD', 'HRS', 'HRIS'].map(sub => (
                 <button
                   key={sub}
                   onClick={() => setSelectedSubCommittee(sub)}

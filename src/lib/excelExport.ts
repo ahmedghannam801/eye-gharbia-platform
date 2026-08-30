@@ -1,5 +1,5 @@
 import ExcelJS from 'exceljs';
-import { UserProfile, IssuedCertificate, Task, Meeting, AttendanceRecord } from '../types';
+import { UserProfile, IssuedCertificate, Task, Meeting, AttendanceRecord, Submission } from '../types';
 
 /**
  * Trigger browser download for an ExcelJS buffer
@@ -746,4 +746,226 @@ export const export365EvaluationToExcel = async (
   // Generate buffer and return it
   const buffer = await workbook.xlsx.writeBuffer();
   return { buffer, filename };
+};
+
+/**
+ * Export Task Submissions to formatted, organized Excel file
+ */
+export const exportTaskSubmissionsToExcel = async (
+  task: Task,
+  submissions: Submission[],
+  allUsers: UserProfile[] = [],
+  filename?: string
+) => {
+  const usersMap = new Map<string, UserProfile>();
+  allUsers.forEach(u => {
+    if (u.id) usersMap.set(u.id, u);
+    if (u.email) usersMap.set(u.email.toLowerCase(), u);
+  });
+
+  const cleanTitle = (task.name || 'مهمة').replace(/[/\\?%*:|"<>]/g, '-').trim();
+  const outFilename = filename || `تسليمات_مهمة_${cleanTitle}.xlsx`;
+
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'EYE Gharbia Platform';
+  workbook.created = new Date();
+
+  // ─────────────────────────────────────────────────────────────
+  // SHEET 1: كشف تسليمات المهمة التفصيلي
+  // ─────────────────────────────────────────────────────────────
+  const ws1 = workbook.addWorksheet('كشف التسليمات', {
+    views: [{ rightToLeft: true, showGridLines: true }]
+  });
+
+  // 1. Task Title Banner (Row 1)
+  ws1.mergeCells('A1:K1');
+  const titleCell = ws1.getCell('A1');
+  titleCell.value = `EYE Organization — كشف تسليمات مهمة: ${task.name}`;
+  titleCell.font = { name: 'Calibri', size: 15, bold: true, color: { argb: 'FFFFFFFF' } };
+  titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD97706' } }; // Amber-600
+  titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+  ws1.getRow(1).height = 36;
+
+  // 2. Metadata Grid (Rows 2 - 4)
+  const acceptedCount = submissions.filter(s => s.status === 'Accepted').length;
+  const pendingCount = submissions.filter(s => s.status === 'Pending').length;
+  const rejectedCount = submissions.filter(s => s.status === 'Rejected').length;
+  const gradedSubs = submissions.filter(s => typeof s.grade === 'number' && s.grade > 0);
+  const avgGradeStr = gradedSubs.length > 0
+    ? `${Math.round(gradedSubs.reduce((acc, s) => acc + (s.grade || 0), 0) / gradedSubs.length)} / 100`
+    : 'لم يتم التقييم بعد';
+
+  const deadlineStr = task.deadline
+    ? new Date(task.deadline).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+    : 'غير محدد';
+
+  const priorityMap: Record<string, string> = {
+    Low: 'منخفضة',
+    Medium: 'متوسطة',
+    High: 'عالية',
+    Urgent: 'عاجلة'
+  };
+
+  const metaRows = [
+    [
+      { label: '📅 الموعد النهائي (Deadline):', val: deadlineStr },
+      { label: '🎯 الأولوية واللجنة:', val: `${priorityMap[task.priority] || task.priority} — (${task.committee || 'الكل'})` }
+    ],
+    [
+      { label: '👤 قائد / مسؤول المهمة:', val: task.createdByName || 'إدارة الكيان' },
+      { label: '📊 متوسط درجات التقييم:', val: avgGradeStr }
+    ],
+    [
+      {
+        label: '👥 إجمالي التسليمات:',
+        val: `${submissions.length} تسليم (${acceptedCount} مقبول • ${pendingCount} بالانتظار • ${rejectedCount} مرفوض)`
+      },
+      { label: '📌 حالة المهمة:', val: task.status === 'Published' ? 'منشورة ونشطة' : task.status === 'Closed' ? 'مكتملة ومغلقة' : 'مسودة' }
+    ]
+  ];
+
+  metaRows.forEach((pair, idx) => {
+    const rowNum = idx + 2;
+    ws1.mergeCells(`A${rowNum}:B${rowNum}`);
+    ws1.mergeCells(`C${rowNum}:E${rowNum}`);
+    ws1.mergeCells(`F${rowNum}:G${rowNum}`);
+    ws1.mergeCells(`H${rowNum}:K${rowNum}`);
+
+    const lbl1 = ws1.getCell(`A${rowNum}`);
+    lbl1.value = pair[0].label;
+    lbl1.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FF475569' } };
+    lbl1.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+    lbl1.alignment = { vertical: 'middle', horizontal: 'right' };
+
+    const val1 = ws1.getCell(`C${rowNum}`);
+    val1.value = pair[0].val;
+    val1.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FF0F172A' } };
+    val1.alignment = { vertical: 'middle', horizontal: 'right' };
+
+    const lbl2 = ws1.getCell(`F${rowNum}`);
+    lbl2.value = pair[1].label;
+    lbl2.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FF475569' } };
+    lbl2.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF1F5F9' } };
+    lbl2.alignment = { vertical: 'middle', horizontal: 'right' };
+
+    const val2 = ws1.getCell(`H${rowNum}`);
+    val2.value = pair[1].val;
+    val2.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FF0F172A' } };
+    val2.alignment = { vertical: 'middle', horizontal: 'right' };
+
+    ws1.getRow(rowNum).height = 24;
+  });
+
+  // Empty Spacer Row (Row 5)
+  ws1.getRow(5).height = 10;
+
+  // 3. Table Header (Row 6)
+  const headers = [
+    '#',
+    'اسم العضو / Member Name',
+    'كود العضوية / Code',
+    'اللجنة / Committee',
+    'القسم واللجنة الفرعية / Department',
+    'وقت التسليم / Submitted At',
+    'حالة التسليم / Status',
+    'الدرجة / Grade',
+    'معايير التقييم / Criteria',
+    'ملاحظات القائد / Leader Feedback',
+    'اسم ورابط الملف / File Attachment'
+  ];
+
+  const headerRow = ws1.addRow(headers);
+  headerRow.height = 28;
+  headerRow.eachCell((cell) => {
+    cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFB45309' } }; // Amber-700
+    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+    cell.border = {
+      top: { style: 'medium', color: { argb: 'FF78350F' } },
+      bottom: { style: 'medium', color: { argb: 'FF78350F' } },
+      left: { style: 'thin', color: { argb: 'FFFDE68A' } },
+      right: { style: 'thin', color: { argb: 'FFFDE68A' } }
+    };
+  });
+
+  // 4. Data Rows
+  submissions.forEach((s, i) => {
+    const u = usersMap.get(s.memberId) || usersMap.get((s.memberEmail || '').toLowerCase());
+    const isEven = i % 2 === 0;
+    const zebraColor = isEven ? 'FFF8FAFC' : 'FFFFFFFF';
+
+    const submittedDateStr = s.submittedAt
+      ? new Date(s.submittedAt).toLocaleDateString('ar-EG') + ' ' + new Date(s.submittedAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })
+      : '—';
+
+    const statusAr = s.status === 'Accepted' ? 'مقبول ✅' : s.status === 'Rejected' ? 'مرفوض ❌' : s.status === 'Resubmission Requested' ? 'مطلوب إعادة التسليم ⚠️' : 'قيد المراجعة ⏳';
+    const gradeStr = typeof s.grade === 'number' ? `${s.grade}/100` : '—';
+
+    let criteriaStr = '—';
+    if (s.gradingCriteria) {
+      criteriaStr = `جودة: ${s.gradingCriteria.quality || 0} • التزام: ${s.gradingCriteria.timeliness || 0} • ابتكار: ${s.gradingCriteria.innovation || 0} • اكتمال: ${s.gradingCriteria.completeness || 0}`;
+    }
+
+    const row = ws1.addRow([
+      i + 1,
+      s.memberName || u?.fullName || 'عضو',
+      u?.membershipCode || '—',
+      s.committee || u?.committee || 'عام',
+      s.department || u?.department || 'عام',
+      submittedDateStr,
+      statusAr,
+      gradeStr,
+      criteriaStr,
+      s.comment || s.rejectionReason || '—',
+      s.fileName || s.fileUrl || '—'
+    ]);
+
+    row.height = 24;
+    row.eachCell((cell, colNumber) => {
+      cell.font = { name: 'Calibri', size: 10, color: { argb: 'FF1E293B' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: zebraColor } };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        right: { style: 'thin', color: { argb: 'FFE2E8F0' } }
+      };
+
+      if (colNumber === 1 || colNumber === 3 || colNumber === 6 || colNumber === 7 || colNumber === 8) {
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      } else if (colNumber === 2 || colNumber === 4 || colNumber === 5 || colNumber === 9 || colNumber === 10 || colNumber === 11) {
+        cell.alignment = { vertical: 'middle', horizontal: 'right', wrapText: true };
+      } else {
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      }
+
+      if (colNumber === 7) {
+        cell.font = {
+          name: 'Calibri',
+          size: 10,
+          bold: true,
+          color: { argb: s.status === 'Accepted' ? 'FF059669' : s.status === 'Rejected' ? 'FFDC2626' : 'FFD97706' }
+        };
+      }
+    });
+  });
+
+  // Column Widths for Sheet 1
+  ws1.columns = [
+    { width: 6 },   // #
+    { width: 26 },  // Member Name
+    { width: 16 },  // Code
+    { width: 18 },  // Committee
+    { width: 22 },  // Department
+    { width: 22 },  // Submitted At
+    { width: 18 },  // Status
+    { width: 14 },  // Grade
+    { width: 34 },  // Criteria
+    { width: 36 },  // Leader Feedback
+    { width: 30 },  // File
+  ];
+
+  // Generate buffer and return
+  const buffer = await workbook.xlsx.writeBuffer();
+  return { buffer, filename: outFilename };
 };

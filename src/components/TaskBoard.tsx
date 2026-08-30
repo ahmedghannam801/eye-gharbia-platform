@@ -6,10 +6,12 @@ import {
   FolderKanban, CheckSquare, Plus, FileText, Calendar, ShieldAlert, ArrowUpRight,
   UploadCloud, CheckCircle2, XCircle, RefreshCw, Send, Paperclip, MessageSquare,
   AlertTriangle, File, HelpCircle, ChevronRight, CornerDownRight, Download, Trash2, Search,
-  Star, Award, Users, Video, Target, UserCheck, Check, Clock, Eye, Layers, Filter, X
+  Star, Award, Users, Video, Target, UserCheck, Check, Clock, Eye, Layers, Filter, X,
+  FileSpreadsheet, Loader2
 } from 'lucide-react';
 import { useLanguage } from '../lib/LanguageContext';
 import { downloadCertificate } from '../lib/certificateGenerator';
+import { exportTaskSubmissionsToExcel, downloadExcelFile } from '../lib/excelExport';
 import { TaskComments } from './TaskComments';
 
 interface TaskBoardProps {
@@ -103,7 +105,23 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
   const translateDepartment = (d?: string) => {
     if (!d || d === 'All') return language === 'ar' ? 'جميع الأقسام' : 'All Departments';
     if (d === 'None' || d === 'General') return language === 'ar' ? 'عام' : 'General';
-    return d;
+    const deptMap: Record<string, string> = {
+      'HRM': language === 'ar' ? 'HRM — إدارة الموارد البشرية' : 'HR Management (HRM)',
+      'HRD': language === 'ar' ? 'HRD — التطوير والتدريب' : 'HR Development (HRD)',
+      'HRS': language === 'ar' ? 'HRS — الدعم والمساندة' : 'HR Support (HRS)',
+      'HRIS': language === 'ar' ? 'HRIS — نظم المعلومات' : 'HR Info Systems (HRIS)',
+      'EPR': language === 'ar' ? 'EPR — العلاقات الخارجية' : 'External PR (EPR)',
+      'IPR': language === 'ar' ? 'IPR — العلاقات الداخلية' : 'Internal PR (IPR)',
+      'Content': language === 'ar' ? 'Content — كتابة المحتوى' : 'Content',
+      'Graphic Design': language === 'ar' ? 'Graphic Design — التصميم الجرافيكي' : 'Graphic Design',
+      'Photography': language === 'ar' ? 'Photography — التصوير الفوتوغرافي' : 'Photography',
+      'Video Editing': language === 'ar' ? 'Video Editing — المونتاج وصناعة الفيديو' : 'Video Editing',
+      'VIP': language === 'ar' ? 'VIP — استقبال كبار الزوار' : 'VIP',
+      'Planning': language === 'ar' ? 'Planning — التخطيط' : 'Planning',
+      'Coordination': language === 'ar' ? 'Coordination — التنسيق والمتابعة' : 'Coordination',
+      'Logistics': language === 'ar' ? 'Logistics — اللوجستيات والدعم الفني' : 'Logistics',
+    };
+    return deptMap[d] || d;
   };
 
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -172,6 +190,41 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
   const [enableGrading, setEnableGrading] = useState(false);
   const [reviewDeptFilter, setReviewDeptFilter] = useState<string>('all');
   const [reviewViewMode, setReviewViewMode] = useState<'grouped' | 'list'>('grouped');
+  const [isExportingSubmissions, setIsExportingSubmissions] = useState(false);
+  const [exportSubmissionsSuccess, setExportSubmissionsSuccess] = useState(false);
+
+  const normalizeSubmissionDept = (comm: string, dept: string): string => {
+    const d = (dept || '').trim().toUpperCase();
+    const c = (comm || '').trim().toUpperCase();
+    if (c === 'HR' || d.includes('HR')) {
+      if (d.includes('HRD')) return 'HRD';
+      if (d.includes('HRS')) return 'HRS';
+      if (d.includes('HRIS')) return 'HRIS';
+      return 'HRM';
+    }
+    if (c === 'PR' || d.includes('PR')) {
+      if (d.includes('EPR')) return 'EPR';
+      if (d.includes('IPR')) return 'IPR';
+      return 'PR';
+    }
+    return dept || 'عام';
+  };
+
+  const handleExportSubmissions = async (t: Task, subs: Submission[]) => {
+    try {
+      setIsExportingSubmissions(true);
+      const allUsers = db.getUsers();
+      const { buffer, filename } = await exportTaskSubmissionsToExcel(t, subs, allUsers);
+      downloadExcelFile(buffer, filename);
+      setExportSubmissionsSuccess(true);
+      setTimeout(() => setExportSubmissionsSuccess(false), 3500);
+    } catch (err) {
+      console.error('Error exporting task submissions:', err);
+      alert(language === 'ar' ? 'حدث خطأ أثناء تصدير ملف الإكسيل' : 'Error exporting Excel file');
+    } finally {
+      setIsExportingSubmissions(false);
+    }
+  };
 
   useEffect(() => {
     loadData();
@@ -1111,7 +1164,7 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
 
             // Group by each defined department in this committee
             commDepts.forEach(dept => {
-              const deptSubs = commSubs.filter(s => (s.department || '').trim().toLowerCase() === dept.trim().toLowerCase());
+              const deptSubs = commSubs.filter(s => normalizeSubmissionDept(comm, s.department || '').toLowerCase() === dept.trim().toLowerCase());
               const accepted = deptSubs.filter(s => s.status === 'Accepted').length;
               const pending = deptSubs.filter(s => s.status === 'Pending').length;
               const graded = deptSubs.filter(s => typeof s.grade === 'number' && s.grade > 0);
@@ -1126,7 +1179,7 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
             });
 
             // Submissions belonging to this committee with General/unmatched department
-            const generalSubs = commSubs.filter(s => !commDepts.some(d => d.trim().toLowerCase() === (s.department || '').trim().toLowerCase()));
+            const generalSubs = commSubs.filter(s => !commDepts.some(d => d.trim().toLowerCase() === normalizeSubmissionDept(comm, s.department || '').toLowerCase()));
             if (generalSubs.length > 0) {
               const accepted = generalSubs.filter(s => s.status === 'Accepted').length;
               const pending = generalSubs.filter(s => s.status === 'Pending').length;
@@ -1191,7 +1244,7 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
           // Filter displayed submissions based on tab selection
           const displayedSubs = taskSubmissions.filter(s => {
             if (reviewDeptFilter === 'all') return true;
-            return (s.department || '').trim().toLowerCase() === reviewDeptFilter.trim().toLowerCase() ||
+            return normalizeSubmissionDept(s.committee || '', s.department || '').toLowerCase() === reviewDeptFilter.trim().toLowerCase() ||
                    (s.committee || '').trim().toUpperCase() === reviewDeptFilter.trim().toUpperCase();
           });
 
@@ -1210,42 +1263,73 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
                   </div>
                   <p className="text-[11px] text-slate-400">
                     {language === 'ar'
-                      ? 'يتم توزيع تسليمات الأعضاء تلقائياً بناءً على اللجان والأقسام المسجلين بها لسهولة وسرعة التقييم'
+                      ? 'يتم توزيع تسليمات الأعضاء تلقائياً بناءً على اللجان والأقسام الأربعة الأساسية لسهولة وسرعة التقييم'
                       : 'Submissions are automatically routed by registered member committee and department for effortless grading'}
                   </p>
                 </div>
 
-                {/* View Mode Toggle */}
-                <div className="flex items-center gap-1 bg-slate-950/80 p-1 rounded-2xl border border-slate-800 self-start sm:self-auto">
+                {/* View Mode Toggle & Excel Export */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  {/* Excel Export Button */}
                   <button
                     type="button"
-                    onClick={() => setReviewViewMode('grouped')}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                      reviewViewMode === 'grouped'
-                        ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-md shadow-amber-500/20'
-                        : 'text-slate-400 hover:text-slate-200'
+                    onClick={() => handleExportSubmissions(selectedTask, taskSubmissions)}
+                    disabled={isExportingSubmissions || taskSubmissions.length === 0}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-md active:scale-95 ${
+                      exportSubmissionsSuccess
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-800 disabled:text-slate-500 text-white'
                     }`}
+                    id="export-task-submissions-excel-btn"
                   >
-                    <Layers className="w-3.5 h-3.5" />
-                    <span>{language === 'ar' ? 'تقسيم اللجان والأقسام' : 'Grouped View'}</span>
+                    {isExportingSubmissions ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : exportSubmissionsSuccess ? (
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                    ) : (
+                      <FileSpreadsheet className="w-3.5 h-3.5" />
+                    )}
+                    <span>
+                      {isExportingSubmissions
+                        ? (language === 'ar' ? 'جاري تجهيز Excel...' : 'Preparing...')
+                        : exportSubmissionsSuccess
+                        ? (language === 'ar' ? 'تم التنزيل بنجاح! ✅' : 'Downloaded! ✅')
+                        : (language === 'ar' ? 'تصدير كشف التسليمات (Excel) 📥' : 'Export Excel 📥')}
+                    </span>
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setReviewViewMode('list')}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                      reviewViewMode === 'list'
-                        ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-md shadow-amber-500/20'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    <CheckSquare className="w-3.5 h-3.5" />
-                    <span>{language === 'ar' ? 'جدول شامل' : 'Flat Table'}</span>
-                  </button>
+
+                  {/* View Mode Switcher */}
+                  <div className="flex items-center gap-1 bg-slate-950/80 p-1 rounded-2xl border border-slate-800 self-start sm:self-auto">
+                    <button
+                      type="button"
+                      onClick={() => setReviewViewMode('grouped')}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                        reviewViewMode === 'grouped'
+                          ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-md shadow-amber-500/20'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <Layers className="w-3.5 h-3.5" />
+                      <span>{language === 'ar' ? 'مقسم للأقسام واللجان' : 'Grouped'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setReviewViewMode('list')}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                        reviewViewMode === 'list'
+                          ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-md shadow-amber-500/20'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <CheckSquare className="w-3.5 h-3.5" />
+                      <span>{language === 'ar' ? 'جدول كامل' : 'Flat Table'}</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
               {/* Committee & Sub-committee Quick-Filter Pills */}
-              <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar flex-wrap">
                 <button
                   type="button"
                   onClick={() => setReviewDeptFilter('all')}
@@ -1286,7 +1370,7 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
 
                 {/* Specific Sub-committees / Departments Pills */}
                 {allFlatDepts.map(dept => {
-                  const count = taskSubmissions.filter(s => (s.department || '').trim().toLowerCase() === dept.trim().toLowerCase()).length;
+                  const count = taskSubmissions.filter(s => normalizeSubmissionDept(s.committee || '', s.department || '').toLowerCase() === dept.trim().toLowerCase()).length;
                   if (count === 0 && !reviewDeptFilter.includes(dept)) return null;
 
                   return (
@@ -1300,7 +1384,7 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
                           : 'bg-slate-800/80 text-amber-300/90 border-slate-700 hover:border-amber-500/40 hover:text-amber-200'
                       }`}
                     >
-                      <span>{dept}</span>
+                      <span>{translateDepartment(dept)}</span>
                       <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
                         reviewDeptFilter === dept ? 'bg-black/30 text-white' : 'bg-slate-900 text-slate-300'
                       }`}>
@@ -1703,20 +1787,16 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
             {Object.keys(COMMITTEE_STRUCTURE).map(c => <option key={c} value={c}>{translateCommittee(c)}</option>)}
           </select>
 
-          {(filterCommittee === 'HR' || filterCommittee === 'HRM') && (
+          {filterCommittee !== 'All' && COMMITTEE_STRUCTURE[filterCommittee] && (
             <select
               value={filterDepartment}
               onChange={(e) => setFilterDepartment(e.target.value)}
               className="bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-xl px-3 py-2 text-xs font-bold text-amber-900 dark:text-amber-200 animate-fadeIn shadow-sm"
             >
-              <option value="All">{language === 'ar' ? '🏢 كل فروع وأقسام HR' : 'All HR Departments'}</option>
-              <option value="HRM">إدارة HRM العامة</option>
-              <option value="HR OF PR">HR OF PR</option>
-              <option value="HR OF SM">HR OF SM</option>
-              <option value="HR OF OR">HR OF OR</option>
-              <option value="HRS">HRS (الدعم)</option>
-              <option value="HRIS">HRIS (نظم المعلومات)</option>
-              <option value="HRD">HRD (التدريب)</option>
+              <option value="All">{language === 'ar' ? `🏢 كل أقسام ${translateCommittee(filterCommittee)}` : `All ${filterCommittee} Departments`}</option>
+              {COMMITTEE_STRUCTURE[filterCommittee].map(d => (
+                <option key={d} value={d}>{translateDepartment(d)}</option>
+              ))}
             </select>
           )}
 

@@ -59,7 +59,7 @@ const calculatePoints = (userSubs: Submission[], tasks: Task[]): number => {
 };
 
 const COMMITTEE_DEPTS_MAP: Record<string, string[]> = {
-  HR: ['HRM', 'HRS', 'HRIS', 'HRD', 'HR OF PR', 'HR OF SM', 'HR OF OR'],
+  HR: ['HRM', 'HRD', 'HRS', 'HRIS'],
   PR: ['EPR', 'IPR', 'FR', 'CR', 'IR'],
   SM: ['Content Writing', 'Graphic Design', 'Photography', 'Video Editing', 'Media Coverage'],
   OR: ['VIP', 'Protocol', 'Planning', 'Event Management', 'Coordination'],
@@ -305,14 +305,11 @@ const AllMembersEvaluationsView: React.FC<{
               onChange={(e) => setDepartmentFilter(e.target.value)}
               className="w-full sm:w-auto max-w-full bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-2xl px-3 py-2.5 text-xs text-amber-900 dark:text-amber-200 font-bold truncate min-w-0 focus:outline-none focus:border-amber-500 animate-fadeIn"
             >
-              <option value="all">{isAr ? '🏢 كل فروع وأقسام HR' : 'All HR'}</option>
-              <option value="HRM">إدارة HRM العامة</option>
-              <option value="HR OF PR">HR OF PR</option>
-              <option value="HR OF SM">HR OF SM</option>
-              <option value="HR OF OR">HR OF OR</option>
-              <option value="HRS">HRS (الدعم)</option>
-              <option value="HRIS">HRIS (نظم المعلومات)</option>
-              <option value="HRD">HRD (التدريب)</option>
+              <option value="all">{isAr ? '🏢 كل أقسام وفروع HR' : 'All HR'}</option>
+              <option value="HRM">{isAr ? 'HRM — إدارة الموارد البشرية' : 'HR Management (HRM)'}</option>
+              <option value="HRD">{isAr ? 'HRD — التطوير والتدريب' : 'HR Development (HRD)'}</option>
+              <option value="HRS">{isAr ? 'HRS — الدعم والمساندة' : 'HR Support (HRS)'}</option>
+              <option value="HRIS">{isAr ? 'HRIS — نظم المعلومات' : 'HR Info Systems (HRIS)'}</option>
             </select>
           )}
 
