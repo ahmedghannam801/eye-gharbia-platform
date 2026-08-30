@@ -942,8 +942,7 @@ class SupabaseDatabase {
 
     if (tasks.data) {
       const remoteTasks = tasks.data.map(taskFromRow);
-      const localTasks = this._ls<Task>('eye_tasks');
-      this.cache.tasks = mergeById(remoteTasks, localTasks, deletedTaskIds);
+      this.cache.tasks = remoteTasks.filter(t => !deletedTaskIds.includes(t.id));
       this._lsSave('eye_tasks', this.cache.tasks);
     } else {
       const localTasks = this._ls<Task>('eye_tasks');
@@ -953,8 +952,7 @@ class SupabaseDatabase {
 
     if (submissions.data) {
       const remoteSubmissions = submissions.data.map(submissionFromRow);
-      const localSubmissions = this._ls<Submission>('eye_submissions');
-      this.cache.submissions = mergeById(remoteSubmissions, localSubmissions, deletedSubIds);
+      this.cache.submissions = remoteSubmissions.filter(s => !deletedSubIds.includes(s.id));
       this._lsSave('eye_submissions', this.cache.submissions);
     } else {
       const localSubmissions = this._ls<Submission>('eye_submissions');

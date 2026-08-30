@@ -574,12 +574,14 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
         governorate: r.governorate || undefined,
       }));
 
-      // Seamlessly combine both remote and local optimistic tasks so newly created items never disappear
-      const localTasks = db.getTasks(currentUser);
-      const taskMap = new Map<string, Task>();
-      localTasks.forEach(t => { if (t && t.id) taskMap.set(t.id, t); });
-      remoteTasks.forEach(t => { if (t && t.id) taskMap.set(t.id, t); });
-      const allTasks: Task[] = Array.from(taskMap.values());
+      // Get deleted IDs to strictly prevent deleted tasks from ever showing
+      const deletedTaskIds: string[] = (() => {
+        try { return JSON.parse(localStorage.getItem('eye_deleted_task_ids') || '[]'); } catch { return []; }
+      })();
+
+      const allTasks: Task[] = (remoteTasks && remoteTasks.length > 0)
+        ? remoteTasks.filter(t => !deletedTaskIds.includes(t.id))
+        : db.getTasks(currentUser).filter(t => !deletedTaskIds.includes(t.id));
 
       const allSubs: Submission[] = (rawSubs || []).map((r: any): Submission => {
         const memberProfile = usersList.find(u => u.id === r.member_id);
@@ -1052,23 +1054,38 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
         console.error('[TaskBoard] Notification send failed:', notifErr);
       }
 
+      // ── Step 4: Notify the member themselves of successful submission ──
+      try {
+        db.addNotification(
+          currentUser.id,
+          'تم تسليم حلك بنجاح ✅',
+          `تم استلام حلك لمهمة "${selectedTask.name}" بنجاح وجاري مراجعته وتقييمه من قِبل المشرفين.`,
+          'success'
+        );
+      } catch (selfNotifErr) {
+        // ignore
+      }
+
       setUploadProgress(100);
       setIsUploading(false);
       setUploadFile(null);
       setCustomFileName('');
       setCustomFileSize('');
-      loadData();
+      await loadData();
     } catch (err: any) {
       setIsUploading(false);
       setUploadError(err.message || 'Upload failed');
     }
   };
 
-  const handleDeleteTask = (taskId: string) => {
-    if (window.confirm(language === 'ar' ? 'هل أنت متأكد من رغبتك في حذف هذا التكليف؟' : 'Are you sure you want to delete this task?')) {
-      db.deleteTask(taskId, currentUser);
+  const handleDeleteTask = async (taskId: string) => {
+    if (window.confirm(language === 'ar' ? 'هل أنت متأكد من رغبتك في حذف هذا التكليف نهائياً؟' : 'Are you sure you want to permanently delete this task?')) {
+      await db.deleteTask(taskId, currentUser);
+      if (isSupabaseConfigured && supabase) {
+        await supabase.from('tasks').delete().eq('id', taskId);
+      }
       if (selectedTask?.id === taskId) setSelectedTask(null);
-      loadData();
+      await loadData();
     }
   };
 
@@ -2319,17 +2336,21 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
                           </span>
                         </div>
 
-                        {currentUser?.role === 'Member' ? (
-                          userSub ? (
-                            <span className={`font-bold px-1.5 py-0.5 rounded text-[9px] ${userSub.status === 'Accepted' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400' :
-                                userSub.status === 'Rejected' ? 'bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400' :
-                                  'bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400'
-                              }`}>
-                              {userSub.status === 'Accepted' ? 'مقبول' : userSub.status === 'Rejected' ? 'مرفوض' : 'قيد المراجعة'}
-                            </span>
-                          ) : (
-                            <span className="text-amber-500 font-bold text-[9px]">لم تسلم</span>
-                          )
+                        {userSub ? (
+                          <span className={`font-bold px-2 py-0.5 rounded-full text-[10px] flex items-center gap-1 ${
+                            userSub.status === 'Accepted'
+                              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800'
+                              : userSub.status === 'Rejected'
+                              ? 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300 border border-red-300 dark:border-red-800'
+                              : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-800'
+                          }`}>
+                            <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
+                            <span>{userSub.status === 'Accepted' ? 'تم القبول' : userSub.status === 'Rejected' ? 'مرفوض' : 'تم التسليم (قيد المراجعة)'}</span>
+                          </span>
+                        ) : currentUser?.role === 'Member' ? (
+                          <span className="text-amber-600 dark:text-amber-400 font-bold text-[10px] bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800">
+                            لم تسلم بعد
+                          </span>
                         ) : null}
                       </div>
                     </div>
