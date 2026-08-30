@@ -82,8 +82,12 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
 
   useEffect(() => {
     loadData();
-    const interval = setInterval(loadData, 6000);
-    return () => clearInterval(interval);
+    const unsub = db.subscribe(loadData);
+    const interval = setInterval(loadData, 4000);
+    return () => {
+      unsub();
+      clearInterval(interval);
+    };
   }, []);
 
   const renderActiveMembersWidget = () => {
@@ -228,21 +232,23 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
   const activeEngagedCount = users.filter(u => u.status === 'Active' && (memberIdsWithSubmissions.has(u.id) || u.role !== 'Member')).length;
   const inactiveMembersCount = users.filter(u => u.status === 'Disabled' || (u.status === 'Active' && u.role === 'Member' && !memberIdsWithSubmissions.has(u.id))).length;
 
-  // Leaders departmental data (adjusted based on user requirements)
+  // Leaders departmental data
   const getLeaderStats = () => {
-    if (currentUser.committee === 'HR') {
+    const isSuper = ['Super Admin', 'Coordinator', 'Deputy Coordinator', 'Head', 'Vice'].includes(currentUser.role);
+    if (isSuper || !currentUser.committee || currentUser.committee === 'All' || currentUser.committee === 'None') {
       return {
-        members: users.filter(u => u.committee !== 'HR' && u.role === 'Member'),
-        tasks: tasks.filter(t => t.committee !== 'HR'),
-        subs: submissions.filter(s => s.committee !== 'HR')
-      };
-    } else {
-      return {
-        members: users.filter(u => u.committee === currentUser.committee && u.role === 'Member'),
-        tasks: tasks.filter(t => t.committee === currentUser.committee),
-        subs: submissions.filter(s => s.committee === currentUser.committee)
+        members: users.filter(u => u.role === 'Member' && u.status === 'Active'),
+        tasks: tasks.filter(t => t.status !== 'Draft' && t.status !== 'Archived'),
+        subs: submissions
       };
     }
+
+    const isHrm = currentUser.committee === 'HR' || currentUser.committee === 'HRM';
+    return {
+      members: users.filter(u => (u.committee === currentUser.committee || (isHrm && (u.committee === 'HR' || u.committee === 'HRM'))) && u.role === 'Member'),
+      tasks: tasks.filter(t => t.committee === currentUser.committee || (isHrm && (t.committee === 'HR' || t.committee === 'HRM')) || t.committee === 'All'),
+      subs: submissions.filter(s => s.committee === currentUser.committee || (isHrm && (s.committee === 'HR' || s.committee === 'HRM')))
+    };
   };
 
   const leaderStats = getLeaderStats();
@@ -250,10 +256,55 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
   const leaderDeptTasks = leaderStats.tasks;
   const leaderDeptSubs = leaderStats.subs;
 
-  // Members data (adjusted based on user requirements)
-  const memberTasks = currentUser.committee === 'HR'
-    ? tasks.filter(t => t.committee !== 'HR' && t.status === 'Published')
-    : tasks.filter(t => t.committee === currentUser.committee && t.department === currentUser.department && t.status === 'Published');
+  // Comprehensive & Reactive Member Tasks matching
+  const memberTasks = tasks.filter(t => {
+    // Exclude drafts or archived tasks
+    if (t.status === 'Draft' || t.status === 'Archived') return false;
+
+    // 1. Direct Assignment: If member is directly assigned in targeted member list
+    if (Array.isArray(t.assignedMemberIds) && t.assignedMemberIds.length > 0 && t.assignedMemberIds.includes(currentUser.id)) {
+      return true;
+    }
+
+    // 2. Organization-wide Task: Available to everyone in entity
+    if (!t.committee || t.committee === 'All' || t.committee === 'General' || t.committee === 'None') {
+      return true;
+    }
+
+    // 3. User with no committee (e.g. executive or general member): Show general tasks
+    if (!currentUser.committee || currentUser.committee === 'None' || currentUser.committee === 'All') {
+      return true;
+    }
+
+    // 4. Committee match:
+    const isHrm = currentUser.committee === 'HR' || currentUser.committee === 'HRM';
+    const isTaskHrm = t.committee === 'HR' || t.committee === 'HRM';
+    const matchesCommittee = t.committee === currentUser.committee || (isHrm && isTaskHrm);
+
+    if (matchesCommittee) {
+      // If task is for all departments within the committee
+      if (!t.department || t.department === 'All' || t.department === 'None' || t.department === 'General') {
+        return true;
+      }
+      // If user has no specific department
+      if (!currentUser.department || currentUser.department === 'None' || currentUser.department === 'All' || currentUser.department === 'Executive') {
+        return true;
+      }
+      // If exact department match
+      if (t.department === currentUser.department) {
+        return true;
+      }
+      // If fuzzy department match (e.g. "HRM - HR OF PR" matches "HR OF PR" or "HRM")
+      const userDeptLow = currentUser.department.toLowerCase();
+      const taskDeptLow = t.department.toLowerCase();
+      if (userDeptLow.includes(taskDeptLow) || taskDeptLow.includes(userDeptLow)) {
+        return true;
+      }
+      return false;
+    }
+
+    return false;
+  });
   const memberSubs = submissions.filter(s => s.memberId === currentUser.id);
 
   return (
@@ -881,9 +932,18 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
 
         const allMeetings = db.getMeetings();
         const memberVisibleMeetings = allMeetings.filter(m => {
-          const matchComm = !m.committee || m.committee === 'All' || m.committee === 'None' || m.committee === 'General' || m.committee === currentUser.committee;
-          const matchDept = !m.department || m.department === 'All' || m.department === 'None' || m.department === 'General' || m.department === currentUser.department;
-          return matchComm && matchDept && m.status !== 'Closed';
+          if (m.status === 'Closed') return false;
+          if (!m.committee || m.committee === 'All' || m.committee === 'General' || m.committee === 'None') return true;
+          if (!currentUser.committee || currentUser.committee === 'None' || currentUser.committee === 'All') return true;
+          const isHrm = currentUser.committee === 'HR' || currentUser.committee === 'HRM';
+          const isMtgHrm = m.committee === 'HR' || m.committee === 'HRM';
+          const matchComm = m.committee === currentUser.committee || (isHrm && isMtgHrm);
+          if (!matchComm) return false;
+          if (!m.department || m.department === 'All' || m.department === 'None' || m.department === 'General') return true;
+          if (!currentUser.department || currentUser.department === 'None' || currentUser.department === 'All') return true;
+          return m.department === currentUser.department ||
+                 m.department.toLowerCase().includes(currentUser.department.toLowerCase()) ||
+                 currentUser.department.toLowerCase().includes(m.department.toLowerCase());
         });
         const nextActiveMeeting = memberVisibleMeetings[0] || null;
         const myAttendanceList = db.getAllAttendance().filter(a => a.memberId === currentUser.id);
