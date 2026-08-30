@@ -332,7 +332,7 @@ export const WeeklyTrivia: React.FC<WeeklyTriviaProps> = ({ currentUser }) => {
                         <span>🎯</span>
                         <span>
                           {isAr
-                            ? `موجهة للجنة: ${activeQuiz.committee === 'HR' ? 'الموارد البشرية (HR)' : activeQuiz.committee === 'PR' ? 'العلاقات العامة (PR)' : activeQuiz.committee === 'SM' ? 'السوشيال ميديا (SM)' : activeQuiz.committee === 'OR' ? 'التنظيم والفعاليات (OR)' : activeQuiz.committee}`
+                            ? `موجهة للجنة: ${activeQuiz.committee === 'HR' ? 'الموارد البشرية (HR)' : activeQuiz.committee === 'PR' ? 'العلاقات العامة (PR)' : activeQuiz.committee === 'SM' ? 'السوشيال ميديا (SM)' : activeQuiz.committee === 'OR' ? 'التنظيم (OR)' : activeQuiz.committee}`
                             : `Target Committee: ${activeQuiz.committee}`}
                         </span>
                       </span>
@@ -801,7 +801,7 @@ export const WeeklyTrivia: React.FC<WeeklyTriviaProps> = ({ currentUser }) => {
                   <option value="HR">{isAr ? '👥 لجنة الموارد البشرية (HR)' : '👥 Human Resources (HR)'}</option>
                   <option value="PR">{isAr ? '🤝 لجنة العلاقات العامة (PR)' : '🤝 Public Relations (PR)'}</option>
                   <option value="SM">{isAr ? '📱 لجنة السوشيال ميديا والتسويق (SM)' : '📱 Social Media (SM)'}</option>
-                  <option value="OR">{isAr ? '🎪 لجنة التنظيم والفعاليات (OR)' : '🎪 Organization & Events (OR)'}</option>
+                  <option value="OR">{isAr ? '🎪 لجنة التنظيم (OR)' : '🎪 Organization (OR)'}</option>
                 </select>
               </div>
 

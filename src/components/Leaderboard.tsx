@@ -60,10 +60,10 @@ const calculatePoints = (userSubs: Submission[], tasks: Task[]): number => {
 };
 
 const COMMITTEE_DEPTS_MAP: Record<string, string[]> = {
-  HR: ['HRM', 'HRD', 'HRS', 'HRIS'],
-  PR: ['EPR', 'IPR', 'FR', 'CR', 'IR'],
-  SM: ['Content Writing', 'Graphic Design', 'Photography', 'Video Editing', 'Media Coverage'],
-  OR: ['VIP', 'Protocol', 'Planning', 'Event Management', 'Coordination'],
+  HR: ['HRM', 'HRS', 'HRIS', 'HRD'],
+  PR: ['EPR', 'IPR'],
+  SM: ['Content', 'Graphic Design', 'Photography', 'Video Editing'],
+  OR: ['VIP', 'Planning', 'Coordination', 'Logistics'],
 };
 
 const getAvailableDepts = (committee: string, allUsersList: UserProfile[]): string[] => {

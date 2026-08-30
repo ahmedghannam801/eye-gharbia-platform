@@ -1458,7 +1458,7 @@ class SupabaseDatabase {
       'EYE-HEAD-HR': { fullName: 'رئيس لجنة الموارد البشرية', role: 'Head', committee: 'HR', department: 'HRM', email: 'head.hr@eye.org' },
       'EYE-HEAD-PR': { fullName: 'رئيس لجنة العلاقات العامة', role: 'Head', committee: 'PR', department: 'EPR', email: 'head.pr@eye.org' },
       'EYE-HEAD-SM': { fullName: 'رئيس لجنة السوشيال ميديا', role: 'Head', committee: 'SM', department: 'Content', email: 'head.sm@eye.org' },
-      'EYE-HEAD-OR': { fullName: 'رئيس لجنة التنظيم والفعاليات', role: 'Head', committee: 'OR', department: 'VIP', email: 'head.or@eye.org' },
+      'EYE-HEAD-OR': { fullName: 'رئيس لجنة التنظيم', role: 'Head', committee: 'OR', department: 'VIP', email: 'head.or@eye.org' },
 
       // HRM Branch Managers
       'EYE-HRM-PR': { fullName: 'مسئول HR لجنة العلاقات العامة', role: 'HRM', committee: 'HR', department: 'HRM - HR OF PR', email: 'hrm.pr@eye.org' },
@@ -1476,7 +1476,7 @@ class SupabaseDatabase {
       'EYE-1010': { fullName: 'حنين الملواني', role: 'Leader', committee: 'HR', department: 'HRM - HR OF OR', email: 'haneen.melwany@eye.org' },
       'EYE-LEAD-PR': { fullName: 'قائد لجنة العلاقات العامة', role: 'Leader', committee: 'PR', department: 'EPR', email: 'lead.pr@eye.org' },
       'EYE-LEAD-SM': { fullName: 'قائد لجنة السوشيال ميديا', role: 'Leader', committee: 'SM', department: 'Content', email: 'lead.sm@eye.org' },
-      'EYE-LEAD-OR': { fullName: 'قائد لجنة التنظيم والفعاليات', role: 'Leader', committee: 'OR', department: 'VIP', email: 'lead.or@eye.org' },
+      'EYE-LEAD-OR': { fullName: 'قائد لجنة التنظيم', role: 'Leader', committee: 'OR', department: 'VIP', email: 'lead.or@eye.org' },
     };
   }
 
