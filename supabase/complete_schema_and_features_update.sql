@@ -24,6 +24,21 @@ ALTER TABLE public.profiles
   ADD COLUMN IF NOT EXISTS rating numeric DEFAULT 5,
   ADD COLUMN IF NOT EXISTS governorate text DEFAULT 'الغربية';
 
+-- معالجة وتوحيد أي أدوار قديمة أو غير متطابقة قبل تفعيل القيد
+UPDATE public.profiles
+SET role = CASE 
+  WHEN role ILIKE '%super%' OR role ILIKE '%admin%' OR role ILIKE '%owner%' THEN 'Super Admin'
+  WHEN role ILIKE '%deputy%' OR role ILIKE '%نائب منسق%' THEN 'Deputy Coordinator'
+  WHEN role ILIKE '%coord%' OR role ILIKE '%منسق%' THEN 'Coordinator'
+  WHEN role ILIKE '%vice%' OR role ILIKE '%نائب%' THEN 'Vice'
+  WHEN role ILIKE '%head%' OR role ILIKE '%رئيس%' THEN 'Head'
+  WHEN role ILIKE '%hrm%' THEN 'HRM'
+  WHEN role ILIKE '%lead%' OR role ILIKE '%قائد%' THEN 'Leader'
+  ELSE 'Member'
+END
+WHERE role NOT IN ('Member', 'Leader', 'Super Admin', 'HRM', 'Vice', 'Head', 'Coordinator', 'Deputy Coordinator') 
+   OR role IS NULL;
+
 -- تحديث فحص الأدوار (Role Check Constraint) ليشمل جميع الأدوار القيادية
 ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_role_check;
 ALTER TABLE public.profiles 
