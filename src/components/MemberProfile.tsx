@@ -13,11 +13,12 @@ import { CareerCompass } from './CareerCompass';
 
 const COMMITTEES_OPTIONS = ['HR', 'PR', 'SM', 'OR'];
 const COMMITTEE_DEPTS_MAPPING: Record<string, string[]> = {
-  HR: ['HR OF PR', 'HR OF SM', 'HR OF OR', 'HRD', 'HRS', 'HRIS'],
+  HR: ['HRM', 'HRD', 'HRS', 'HRIS'],
   PR: ['EPR', 'IPR'],
   SM: ['Content', 'Graphic Design', 'Photography', 'Video Editing'],
   OR: ['VIP', 'Planning', 'Coordination', 'Logistics'],
 };
+const HRM_SUB_OPTIONS = ['HR OF PR', 'HR OF SM', 'HR OF OR', 'HR OF HR', 'HRM General'];
 
 interface MemberProfileProps {
   currentUser: UserProfile;
@@ -551,6 +552,7 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({
     return activeUser.committee === 'HR' ? 'PR' : 'HR';
   });
   const [targetDept, setTargetDept] = useState<string>('None');
+  const [targetSubDept, setTargetSubDept] = useState<string>('HR OF PR');
   const [transferReason, setTransferReason] = useState('');
   const [transferSuccess, setTransferSuccess] = useState('');
   const [committeeRequests, setCommitteeRequests] = useState<CommitteeChangeRequest[]>(() => {
@@ -574,6 +576,10 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({
     e.preventDefault();
     if (!transferReason.trim()) return;
 
+    const finalTargetDept = (targetCommittee === 'HR' && targetDept === 'HRM' && targetSubDept)
+      ? targetSubDept
+      : targetDept;
+
     db.createCommitteeChangeRequest({
       memberId: currentUser.id,
       memberName: currentUser.fullName,
@@ -581,7 +587,7 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({
       currentCommittee: currentUser.committee,
       targetCommittee: targetCommittee,
       currentDepartment: currentUser.department,
-      targetDepartment: targetDept,
+      targetDepartment: finalTargetDept,
       reason: transferReason,
     }, currentUser);
 
@@ -3799,9 +3805,11 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({
                   <select
                     value={targetCommittee}
                     onChange={e => {
-                      setTargetCommittee(e.target.value);
-                      const depts = COMMITTEE_DEPTS_MAPPING[e.target.value] || [];
+                      const comm = e.target.value;
+                      setTargetCommittee(comm);
+                      const depts = COMMITTEE_DEPTS_MAPPING[comm] || [];
                       setTargetDept(depts[0] || 'None');
+                      if (comm === 'HR') setTargetSubDept('HR OF PR');
                     }}
                     className="w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 p-3 text-xs font-bold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-amber-500 outline-none"
                   >
@@ -3819,7 +3827,11 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({
                   </label>
                   <select
                     value={targetDept}
-                    onChange={e => setTargetDept(e.target.value)}
+                    onChange={e => {
+                      const dept = e.target.value;
+                      setTargetDept(dept);
+                      if (dept === 'HRM') setTargetSubDept('HR OF PR');
+                    }}
                     className="w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 p-3 text-xs font-bold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-amber-500 outline-none"
                   >
                     <option value="None">{language === 'ar' ? 'بدون تخصص محدد' : 'None / General'}</option>
@@ -3829,6 +3841,24 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({
                   </select>
                 </div>
               </div>
+
+              {/* HRM Sub-Branch Selector: Opened only when HR committee and HRM department are selected */}
+              {targetCommittee === 'HR' && targetDept === 'HRM' && (
+                <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-1.5 animate-fadeIn">
+                  <label className="block text-xs font-black text-amber-600 dark:text-amber-400">
+                    {language === 'ar' ? 'اللجنة الفرعية لـ HRM (تحديد التكليف) *' : 'HRM Sub-Branch *'}
+                  </label>
+                  <select
+                    value={targetSubDept}
+                    onChange={e => setTargetSubDept(e.target.value)}
+                    className="w-full rounded-xl border border-amber-500/40 bg-white dark:bg-slate-900 p-2.5 text-xs font-bold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-amber-500 outline-none"
+                  >
+                    {HRM_SUB_OPTIONS.map(sub => (
+                      <option key={sub} value={sub}>{sub}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">

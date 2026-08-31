@@ -253,11 +253,19 @@ export interface OrganizationSettings {
 
 // Committee and Department mapping helper
 export const COMMITTEE_STRUCTURE: Record<string, string[]> = {
-  HR: ['HR OF PR', 'HR OF SM', 'HR OF OR', 'HRD', 'HRS', 'HRIS'],
+  HR: ['HRM', 'HRD', 'HRS', 'HRIS'],
   PR: ['EPR', 'IPR'],
   SM: ['Content', 'Graphic Design', 'Photography', 'Video Editing'],
   OR: ['VIP', 'Planning', 'Coordination', 'Logistics'],
 };
+
+export const HRM_SUB_COMMITTEES: string[] = [
+  'HR OF PR',
+  'HR OF SM',
+  'HR OF OR',
+  'HR OF HR',
+  'HRM General',
+];
 
 export const CENTRAL_DEPARTMENTS: { title: string; committee: string; department: string }[] = [];
 

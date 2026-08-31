@@ -12,11 +12,12 @@ interface ExcusesAndFreezeProps {
 
 const COMMITTEES_LIST = ['HR', 'PR', 'SM', 'OR'];
 const COMMITTEE_DEPTS_MAP: Record<string, string[]> = {
-  HR: ['HR OF PR', 'HR OF SM', 'HR OF OR', 'HRD', 'HRS', 'HRIS'],
+  HR: ['HRM', 'HRD', 'HRS', 'HRIS'],
   PR: ['EPR', 'IPR'],
   SM: ['Content', 'Graphic Design', 'Photography', 'Video Editing'],
   OR: ['VIP', 'Planning', 'Coordination', 'Logistics'],
 };
+const HRM_SUB_BRANCHES = ['HR OF PR', 'HR OF SM', 'HR OF OR', 'HR OF HR', 'HRM General'];
 
 export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ currentUser }) => {
   const { language, isRtl } = useLanguage();
@@ -82,6 +83,7 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
     return currentUser.committee === 'HR' ? 'PR' : 'HR';
   });
   const [targetDepartment, setTargetDepartment] = useState<string>('None');
+  const [targetSubDepartment, setTargetSubDepartment] = useState<string>('HR OF PR');
   const [committeeChangeReason, setCommitteeChangeReason] = useState('');
 
   // Status message
@@ -164,6 +166,10 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
     e.preventDefault();
     if (!committeeChangeReason.trim()) return;
 
+    const finalTargetDept = (targetCommittee === 'HR' && targetDepartment === 'HRM' && targetSubDepartment)
+      ? targetSubDepartment
+      : targetDepartment;
+
     db.createCommitteeChangeRequest({
       memberId: currentUser.id,
       memberName: currentUser.fullName,
@@ -171,7 +177,7 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
       currentCommittee: currentUser.committee,
       targetCommittee: targetCommittee,
       currentDepartment: currentUser.department,
-      targetDepartment: targetDepartment,
+      targetDepartment: finalTargetDept,
       reason: committeeChangeReason,
     }, currentUser);
 
@@ -583,9 +589,11 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
                 <select
                   value={targetCommittee}
                   onChange={e => {
-                    setTargetCommittee(e.target.value);
-                    const depts = COMMITTEE_DEPTS_MAP[e.target.value] || [];
+                    const comm = e.target.value;
+                    setTargetCommittee(comm);
+                    const depts = COMMITTEE_DEPTS_MAP[comm] || [];
                     setTargetDepartment(depts[0] || 'None');
+                    if (comm === 'HR') setTargetSubDepartment('HR OF PR');
                   }}
                   className="w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 p-3 text-xs font-bold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500 outline-none"
                 >
@@ -606,7 +614,11 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
                 </label>
                 <select
                   value={targetDepartment}
-                  onChange={e => setTargetDepartment(e.target.value)}
+                  onChange={e => {
+                    const dept = e.target.value;
+                    setTargetDepartment(dept);
+                    if (dept === 'HRM') setTargetSubDepartment('HR OF PR');
+                  }}
                   className="w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 p-3 text-xs font-bold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500 outline-none"
                 >
                   <option value="None">{isAr ? 'بدون تخصيص محدد / غير محدد' : 'General / None'}</option>
@@ -616,6 +628,24 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
                 </select>
               </div>
             </div>
+
+            {/* HRM Sub-Branch Selector: Opened only when HR committee and HRM department are selected */}
+            {targetCommittee === 'HR' && targetDepartment === 'HRM' && (
+              <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 space-y-1.5 animate-fadeIn">
+                <label className="block text-xs font-black text-emerald-700 dark:text-emerald-300">
+                  {isAr ? 'اللجنة الفرعية لـ HRM (تحديد التكليف) *' : 'HRM Sub-Branch Assignment *'}
+                </label>
+                <select
+                  value={targetSubDepartment}
+                  onChange={e => setTargetSubDepartment(e.target.value)}
+                  className="w-full rounded-xl border border-emerald-500/40 bg-white dark:bg-slate-900 p-2.5 text-xs font-bold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500 outline-none"
+                >
+                  {HRM_SUB_BRANCHES.map(sub => (
+                    <option key={sub} value={sub}>{sub}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div>
               <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">

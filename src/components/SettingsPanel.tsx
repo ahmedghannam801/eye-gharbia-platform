@@ -1502,8 +1502,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white"
                   >
                     <option value="None">None</option>
-                    {['HRM', 'HR', 'PR', 'SM', 'OR'].map(c => (
-                      <option key={c} value={c}>{c === 'HRM' ? 'HRM (الموارد البشرية)' : `${c} Committee`}</option>
+                    {['HR', 'PR', 'SM', 'OR'].map(c => (
+                      <option key={c} value={c}>{c === 'HR' ? 'الموارد البشرية (HR)' : `${c} Committee`}</option>
                     ))}
                   </select>
                 </div>
@@ -1516,26 +1516,28 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white"
                   >
                     <option value="None">None</option>
-                    {(COMMITTEE_STRUCTURE[editCommittee] || ['HRM', 'EPR', 'Content', 'Graphic Design', 'VIP']).map(d => (
+                    {(COMMITTEE_STRUCTURE[editCommittee] || ['HRM', 'HRD', 'HRS', 'HRIS']).map(d => (
                       <option key={d} value={d}>{d}</option>
                     ))}
                   </select>
                 </div>
 
-                {/* Sub-committee dropdown shown ONLY for HRM / HR */}
-                {(editCommittee === 'HRM' || editCommittee === 'HR' || editDepartment.startsWith('HRM')) && (
+                {/* Sub-committee dropdown shown ONLY when HR committee and HRM department are chosen */}
+                {editCommittee === 'HR' && (editDepartment === 'HRM' || editDepartment.startsWith('HRM')) && (
                   <div className="col-span-2 bg-indigo-50/70 dark:bg-indigo-950/40 p-3.5 rounded-2xl border border-indigo-200 dark:border-indigo-800/60 space-y-1">
                     <label className="text-xs font-black text-indigo-900 dark:text-indigo-200 block mb-1">
-                      {ar ? 'اللجنة الفرعية لـ HRM *' : 'HRM Sub-Committee *'}
+                      {ar ? 'اللجنة الفرعية لـ HRM (التكليف) *' : 'HRM Sub-Committee *'}
                     </label>
                     <select
-                      value={editSubCommittee}
+                      value={editSubCommittee || 'HR OF PR'}
                       onChange={e => setEditSubCommittee(e.target.value)}
                       className="w-full bg-white dark:bg-slate-800 border border-indigo-200 dark:border-indigo-700 rounded-xl px-3 py-2 text-xs font-bold text-indigo-900 dark:text-indigo-100"
                     >
-                      <option value="HR OF OR">HR OF OR (Human Resources of Organization & Recruitment)</option>
-                      <option value="HR OF SM">HR OF SM (Human Resources of Social Media)</option>
                       <option value="HR OF PR">HR OF PR (Human Resources of Public Relations)</option>
+                      <option value="HR OF SM">HR OF SM (Human Resources of Social Media)</option>
+                      <option value="HR OF OR">HR OF OR (Human Resources of Organization)</option>
+                      <option value="HR OF HR">HR OF HR (Internal Human Resources)</option>
+                      <option value="HRM General">HRM General (General HR Management)</option>
                     </select>
                   </div>
                 )}

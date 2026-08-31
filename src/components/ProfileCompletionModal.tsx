@@ -17,12 +17,10 @@ const COMMITTEE_LABELS: Record<string, string> = {
 };
 
 const DEPARTMENT_LABELS: Record<string, string> = {
-  // HR Departments (Branches)
-  'HR OF PR': 'الموارد البشرية لـ لجنة العلاقات العامة (HR OF PR)',
-  'HR OF SM': 'الموارد البشرية لـ لجنة السوشيال ميديا (HR OF SM)',
-  'HR OF OR': 'الموارد البشرية لـ لجنة التنظيم (HR OF OR)',
+  // HR Departments
+  'HRM': 'إدارة الموارد البشرية (HRM)',
   'HRD': 'التطوير والتدريب (HRD)',
-  'HRS': 'الاستبيانات والمتابعة (HRS)',
+  'HRS': 'الدعم والمساندة (HRS)',
   'HRIS': 'نظم المعلومات وإدارة البيانات (HRIS)',
   // PR Departments
   'EPR': 'العلاقات العامة الخارجية (EPR)',
@@ -39,6 +37,7 @@ const DEPARTMENT_LABELS: Record<string, string> = {
   'Logistics': 'الدعم اللوجستي والميداني (Logistics)',
 };
 
+const HRM_SUBS = ['HR OF PR', 'HR OF SM', 'HR OF OR', 'HR OF HR', 'HRM General'];
 const COMMITTEES = ['HR', 'PR', 'SM', 'OR'];
 const DEPARTMENTS = COMMITTEE_STRUCTURE;
 
@@ -61,10 +60,10 @@ export function isProfileIncomplete(user: UserProfile): boolean {
   const comm = user.committee || '';
   const committeeBad = !comm || comm === 'None' || comm === 'General' || !COMMITTEES.includes(comm);
 
-  // 4. Department Check: Must be valid and not generic HRM/None
+  // 4. Department Check: Must be valid
   const validDepts = DEPARTMENTS[comm] || [];
   const dept = (user.department || '').trim();
-  const deptBad = !dept || dept === 'None' || dept === 'HRM' || dept === 'Events' || !validDepts.includes(dept);
+  const deptBad = !dept || dept === 'None' || dept === 'Events';
 
   return nameBad || phoneBad || committeeBad || deptBad;
 }
@@ -74,7 +73,8 @@ export const ProfileCompletionModal: React.FC<Props> = ({ currentUser, onComplet
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [committee, setCommittee] = useState('HR');
-  const [department, setDepartment] = useState('HR OF PR');
+  const [department, setDepartment] = useState('HRM');
+  const [subBranch, setSubBranch] = useState('HR OF PR');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [done, setDone] = useState(false);
@@ -92,7 +92,7 @@ export const ProfileCompletionModal: React.FC<Props> = ({ currentUser, onComplet
       const availableDepts = DEPARTMENTS[defaultComm] || [];
       const defaultDept = availableDepts.includes(currentUser.department)
         ? currentUser.department
-        : availableDepts[0] || '';
+        : availableDepts[0] || 'HRM';
 
       setFullName(currentUser.fullName && currentUser.fullName.includes(' ') ? currentUser.fullName : '');
       setPhone(currentUser.phoneNumber && currentUser.phoneNumber !== '+201000000000' ? currentUser.phoneNumber : '');
@@ -139,11 +139,15 @@ export const ProfileCompletionModal: React.FC<Props> = ({ currentUser, onComplet
     setError('');
 
     try {
+      const effectiveDepartment = (committee === 'HR' && department === 'HRM' && subBranch)
+        ? subBranch
+        : department;
+
       const updates = {
         full_name: cleanName,
         phone_number: cleanPhone,
         committee,
-        department,
+        department: effectiveDepartment,
         status: 'Active' as const,
       };
 
@@ -160,7 +164,7 @@ export const ProfileCompletionModal: React.FC<Props> = ({ currentUser, onComplet
         fullName: cleanName,
         phoneNumber: cleanPhone,
         committee,
-        department,
+        department: effectiveDepartment,
         status: 'Active',
       }, currentUser);
 
@@ -175,7 +179,7 @@ export const ProfileCompletionModal: React.FC<Props> = ({ currentUser, onComplet
           fullName: cleanName,
           phoneNumber: cleanPhone,
           committee,
-          department,
+          department: effectiveDepartment,
           status: 'Active',
         });
       }, 1500);
@@ -291,7 +295,10 @@ export const ProfileCompletionModal: React.FC<Props> = ({ currentUser, onComplet
               </label>
               <select
                 value={department}
-                onChange={e => setDepartment(e.target.value)}
+                onChange={e => {
+                  setDepartment(e.target.value);
+                  if (e.target.value === 'HRM') setSubBranch('HR OF PR');
+                }}
                 className="w-full px-4 py-3 rounded-xl text-sm font-semibold text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all cursor-pointer"
                 style={{ backgroundColor: '#1e293b', border: '1px solid #334155', color: '#ffffff' }}
               >
@@ -302,6 +309,27 @@ export const ProfileCompletionModal: React.FC<Props> = ({ currentUser, onComplet
                 ))}
               </select>
             </div>
+
+            {/* 5. HRM Sub-Branch (when HR committee and HRM department are chosen) */}
+            {committee === 'HR' && department === 'HRM' && (
+              <div className="p-3.5 rounded-xl bg-blue-950/40 border border-blue-800/60 animate-fadeIn space-y-1.5">
+                <label className="block text-xs font-black text-blue-300">
+                  <span>فرع أو تكليف الموارد البشرية لـ HRM *</span>
+                </label>
+                <select
+                  value={subBranch}
+                  onChange={e => setSubBranch(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-lg text-xs font-bold text-white focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                  style={{ backgroundColor: '#1e293b', border: '1px solid #334155', color: '#ffffff' }}
+                >
+                  {HRM_SUBS.map(s => (
+                    <option key={s} value={s} style={{ backgroundColor: '#1e293b', color: '#ffffff' }}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* Error Message */}
             {error && (
