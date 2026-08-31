@@ -156,7 +156,7 @@ export const ProfileCompletionModal: React.FC<Props> = ({ currentUser, onComplet
       }
 
       // 2. Update local DB cache
-      const updatedUser = await db.updateProfile(currentUser.id, {
+      await db.updateProfile(currentUser.id, {
         fullName: cleanName,
         phoneNumber: cleanPhone,
         committee,
@@ -170,7 +170,7 @@ export const ProfileCompletionModal: React.FC<Props> = ({ currentUser, onComplet
 
       setTimeout(() => {
         setVisible(false);
-        onComplete(updatedUser || {
+        onComplete({
           ...currentUser,
           fullName: cleanName,
           phoneNumber: cleanPhone,

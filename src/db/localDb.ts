@@ -3558,7 +3558,7 @@ class SupabaseDatabase {
       this.cache.notifications.unshift(newNotif);
 
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uId);
-      const targetUuid = isUuid ? uId : (this.cache.users.find(u => u.id === uId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(u.id))?.id || null);
+      const targetUuid = isUuid ? uId : (this.cache.users.find(u => u.id === uId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(u.id))?.id || uId);
 
       if (targetUuid) {
         rowsToInsert.push({
@@ -7382,14 +7382,23 @@ class SupabaseDatabase {
     })();
 
     // Notify Super Admin, Vice, Coordinators, HRM, Head, and Committee Leaders
-    const receivers = this.getUsers().filter(
-      (u) =>
-        (['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM', 'Head'].includes(u.role) ||
-          u.department === 'HRM' ||
-          u.committee === 'HR' ||
-          (u.role === 'Leader' && (u.committee === req.committee || u.committee === 'All'))) &&
-        u.status === 'Active'
-    );
+    const reqComm = (req.committee || '').trim().toLowerCase();
+    const receivers = this.getUsers().filter((u) => {
+      const uRole = (u.role || '').trim();
+      const uComm = (u.committee || '').trim().toLowerCase();
+      const isActive = !u.status || u.status.toLowerCase() === 'active';
+      if (!isActive) return false;
+
+      // Executive admins & HRM always receive
+      if (['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM'].includes(uRole)) return true;
+      if (u.department === 'HRM' || uComm === 'hr' || uComm === 'all') return true;
+
+      // Committee Head and Leaders receive for their committee
+      if (uRole === 'Head' || uRole === 'Leader') {
+        return uComm === reqComm || uComm === 'all' || (reqComm.includes('hr') && uComm.includes('hr'));
+      }
+      return false;
+    });
     const receiverIds = Array.from(new Set(receivers.map((r) => r.id)));
     const safeReason = (req.reason || '').slice(0, 40);
     this.addNotificationsBulk(
@@ -7538,14 +7547,23 @@ class SupabaseDatabase {
     })();
 
     // Notify Super Admin, Vice, Coordinators, HRM, Head, and Committee Leaders
-    const receivers = this.getUsers().filter(
-      (u) =>
-        (['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM', 'Head'].includes(u.role) ||
-          u.department === 'HRM' ||
-          u.committee === 'HR' ||
-          (u.role === 'Leader' && (u.committee === req.committee || u.committee === 'All'))) &&
-        u.status === 'Active'
-    );
+    const reqComm = (req.committee || '').trim().toLowerCase();
+    const receivers = this.getUsers().filter((u) => {
+      const uRole = (u.role || '').trim();
+      const uComm = (u.committee || '').trim().toLowerCase();
+      const isActive = !u.status || u.status.toLowerCase() === 'active';
+      if (!isActive) return false;
+
+      // Executive admins & HRM always receive
+      if (['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM'].includes(uRole)) return true;
+      if (u.department === 'HRM' || uComm === 'hr' || uComm === 'all') return true;
+
+      // Committee Head and Leaders receive for their committee
+      if (uRole === 'Head' || uRole === 'Leader') {
+        return uComm === reqComm || uComm === 'all' || (reqComm.includes('hr') && uComm.includes('hr'));
+      }
+      return false;
+    });
     const receiverIds = Array.from(new Set(receivers.map((r) => r.id)));
     const safeReason = (req.reason || '').slice(0, 40);
     this.addNotificationsBulk(
@@ -7698,15 +7716,25 @@ class SupabaseDatabase {
       }
     })();
 
-    // Notify Super Admin, Vice, Coordinators, HRM, Head, and Committee Leaders (both current and target committee)
-    const receivers = this.getUsers().filter(
-      (u) =>
-        (['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM', 'Head'].includes(u.role) ||
-          u.department === 'HRM' ||
-          u.committee === 'HR' ||
-          (u.role === 'Leader' && (u.committee === req.currentCommittee || u.committee === req.targetCommittee || u.committee === 'All'))) &&
-        u.status === 'Active'
-    );
+    // Notify Super Admin, Vice, Coordinators, HRM, and Committee Leaders (both current and target committee)
+    const curComm = (req.currentCommittee || '').trim().toLowerCase();
+    const targetComm = (req.targetCommittee || '').trim().toLowerCase();
+    const receivers = this.getUsers().filter((u) => {
+      const uRole = (u.role || '').trim();
+      const uComm = (u.committee || '').trim().toLowerCase();
+      const isActive = !u.status || u.status.toLowerCase() === 'active';
+      if (!isActive) return false;
+
+      // Executive admins & HRM always receive
+      if (['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM'].includes(uRole)) return true;
+      if (u.department === 'HRM' || uComm === 'hr' || uComm === 'all') return true;
+
+      // Committee Heads & Leaders of current or target committee receive
+      if (uRole === 'Head' || uRole === 'Leader') {
+        return uComm === curComm || uComm === targetComm || uComm === 'all';
+      }
+      return false;
+    });
     const receiverIds = Array.from(new Set(receivers.map((r) => r.id)));
     const safeReason = (req.reason || '').slice(0, 50);
     this.addNotificationsBulk(

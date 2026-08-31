@@ -1,6 +1,6 @@
 import React, { useState, useEffect, Component, ErrorInfo, ReactNode } from 'react';
 import { db } from '../db/localDb';
-import { supabase, getPermanentStorageUrl } from '../lib/supabaseClient';
+import { supabase, isSupabaseConfigured, getPermanentStorageUrl } from '../lib/supabaseClient';
 import { Task, Submission, UserProfile, COMMITTEE_STRUCTURE, TaskPriority, TaskStatus, SubmissionStatus } from '../types';
 import {
   FolderKanban, CheckSquare, Plus, FileText, Calendar, ShieldAlert, ArrowUpRight,
@@ -262,14 +262,46 @@ const TaskVideoPlayer: React.FC<{ task: Task; language: string }> = ({ task, lan
           </div>
         ) : (
           <iframe
-            src={ytVideoId ? `https://www.youtube.com/embed/${ytVideoId}?autoplay=1&playsinline=1&rel=0&modestbranding=1&enablejsapi=1` : videoInfo.embedUrl}
+            src={
+              ytVideoId
+                ? `https://www.youtube-nocookie.com/embed/${ytVideoId}?autoplay=1&playsinline=1&rel=0&modestbranding=1&enablejsapi=1${typeof window !== 'undefined' ? `&origin=${encodeURIComponent(window.location.origin)}` : ''}`
+                : videoInfo.embedUrl
+            }
             title={task.name}
             style={{ width: '100%', height: '100%', border: 0, backgroundColor: '#000000' }}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            referrerPolicy="strict-origin-when-cross-origin"
             allowFullScreen
           />
         )}
       </div>
+
+      {/* Embedded Video Note & Fast YouTube Direct Action */}
+      {ytVideoId && (
+        <div className="p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs text-amber-900 dark:text-amber-200">
+          <div className="space-y-0.5 text-start">
+            <p className="font-extrabold flex items-center gap-1.5 text-amber-800 dark:text-amber-300 text-[11px]">
+              <span>💡</span>
+              <span>{isAr ? 'إذا ظهرت لك رسالة (المحتوى محظور داخل المواقع):' : 'If you see (Content blocked on external sites):'}</span>
+            </p>
+            <p className="text-[11px] opacity-90">
+              {isAr
+                ? 'قام ناشر الفيديو على يوتيوب بتعطيل التضمين الخارجي. يمكنك المشاهدة بضغطة زر مباشرة:'
+                : 'Embedding is restricted by the video uploader. Click below to open directly in YouTube app:'}
+            </p>
+          </div>
+
+          <a
+            href={`https://www.youtube.com/watch?v=${ytVideoId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-md shadow-red-600/30 transition-all shrink-0 cursor-pointer"
+          >
+            <Play className="w-3.5 h-3.5 fill-current" />
+            <span>{isAr ? 'فتح وتشغيل في YouTube 🎬' : 'Open in YouTube App 🎬'}</span>
+          </a>
+        </div>
+      )}
 
       {/* Action Bar & Quick Open Buttons */}
       <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">

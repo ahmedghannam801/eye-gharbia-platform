@@ -242,7 +242,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
     if (isSuper || !currentUser.committee || currentUser.committee === 'All' || currentUser.committee === 'None') {
       return {
         members: users.filter(u => u.role === 'Member' && u.status === 'Active'),
-        tasks: tasks.filter(t => t.status !== 'Draft' && t.status !== 'Archived'),
+        tasks: tasks.filter(t => (t.status as string) !== 'Draft' && (t.status as string) !== 'Archived'),
         subs: submissions
       };
     }
@@ -263,7 +263,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
   // Comprehensive & Reactive Member Tasks matching
   const memberTasks = tasks.filter(t => {
     // Exclude drafts or archived tasks
-    if (t.status === 'Draft' || t.status === 'Archived') return false;
+    if ((t.status as string) === 'Draft' || (t.status as string) === 'Archived') return false;
 
     // 1. Direct Assignment: If member is directly assigned in targeted member list
     if (Array.isArray(t.assignedMemberIds) && t.assignedMemberIds.length > 0 && t.assignedMemberIds.includes(currentUser.id)) {

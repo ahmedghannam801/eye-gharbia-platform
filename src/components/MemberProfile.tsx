@@ -2167,8 +2167,8 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({
                       </div>
                     )}
 
-                    {/* Committee Transfer Request Action / Status */}
-                    {isOwnProfile && (
+                    {/* Committee Transfer Request Action / Status (Only for Members and Leaders, not Head / Highboard) */}
+                    {isOwnProfile && !['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator'].includes(userProfile.role) && (
                       <div className="py-2">
                         {pendingTransferRequest ? (
                           <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs space-y-1">

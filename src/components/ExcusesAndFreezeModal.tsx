@@ -21,33 +21,44 @@ const COMMITTEE_DEPTS_MAP: Record<string, string[]> = {
 export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ currentUser }) => {
   const { language, isRtl } = useLanguage();
   const isAr = language === 'ar';
-  const isHRResponsible =
+
+  const isHighboardOrHR =
     isAdminUser(currentUser) ||
-    ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM'].includes(currentUser.role) ||
+    ['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM'].includes(currentUser.role) ||
     currentUser.department === 'HRM' ||
     currentUser.committee === 'HR' ||
     currentUser.committee === 'All' ||
     (currentUser.department || '').includes('HR') ||
     ((currentUser as any).subCommittee || '').includes('HR');
 
-  const isSuperAdminOrVice = isAdminUser(currentUser) || ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM'].includes(currentUser.role);
-  const isAdminOrLeader = isHRResponsible || currentUser.role === 'Leader';
+  const isHead = currentUser.role === 'Head';
+  const isHeadOrHighboard = isHighboardOrHR || isHead;
+  const isLeader = currentUser.role === 'Leader';
+  const isLeadership = isHeadOrHighboard || isLeader;
 
   // Check if a user can approve/reject requests (Super Admin / Head / Vice / HR have full management and approval authority)
   const canApproveRequest = (requestMemberId?: string): boolean => {
-    if (isAdminUser(currentUser) || isHRResponsible || isSuperAdminOrVice) {
+    if (isAdminUser(currentUser) || isHighboardOrHR || isHead) {
       return true; // Unrestricted access for all leadership and HR admins
     }
-    if (currentUser.role === 'Leader') {
+    if (isLeader) {
       if (requestMemberId && requestMemberId === currentUser.id) return false;
       return true;
     }
     return false;
   };
 
-  const [activeTab, setActiveTab] = useState<'excuses' | 'freeze' | 'committee-change' | 'manage' | 'activity'>(() => {
-    return isAdminOrLeader ? 'manage' : 'excuses';
+  const [activeTab, setActiveTab] = useState<'manage' | 'excuses' | 'freeze' | 'committee-change' | 'activity'>(() => {
+    return isLeadership ? 'manage' : 'excuses';
   });
+  const [manageCategoryFilter, setManageCategoryFilter] = useState<'all' | 'committee' | 'excuse' | 'freeze'>('all');
+  const [committeeFilter, setCommitteeFilter] = useState<string>(() => {
+    if (isHead && currentUser.committee && currentUser.committee !== 'None' && currentUser.committee !== 'All') {
+      return currentUser.committee;
+    }
+    return 'All';
+  });
+  const [statusFilter, setStatusFilter] = useState<'All' | 'Pending' | 'Approved' | 'Rejected'>('All');
   const [activitySearch, setActivitySearch] = useState('');
 
   const [excuses, setExcuses] = useState<ExcuseRequest[]>([]);
@@ -186,42 +197,63 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
     loadData();
   };
 
+  const userComm = (currentUser.committee || '').trim().toLowerCase();
+
   const visibleExcuses = excuses.filter(exc => {
-    if (isHRResponsible) return true;
-    if (currentUser.role === 'Leader') {
+    if (isHighboardOrHR) {
+      if (committeeFilter !== 'All') {
+        return (exc.committee || '').trim().toLowerCase() === committeeFilter.toLowerCase();
+      }
+      return true;
+    }
+    if (isHead || isLeader) {
       const excComm = (exc.committee || '').trim().toLowerCase();
-      const userComm = (currentUser.committee || '').trim().toLowerCase();
-      if (excComm === userComm || excComm === 'all' || userComm === 'all') return true;
-      if ((userComm === 'hr' || userComm === 'hrm') && (excComm === 'hr' || excComm === 'hrm')) return true;
-      return false;
+      const matchCommittee = excComm === userComm || excComm === 'all' || userComm === 'all' || (userComm.includes('hr') && excComm.includes('hr'));
+      if (committeeFilter !== 'All') {
+        return matchCommittee && (exc.committee || '').trim().toLowerCase() === committeeFilter.toLowerCase();
+      }
+      return matchCommittee || exc.memberId === currentUser.id;
     }
     return exc.memberId === currentUser.id;
-  });
+  }).filter(exc => statusFilter === 'All' || exc.status === statusFilter);
 
   const visibleFreezes = freezes.filter(frz => {
-    if (isHRResponsible) return true;
-    if (currentUser.role === 'Leader') {
+    if (isHighboardOrHR) {
+      if (committeeFilter !== 'All') {
+        return (frz.committee || '').trim().toLowerCase() === committeeFilter.toLowerCase();
+      }
+      return true;
+    }
+    if (isHead || isLeader) {
       const frzComm = (frz.committee || '').trim().toLowerCase();
-      const userComm = (currentUser.committee || '').trim().toLowerCase();
-      if (frzComm === userComm || frzComm === 'all' || userComm === 'all') return true;
-      if ((userComm === 'hr' || userComm === 'hrm') && (frzComm === 'hr' || frzComm === 'hrm')) return true;
-      return false;
+      const matchCommittee = frzComm === userComm || frzComm === 'all' || userComm === 'all' || (userComm.includes('hr') && frzComm.includes('hr'));
+      if (committeeFilter !== 'All') {
+        return matchCommittee && (frz.committee || '').trim().toLowerCase() === committeeFilter.toLowerCase();
+      }
+      return matchCommittee || frz.memberId === currentUser.id;
     }
     return frz.memberId === currentUser.id;
-  });
+  }).filter(frz => statusFilter === 'All' || frz.status === statusFilter);
 
   const visibleCommitteeChanges = committeeChanges.filter(c => {
-    if (isHRResponsible) return true;
-    if (currentUser.role === 'Leader') {
+    if (isHighboardOrHR) {
+      if (committeeFilter !== 'All') {
+        return (c.currentCommittee || '').trim().toLowerCase() === committeeFilter.toLowerCase() ||
+               (c.targetCommittee || '').trim().toLowerCase() === committeeFilter.toLowerCase();
+      }
+      return true;
+    }
+    if (isHead || isLeader) {
       const curComm = (c.currentCommittee || '').trim().toLowerCase();
       const targetComm = (c.targetCommittee || '').trim().toLowerCase();
-      const userComm = (currentUser.committee || '').trim().toLowerCase();
-      if (curComm === userComm || targetComm === userComm || userComm === 'all') return true;
-      if ((userComm === 'hr' || userComm === 'hrm') && (curComm === 'hr' || targetComm === 'hr')) return true;
-      return false;
+      const matchCommittee = curComm === userComm || targetComm === userComm || userComm === 'all' || (userComm.includes('hr') && (curComm.includes('hr') || targetComm.includes('hr')));
+      if (committeeFilter !== 'All') {
+        return matchCommittee && ((c.currentCommittee || '').trim().toLowerCase() === committeeFilter.toLowerCase() || (c.targetCommittee || '').trim().toLowerCase() === committeeFilter.toLowerCase());
+      }
+      return matchCommittee || c.memberId === currentUser.id;
     }
     return c.memberId === currentUser.id;
-  });
+  }).filter(c => statusFilter === 'All' || c.status === statusFilter);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -234,10 +266,10 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
     }
   };
 
-  const pendingCount =
-    visibleExcuses.filter(e => e.status === 'Pending').length +
-    visibleFreezes.filter(f => f.status === 'Pending').length +
-    visibleCommitteeChanges.filter(c => c.status === 'Pending').length;
+  const pendingCommCount = visibleCommitteeChanges.filter(c => c.status === 'Pending').length;
+  const pendingExcCount = visibleExcuses.filter(e => e.status === 'Pending').length;
+  const pendingFrzCount = visibleFreezes.filter(f => f.status === 'Pending').length;
+  const pendingCount = pendingCommCount + pendingExcCount + pendingFrzCount;
 
   return (
     <div className="space-y-6 p-4 sm:p-6" dir={isRtl ? 'rtl' : 'ltr'}>
@@ -248,11 +280,19 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
             <Snowflake className="w-3.5 h-3.5" />
             <span>{isAr ? 'منظومة الأعذار والطلبات وتجميد العضوية' : 'Excuses, Requests & Freeze System'}</span>
           </div>
-          <h1 className="text-xl sm:text-3xl font-black">{isAr ? 'تقديم الأعذار وطلبات نقل اللجان وتجميد النشاط' : 'Excuses & Requests Hub'}</h1>
+          <h1 className="text-xl sm:text-3xl font-black">
+            {isLeadership
+              ? (isAr ? 'لوحة متابعة ومراجعة طلبات الأعضاء واللجان' : 'Leadership Requests & Approvals Panel')
+              : (isAr ? 'تقديم الأعذار وطلبات نقل اللجان وتجميد النشاط' : 'Excuses & Requests Hub')}
+          </h1>
           <p className="text-xs sm:text-sm text-slate-300 max-w-2xl font-semibold">
-            {isAr 
-              ? 'يمكنك تقديم عذر رسمي عن عدم حضور اجتماع، أو طلب فريز لتجميد نشاطك مؤقتاً، أو تقديم طلب رسمي لتغيير ونقل لجنتك إلى لجنة أخرى بموافقة القادة والإدارة.' 
-              : 'Submit official excuses for meetings, request membership freezes, or request a committee transfer with Leader and Admin approval.'}
+            {isLeadership
+              ? (isAr
+                  ? 'يمكنك مراجعة كافة طلبات الأعضاء واللجان (طلبات نقل اللجان، الأعذار الرسمية، وتجميد العضوية) واعتمادها أو رفضها فورياً مع إشعار الأعضاء بالقرار.'
+                  : 'Review, approve, or reject member requests for committee transfers, excuses, and membership freezes with instant notifications.')
+              : (isAr 
+                  ? 'يمكنك تقديم عذر رسمي عن عدم حضور اجتماع، أو طلب فريز لتجميد نشاطك مؤقتاً، أو تقديم طلب رسمي لتغيير ونقل لجنتك إلى لجنة أخرى بموافقة القادة والإدارة.' 
+                  : 'Submit official excuses for meetings, request membership freezes, or request a committee transfer with Leader and Admin approval.')}
           </p>
         </div>
       </div>
@@ -266,70 +306,112 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
         </div>
       )}
 
+      {/* Main Navigation Tabs */}
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-3">
-        <button
-          onClick={() => setActiveTab('excuses')}
-          className={`px-4 py-2.5 rounded-2xl font-black text-xs flex items-center gap-2 transition-all cursor-pointer ${
-            activeTab === 'excuses'
-              ? 'bg-blue-600 text-white shadow-md'
-              : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
-          }`}
-        >
-          <FileText className="w-4 h-4" />
-          <span>{isAr ? 'تقديم عذر رسمي' : 'Submit Excuse'}</span>
-        </button>
+        {isLeadership ? (
+          <>
+            <button
+              onClick={() => setActiveTab('manage')}
+              className={`px-4 py-2.5 rounded-2xl font-black text-xs flex items-center gap-2 transition-all cursor-pointer ${
+                activeTab === 'manage'
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                  : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
+              }`}
+            >
+              <Clock className="w-4 h-4" />
+              <span>{isAr ? '📥 إدارة ومراجعة الطلبات واللجان' : 'Manage & Review Requests'}</span>
+              {pendingCount > 0 && (
+                <span className="px-2 py-0.5 rounded-full bg-amber-400 text-slate-900 text-[10px] font-black animate-pulse">
+                  {pendingCount}
+                </span>
+              )}
+            </button>
 
-        <button
-          onClick={() => setActiveTab('freeze')}
-          className={`px-4 py-2.5 rounded-2xl font-black text-xs flex items-center gap-2 transition-all cursor-pointer ${
-            activeTab === 'freeze'
-              ? 'bg-blue-600 text-white shadow-md'
-              : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
-          }`}
-        >
-          <Snowflake className="w-4 h-4 text-cyan-400" />
-          <span>{isAr ? 'طلب فريز (تجميد العضوية)' : 'Request Freeze'}</span>
-        </button>
+            <button
+              onClick={() => setActiveTab('activity')}
+              className={`px-4 py-2.5 rounded-2xl font-black text-xs flex items-center gap-2 transition-all cursor-pointer ${
+                activeTab === 'activity'
+                  ? 'bg-purple-600 text-white shadow-md'
+                  : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
+              }`}
+            >
+              <span>📜 {isAr ? 'سجل الأنشطة والتحركات' : 'Audit Logs'}</span>
+            </button>
 
-        <button
-          onClick={() => setActiveTab('committee-change')}
-          className={`px-4 py-2.5 rounded-2xl font-black text-xs flex items-center gap-2 transition-all cursor-pointer ${
-            activeTab === 'committee-change'
-              ? 'bg-emerald-600 text-white shadow-md'
-              : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
-          }`}
-        >
-          <ArrowRightLeft className="w-4 h-4 text-emerald-400" />
-          <span>{isAr ? '🔄 طلب تغيير لجنة' : 'Change Committee'}</span>
-        </button>
+            <button
+              onClick={() => setActiveTab('excuses')}
+              className={`px-4 py-2.5 rounded-2xl font-black text-xs flex items-center gap-2 transition-all cursor-pointer ${
+                activeTab === 'excuses'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
+              }`}
+            >
+              <FileText className="w-4 h-4" />
+              <span>{isAr ? 'تقديم عذر خاص بي' : 'Submit Excuse'}</span>
+            </button>
 
-        <button
-          onClick={() => setActiveTab('manage')}
-          className={`px-4 py-2.5 rounded-2xl font-black text-xs flex items-center gap-2 transition-all cursor-pointer ${
-            activeTab === 'manage'
-              ? 'bg-blue-600 text-white shadow-md'
-              : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
-          }`}
-        >
-          <Clock className="w-4 h-4" />
-          <span>
-            {isAdminOrLeader
-              ? (isAr ? `إدارة ومراجعة الطلبات (${pendingCount})` : `Manage Requests (${pendingCount})`)
-              : (isAr ? 'طلباتي السابقة' : 'My Requests')}
-          </span>
-        </button>
+            <button
+              onClick={() => setActiveTab('freeze')}
+              className={`px-4 py-2.5 rounded-2xl font-black text-xs flex items-center gap-2 transition-all cursor-pointer ${
+                activeTab === 'freeze'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
+              }`}
+            >
+              <Snowflake className="w-4 h-4 text-cyan-400" />
+              <span>{isAr ? 'طلب فريز خاص بي' : 'Request Freeze'}</span>
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              onClick={() => setActiveTab('excuses')}
+              className={`px-4 py-2.5 rounded-2xl font-black text-xs flex items-center gap-2 transition-all cursor-pointer ${
+                activeTab === 'excuses'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
+              }`}
+            >
+              <FileText className="w-4 h-4" />
+              <span>{isAr ? 'تقديم عذر رسمي' : 'Submit Excuse'}</span>
+            </button>
 
-        {isAdminOrLeader && (
-          <button
-            onClick={() => setActiveTab('activity')}
-            className={`px-4 py-2.5 rounded-2xl font-black text-xs flex items-center gap-2 transition-all cursor-pointer ${
-              activeTab === 'activity'
-                ? 'bg-purple-600 text-white shadow-md'
-                : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
-            }`}
-          >
-            <span>📜 {isAr ? 'سجل الأنشطة والتحركات اللحظي' : 'Audit Logs'}</span>
-          </button>
+            <button
+              onClick={() => setActiveTab('freeze')}
+              className={`px-4 py-2.5 rounded-2xl font-black text-xs flex items-center gap-2 transition-all cursor-pointer ${
+                activeTab === 'freeze'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
+              }`}
+            >
+              <Snowflake className="w-4 h-4 text-cyan-400" />
+              <span>{isAr ? 'طلب فريز (تجميد العضوية)' : 'Request Freeze'}</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('committee-change')}
+              className={`px-4 py-2.5 rounded-2xl font-black text-xs flex items-center gap-2 transition-all cursor-pointer ${
+                activeTab === 'committee-change'
+                  ? 'bg-emerald-600 text-white shadow-md'
+                  : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
+              }`}
+            >
+              <ArrowRightLeft className="w-4 h-4 text-emerald-400" />
+              <span>{isAr ? '🔄 طلب تغيير لجنة' : 'Change Committee'}</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('manage')}
+              className={`px-4 py-2.5 rounded-2xl font-black text-xs flex items-center gap-2 transition-all cursor-pointer ${
+                activeTab === 'manage'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
+              }`}
+            >
+              <Clock className="w-4 h-4" />
+              <span>{isAr ? 'طلباتي ومتابعة الردود' : 'My Requests'}</span>
+            </button>
+          </>
         )}
       </div>
 
@@ -473,7 +555,7 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
         </div>
       )}
 
-      {activeTab === 'committee-change' && (
+      {activeTab === 'committee-change' && !isHeadOrHighboard && (
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 space-y-6 shadow-sm">
           <h2 className="text-base font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-2">
             <ArrowRightLeft className="w-5 h-5 text-emerald-500" />
@@ -562,203 +644,310 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
 
       {activeTab === 'manage' && (
         <div className="space-y-6">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 space-y-4 shadow-sm">
-            <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100 flex items-center justify-between">
-              <span className="flex items-center gap-2">
-                <ArrowRightLeft className="w-4 h-4 text-emerald-500" />
-                {isAr ? 'طلبات تغيير ونقل اللجان' : 'Committee Transfer Requests'}
-              </span>
-              <span className="text-xs text-slate-400 font-mono font-bold">
-                {visibleCommitteeChanges.length}
-              </span>
-            </h3>
-
-            {visibleCommitteeChanges.length === 0 ? (
-              <p className="text-xs text-slate-400 text-center py-6">{isAr ? 'لا توجد طلبات تغيير لجان حالياً.' : 'No committee transfer requests found.'}</p>
-            ) : (
-              <div className="space-y-3">
-                {visibleCommitteeChanges.map((commReq) => (
-                  <div
-                    key={commReq.id}
-                    className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-                  >
-                    <div className="space-y-1.5 text-start">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-[9px] font-bold">
-                          {isAr ? 'طلب نقل لجنة' : 'Transfer'}
-                        </span>
-                        <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">
-                          {commReq.memberName}
-                        </h4>
-                        <span className="text-[10px] text-slate-400 font-mono">
-                          {new Date(commReq.createdAt).toLocaleDateString()}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs font-black text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 w-fit">
-                        <span className="text-amber-600 dark:text-amber-400">{commReq.currentCommittee}</span>
-                        <ArrowRightLeft className="w-3.5 h-3.5 text-slate-400" />
-                        <span className="text-emerald-600 dark:text-emerald-400">{commReq.targetCommittee} {commReq.targetDepartment && commReq.targetDepartment !== 'None' ? `(${commReq.targetDepartment})` : ''}</span>
-                      </div>
-                      <p className="text-xs text-slate-600 dark:text-slate-300">{commReq.reason}</p>
-                      {commReq.adminResponse && (
-                        <p className="text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 p-2 rounded-xl border border-amber-200 dark:border-amber-800/40 mt-1">
-                          💬 <strong>{isAr ? 'رد الإدارة:' : 'Admin Note:'}</strong> {commReq.adminResponse}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="flex sm:flex-col items-center sm:items-end justify-between gap-2 shrink-0">
-                      {getStatusBadge(commReq.status)}
-
-                      {commReq.status === 'Pending' && (
-                        canApproveRequest(commReq.memberId) ? (
-                          <button
-                            onClick={() => setSelectedRequest({ type: 'committee', item: commReq })}
-                            className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] shadow-sm cursor-pointer"
-                          >
-                            {isAr ? 'مراجعة وقبول / رفض' : 'Review'}
-                          </button>
-                        ) : (
-                          <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-lg border border-amber-200 dark:border-amber-800">
-                            🔒 {isAr ? 'يتطلب موافقة القادة أو الإدارة' : 'Leader / Admin Approval Required'}
-                          </span>
-                        )
-                      )}
-                    </div>
-                  </div>
-                ))}
+          {/* Top Filter & Metrics Bar */}
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200 dark:border-slate-800 space-y-4 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Clock className="w-5 h-5 text-blue-500" />
+                <h3 className="text-sm font-extrabold text-slate-900 dark:text-slate-100">
+                  {isLeadership ? (isAr ? 'تصفية وإدارة طلبات الأعضاء' : 'Filter & Manage Requests') : (isAr ? 'متابعة سجل طلباتي' : 'My Requests Log')}
+                </h3>
               </div>
-            )}
-          </div>
 
-          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 space-y-4 shadow-sm">
-            <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100 flex items-center justify-between">
-              <span className="flex items-center gap-2">
-                <FileText className="w-4 h-4 text-blue-500" />
-                {isAr ? 'طلبات الأعذار الرسمية' : 'Excuse Requests'}
-              </span>
-              <span className="text-xs text-slate-400 font-mono font-bold">
-                {visibleExcuses.length}
-              </span>
-            </h3>
-
-            {visibleExcuses.length === 0 ? (
-              <p className="text-xs text-slate-400 text-center py-6">{isAr ? 'لا توجد طلبات أعذار حالياً.' : 'No excuse requests found.'}</p>
-            ) : (
-              <div className="space-y-3">
-                {visibleExcuses.map((exc) => (
-                  <div
-                    key={exc.id}
-                    className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+              {/* Filters */}
+              <div className="flex flex-wrap items-center gap-2">
+                {isLeadership && (
+                  <select
+                    value={committeeFilter}
+                    onChange={e => setCommitteeFilter(e.target.value)}
+                    className="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 outline-none"
                   >
-                    <div className="space-y-1.5 text-start">
-                      <div className="flex items-center gap-2">
-                        <span className="px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 text-[9px] font-bold">
-                          {exc.type === 'Meeting' ? (isAr ? 'اجتماع' : 'Meeting') : exc.type === 'Task' ? (isAr ? 'تاسك' : 'Task') : (isAr ? 'عام' : 'General')}
-                        </span>
-                        <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">
-                          {exc.memberName} ({exc.committee})
-                        </h4>
-                        <span className="text-[10px] text-slate-400 font-mono">{exc.date}</span>
-                      </div>
-                      {exc.targetTitle && (
-                        <p className="text-xs font-semibold text-blue-600 dark:text-blue-400">{exc.targetTitle}</p>
-                      )}
-                      <p className="text-xs text-slate-600 dark:text-slate-300">{exc.reason}</p>
-                      {exc.adminResponse && (
-                        <p className="text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 p-2 rounded-xl border border-amber-200 dark:border-amber-800/40 mt-1">
-                          💬 <strong>{isAr ? 'رد الإدارة:' : 'Admin Note:'}</strong> {exc.adminResponse}
-                        </p>
-                      )}
-                    </div>
+                    <option value="All">{isAr ? 'كل اللجان' : 'All Committees'}</option>
+                    <option value="HR">HR</option>
+                    <option value="PR">PR</option>
+                    <option value="SM">SM</option>
+                    <option value="OR">OR</option>
+                  </select>
+                )}
 
-                    <div className="flex sm:flex-col items-center sm:items-end justify-between gap-2 shrink-0">
-                      {getStatusBadge(exc.status)}
-
-                      {exc.status === 'Pending' && (
-                        canApproveRequest(exc.memberId) ? (
-                          <button
-                            onClick={() => setSelectedRequest({ type: 'excuse', item: exc })}
-                            className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] shadow-sm cursor-pointer"
-                          >
-                            {isAr ? 'مراجعة واتخاذ قرار' : 'Review'}
-                          </button>
-                        ) : (
-                          <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-lg border border-amber-200 dark:border-amber-800">
-                            🔒 {isAr ? 'يتطلب موافقة مسئول HR أو النائب' : 'Requires HEAD HR / Vice Approval'}
-                          </span>
-                        )
-                      )}
-                    </div>
-                  </div>
-                ))}
+                <select
+                  value={statusFilter}
+                  onChange={e => setStatusFilter(e.target.value as any)}
+                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 outline-none"
+                >
+                  <option value="All">{isAr ? 'كل الحالات' : 'All Status'}</option>
+                  <option value="Pending">{isAr ? 'قيد المراجعة ⏳' : 'Pending ⏳'}</option>
+                  <option value="Approved">{isAr ? 'مقبول ومُعتمد ✅' : 'Approved ✅'}</option>
+                  <option value="Rejected">{isAr ? 'مرفوض ❌' : 'Rejected ❌'}</option>
+                </select>
               </div>
-            )}
+            </div>
+
+            {/* Category Sub-Tabs */}
+            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                onClick={() => setManageCategoryFilter('all')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  manageCategoryFilter === 'all'
+                    ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                }`}
+              >
+                {isAr ? 'عرض الكل' : 'All'} ({visibleCommitteeChanges.length + visibleExcuses.length + visibleFreezes.length})
+              </button>
+
+              <button
+                onClick={() => setManageCategoryFilter('committee')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  manageCategoryFilter === 'committee'
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                }`}
+              >
+                <ArrowRightLeft className="w-3.5 h-3.5" />
+                <span>{isAr ? 'طلبات نقل اللجان' : 'Committee Transfers'}</span>
+                <span className="px-1.5 py-0.2 rounded-md bg-white/20 text-[10px]">{visibleCommitteeChanges.length}</span>
+                {pendingCommCount > 0 && (
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                )}
+              </button>
+
+              <button
+                onClick={() => setManageCategoryFilter('excuse')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  manageCategoryFilter === 'excuse'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>{isAr ? 'طلبات الأعذار الرسمية' : 'Excuses'}</span>
+                <span className="px-1.5 py-0.2 rounded-md bg-white/20 text-[10px]">{visibleExcuses.length}</span>
+                {pendingExcCount > 0 && (
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                )}
+              </button>
+
+              <button
+                onClick={() => setManageCategoryFilter('freeze')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  manageCategoryFilter === 'freeze'
+                    ? 'bg-cyan-600 text-white'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                }`}
+              >
+                <Snowflake className="w-3.5 h-3.5" />
+                <span>{isAr ? 'طلبات الفريز والتجميد' : 'Freezes'}</span>
+                <span className="px-1.5 py-0.2 rounded-md bg-white/20 text-[10px]">{visibleFreezes.length}</span>
+                {pendingFrzCount > 0 && (
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                )}
+              </button>
+            </div>
           </div>
+          {(manageCategoryFilter === 'all' || manageCategoryFilter === 'committee') && (
+            <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 space-y-4 shadow-sm">
+              <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100 flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <ArrowRightLeft className="w-4 h-4 text-emerald-500" />
+                  {isAr ? 'طلبات تغيير ونقل اللجان' : 'Committee Transfer Requests'}
+                </span>
+                <span className="text-xs text-slate-400 font-mono font-bold">
+                  {visibleCommitteeChanges.length}
+                </span>
+              </h3>
 
-          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 space-y-4 shadow-sm">
-            <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100 flex items-center justify-between">
-              <span className="flex items-center gap-2">
-                <Snowflake className="w-4 h-4 text-cyan-500" />
-                {isAr ? 'طلبات الفريز وتجميد النشاط' : 'Freeze Requests'}
-              </span>
-              <span className="text-xs text-slate-400 font-mono font-bold">
-                {visibleFreezes.length}
-              </span>
-            </h3>
-
-            {visibleFreezes.length === 0 ? (
-              <p className="text-xs text-slate-400 text-center py-6">{isAr ? 'لا توجد طلبات فريز حالياً.' : 'No freeze requests found.'}</p>
-            ) : (
-              <div className="space-y-3">
-                {visibleFreezes.map((frz) => (
-                  <div
-                    key={frz.id}
-                    className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-                  >
-                    <div className="space-y-1.5 text-start">
-                      <div className="flex items-center gap-2">
-                        <span className="px-2 py-0.5 rounded-md bg-cyan-100 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 text-[9px] font-bold">
-                          {isAr ? 'تجميد نشاط' : 'Freeze'}
-                        </span>
-                        <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">
-                          {frz.memberName} ({frz.committee})
-                        </h4>
-                      </div>
-                      <p className="text-xs font-semibold text-cyan-600 dark:text-cyan-400">
-                        🗓️ {isAr ? 'المدة:' : 'Period:'} {frz.startDate} ➔ {frz.endDate}
-                      </p>
-                      <p className="text-xs text-slate-600 dark:text-slate-300">{frz.reason}</p>
-                      {frz.adminResponse && (
-                        <p className="text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 p-2 rounded-xl border border-amber-200 dark:border-amber-800/40 mt-1">
-                          💬 <strong>{isAr ? 'رد الإدارة:' : 'Admin Note:'}</strong> {frz.adminResponse}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="flex sm:flex-col items-center sm:items-end justify-between gap-2 shrink-0">
-                      {getStatusBadge(frz.status)}
-
-                      {frz.status === 'Pending' && (
-                        canApproveRequest(frz.memberId) ? (
-                          <button
-                            onClick={() => setSelectedRequest({ type: 'freeze', item: frz })}
-                            className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] shadow-sm cursor-pointer"
-                          >
-                            {isAr ? 'مراجعة واتخاذ قرار' : 'Review'}
-                          </button>
-                        ) : (
-                          <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-lg border border-amber-200 dark:border-amber-800">
-                            🔒 {isAr ? 'يتطلب موافقة مسئول HR أو النائب' : 'Requires HEAD HR / Vice Approval'}
+              {visibleCommitteeChanges.length === 0 ? (
+                <p className="text-xs text-slate-400 text-center py-6">{isAr ? 'لا توجد طلبات تغيير لجان مطابقة حالياً.' : 'No committee transfer requests found.'}</p>
+              ) : (
+                <div className="space-y-3">
+                  {visibleCommitteeChanges.map((commReq) => (
+                    <div
+                      key={commReq.id}
+                      className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                    >
+                      <div className="space-y-1.5 text-start">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-[9px] font-bold">
+                            {isAr ? 'طلب نقل لجنة' : 'Transfer'}
                           </span>
-                        )
-                      )}
+                          <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                            {commReq.memberName}
+                          </h4>
+                          <span className="text-[10px] text-slate-400 font-mono">
+                            {new Date(commReq.createdAt).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs font-black text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 w-fit">
+                          <span className="text-amber-600 dark:text-amber-400">{commReq.currentCommittee}</span>
+                          <ArrowRightLeft className="w-3.5 h-3.5 text-slate-400" />
+                          <span className="text-emerald-600 dark:text-emerald-400">{commReq.targetCommittee} {commReq.targetDepartment && commReq.targetDepartment !== 'None' ? `(${commReq.targetDepartment})` : ''}</span>
+                        </div>
+                        <p className="text-xs text-slate-600 dark:text-slate-300">{commReq.reason}</p>
+                        {commReq.adminResponse && (
+                          <p className="text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 p-2 rounded-xl border border-amber-200 dark:border-amber-800/40 mt-1">
+                            💬 <strong>{isAr ? 'رد الإدارة:' : 'Admin Note:'}</strong> {commReq.adminResponse}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="flex sm:flex-col items-center sm:items-end justify-between gap-2 shrink-0">
+                        {getStatusBadge(commReq.status)}
+
+                        {commReq.status === 'Pending' && (
+                          canApproveRequest(commReq.memberId) ? (
+                            <button
+                              onClick={() => setSelectedRequest({ type: 'committee', item: commReq })}
+                              className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] shadow-sm cursor-pointer"
+                            >
+                              {isAr ? 'مراجعة وقبول / رفض' : 'Review'}
+                            </button>
+                          ) : (
+                            <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-lg border border-amber-200 dark:border-amber-800">
+                              🔒 {isAr ? 'يتطلب موافقة القادة أو الإدارة' : 'Leader / Admin Approval Required'}
+                            </span>
+                          )
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {(manageCategoryFilter === 'all' || manageCategoryFilter === 'excuse') && (
+            <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 space-y-4 shadow-sm">
+              <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100 flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-blue-500" />
+                  {isAr ? 'طلبات الأعذار الرسمية' : 'Excuse Requests'}
+                </span>
+                <span className="text-xs text-slate-400 font-mono font-bold">
+                  {visibleExcuses.length}
+                </span>
+              </h3>
+
+              {visibleExcuses.length === 0 ? (
+                <p className="text-xs text-slate-400 text-center py-6">{isAr ? 'لا توجد طلبات أعذار مطابقة حالياً.' : 'No excuse requests found.'}</p>
+              ) : (
+                <div className="space-y-3">
+                  {visibleExcuses.map((exc) => (
+                    <div
+                      key={exc.id}
+                      className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                    >
+                      <div className="space-y-1.5 text-start">
+                        <div className="flex items-center gap-2">
+                          <span className="px-2 py-0.5 rounded-md bg-blue-100 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 text-[9px] font-bold">
+                            {exc.type === 'Meeting' ? (isAr ? 'اجتماع' : 'Meeting') : exc.type === 'Task' ? (isAr ? 'تاسك' : 'Task') : (isAr ? 'عام' : 'General')}
+                          </span>
+                          <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                            {exc.memberName} ({exc.committee})
+                          </h4>
+                          <span className="text-[10px] text-slate-400 font-mono">{exc.date}</span>
+                        </div>
+                        {exc.targetTitle && (
+                          <p className="text-xs font-semibold text-blue-600 dark:text-blue-400">{exc.targetTitle}</p>
+                        )}
+                        <p className="text-xs text-slate-600 dark:text-slate-300">{exc.reason}</p>
+                        {exc.adminResponse && (
+                          <p className="text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 p-2 rounded-xl border border-amber-200 dark:border-amber-800/40 mt-1">
+                            💬 <strong>{isAr ? 'رد الإدارة:' : 'Admin Note:'}</strong> {exc.adminResponse}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="flex sm:flex-col items-center sm:items-end justify-between gap-2 shrink-0">
+                        {getStatusBadge(exc.status)}
+
+                        {exc.status === 'Pending' && (
+                          canApproveRequest(exc.memberId) ? (
+                            <button
+                              onClick={() => setSelectedRequest({ type: 'excuse', item: exc })}
+                              className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] shadow-sm cursor-pointer"
+                            >
+                              {isAr ? 'مراجعة واتخاذ قرار' : 'Review'}
+                            </button>
+                          ) : (
+                            <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-lg border border-amber-200 dark:border-amber-800">
+                              🔒 {isAr ? 'يتطلب موافقة مسئول HR أو النائب' : 'Requires HEAD HR / Vice Approval'}
+                            </span>
+                          )
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {(manageCategoryFilter === 'all' || manageCategoryFilter === 'freeze') && (
+            <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 space-y-4 shadow-sm">
+              <h3 className="text-sm font-extrabold text-slate-800 dark:text-slate-100 flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <Snowflake className="w-4 h-4 text-cyan-500" />
+                  {isAr ? 'طلبات الفريز وتجميد النشاط' : 'Freeze Requests'}
+                </span>
+                <span className="text-xs text-slate-400 font-mono font-bold">
+                  {visibleFreezes.length}
+                </span>
+              </h3>
+
+              {visibleFreezes.length === 0 ? (
+                <p className="text-xs text-slate-400 text-center py-6">{isAr ? 'لا توجد طلبات فريز مطابقة حالياً.' : 'No freeze requests found.'}</p>
+              ) : (
+                <div className="space-y-3">
+                  {visibleFreezes.map((frz) => (
+                    <div
+                      key={frz.id}
+                      className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                    >
+                      <div className="space-y-1.5 text-start">
+                        <div className="flex items-center gap-2">
+                          <span className="px-2 py-0.5 rounded-md bg-cyan-100 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 text-[9px] font-bold">
+                            {isAr ? 'تجميد نشاط' : 'Freeze'}
+                          </span>
+                          <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                            {frz.memberName} ({frz.committee})
+                          </h4>
+                        </div>
+                        <p className="text-xs font-semibold text-cyan-600 dark:text-cyan-400">
+                          🗓️ {isAr ? 'المدة:' : 'Period:'} {frz.startDate} ➔ {frz.endDate}
+                        </p>
+                        <p className="text-xs text-slate-600 dark:text-slate-300">{frz.reason}</p>
+                        {frz.adminResponse && (
+                          <p className="text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 p-2 rounded-xl border border-amber-200 dark:border-amber-800/40 mt-1">
+                            💬 <strong>{isAr ? 'رد الإدارة:' : 'Admin Note:'}</strong> {frz.adminResponse}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="flex sm:flex-col items-center sm:items-end justify-between gap-2 shrink-0">
+                        {getStatusBadge(frz.status)}
+
+                        {frz.status === 'Pending' && (
+                          canApproveRequest(frz.memberId) ? (
+                            <button
+                              onClick={() => setSelectedRequest({ type: 'freeze', item: frz })}
+                              className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] shadow-sm cursor-pointer"
+                            >
+                              {isAr ? 'مراجعة واتخاذ قرار' : 'Review'}
+                            </button>
+                          ) : (
+                            <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-lg border border-amber-200 dark:border-amber-800">
+                              🔒 {isAr ? 'يتطلب موافقة مسئول HR أو النائب' : 'Requires HEAD HR / Vice Approval'}
+                            </span>
+                          )
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
