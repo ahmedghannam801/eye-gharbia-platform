@@ -743,10 +743,10 @@ export const Leaderboard: React.FC<LeaderboardProps> = ({ currentUser, onNavigat
           {['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader'].includes(currentUser.role) && (
             <button
               onClick={() => setIsGoogleSheetsModalOpen(true)}
-              className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl shadow-md transition-all cursor-pointer flex items-center gap-2 border border-emerald-500"
+              className="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black rounded-2xl shadow-md transition-all cursor-pointer flex items-center gap-2 border border-emerald-500"
             >
               <FileSpreadsheet className="w-4 h-4" />
-              <span>{language === 'ar' ? '🔗 ربط Google Sheets' : '🔗 Sync Google Sheets'}</span>
+              <span>{language === 'ar' ? '📊 استيراد تقييمات الأعضاء (Excel / Sheets)' : '📊 Import Ratings (Excel / Sheets)'}</span>
             </button>
           )}
 

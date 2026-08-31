@@ -768,6 +768,16 @@ export const FeedbackSystem: React.FC<FeedbackSystemProps> = ({ currentUser, ini
                 <span>{isAr ? '📝 تقرير 365 Word' : '📝 365 Word'}</span>
               </button>
 
+              {/* Excel Evaluations Importer Button */}
+              <button
+                onClick={() => setIsGoogleSheetsModalOpen(true)}
+                className="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-xs rounded-2xl border border-emerald-500/40 shadow-xl transition-all cursor-pointer flex items-center justify-center gap-2"
+                title="استيراد التقييمات من شيت إكسيل"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-emerald-200" />
+                <span>{isAr ? '📊 استيراد تقييمات Excel' : '📊 Import Excel'}</span>
+              </button>
+
               <button
                 onClick={handleExport365Pdf}
                 className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs rounded-2xl border border-blue-500/30 shadow-xl transition-all cursor-pointer flex items-center justify-center gap-2"

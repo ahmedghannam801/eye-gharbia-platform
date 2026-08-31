@@ -586,6 +586,62 @@ export const exportUsersToExcel = async (users: UserProfile[], filename = 'EYE_M
   return { buffer, filename };
 };
 
+/**
+ * Generate a pre-filled Excel evaluation template with all active members
+ */
+export const exportEvaluationsTemplateToExcel = async (
+  users: UserProfile[],
+  filename = 'قالب_تقييم_الأعضاء_EYE.xlsx'
+) => {
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet('تقييمات الأعضاء', {
+    views: [{ rightToLeft: true }]
+  });
+
+  // Headers
+  worksheet.addRow([
+    'كود العضو / Membership Code',
+    'اسم العضو / Full Name',
+    'اللجنة / Committee',
+    'القسم / Department',
+    'الالتزام والجدية (1-5)',
+    'جودة العمل (1-5)',
+    'العمل الجماعي والتواصل (1-5)',
+    'المبادرة والنشاط (1-5)',
+    'التقييم الكلي (1-5 أو %)',
+    'نقاط بونص إضافية (Bonus)',
+    'ملاحظات وتعليق التقييم (Feedback)'
+  ]);
+
+  const activeMembers = users.filter(u => u.status === 'Active');
+  activeMembers.forEach(u => {
+    worksheet.addRow([
+      u.membershipCode || u.id,
+      u.fullName,
+      u.committee || 'عام',
+      u.department || 'عام',
+      5, // default sample rating
+      5,
+      5,
+      5,
+      5,
+      0,
+      'أداء متميز وتفاعل رائع'
+    ]);
+  });
+
+  // Style header row
+  worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  worksheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF10B981' } };
+
+  worksheet.columns.forEach(column => {
+    column.width = column.header ? Math.max(16, column.header.length + 4) : 16;
+  });
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return { buffer, filename };
+};
+
 export const exportCertificatesToExcel = async (certs: IssuedCertificate[], filename = 'EYE_Issued_Certificates.xlsx') => {
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet('الشهادات المعتمدة', {
