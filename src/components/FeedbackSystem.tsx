@@ -689,23 +689,32 @@ export const FeedbackSystem: React.FC<FeedbackSystemProps> = ({ currentUser, ini
                       </div>
                     </div>
 
-                    {/* Breakdown Pillars: Meetings + Tasks + Behavior & Interaction */}
+                    {/* Breakdown Pillars: Tasks 40% + Meetings 35% + Behavior & Interaction 25% */}
                     <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/10 text-center text-[10px]">
                       <div className="bg-white/5 p-1.5 rounded-xl border border-white/5">
-                        <span className="text-slate-400 block mb-0.5">📅 {isAr ? 'الاجتماعات' : 'Meetings'}</span>
-                        <span className="font-bold text-amber-300 font-mono">
-                          {livePreview.onlineMeetingsEarned + livePreview.offlineMeetingsEarned}ن
+                        <span className="text-slate-400 block mb-0.5">📋 {isAr ? 'المهام (40%)' : 'Tasks (40%)'}</span>
+                        <span className="font-bold text-emerald-300 font-mono text-xs block">
+                          {livePreview.tasksWeightedScore}%
+                        </span>
+                        <span className="text-[9px] text-slate-400 block font-mono">
+                          {livePreview.tasksEarned} / {livePreview.tasksMax || '—'}ن
                         </span>
                       </div>
                       <div className="bg-white/5 p-1.5 rounded-xl border border-white/5">
-                        <span className="text-slate-400 block mb-0.5">📋 {isAr ? 'المهام' : 'Tasks'}</span>
-                        <span className="font-bold text-emerald-300 font-mono">
-                          {livePreview.tasksEarned}ن
+                        <span className="text-slate-400 block mb-0.5">📅 {isAr ? 'الاجتماعات (35%)' : 'Meetings (35%)'}</span>
+                        <span className="font-bold text-amber-300 font-mono text-xs block">
+                          {livePreview.meetingsWeightedScore}%
+                        </span>
+                        <span className="text-[9px] text-slate-400 block font-mono">
+                          {livePreview.onlineMeetingsEarned + livePreview.offlineMeetingsEarned} / {livePreview.meetingsMax || '—'}ن
                         </span>
                       </div>
                       <div className="bg-white/5 p-1.5 rounded-xl border border-white/5">
-                        <span className="text-slate-400 block mb-0.5">⭐ {isAr ? 'سلوك وتفاعل' : 'BHV & Inter'}</span>
-                        <span className="font-bold text-indigo-300 font-mono">
+                        <span className="text-slate-400 block mb-0.5">⭐ {isAr ? 'التقييم (25%)' : 'Evaluation (25%)'}</span>
+                        <span className="font-bold text-indigo-300 font-mono text-xs block">
+                          {livePreview.evalWeightedScore}%
+                        </span>
+                        <span className="text-[9px] text-slate-400 block font-mono">
                           {(bhvScore + interactionScore).toFixed(1)} / 23ن
                         </span>
                       </div>

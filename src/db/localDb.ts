@@ -8358,6 +8358,11 @@ export interface MemberAVGBreakdown {
   excusedTasksCount: number;
   behaviorScore: number;
   interactionScore: number;
+  tasksWeightedScore: number;    // من 40%
+  meetingsWeightedScore: number; // من 35%
+  evalWeightedScore: number;     // من 25%
+  tasksMax: number;
+  meetingsMax: number;
 }
 
 export function calculateMemberAVG(
@@ -8370,8 +8375,10 @@ export function calculateMemberAVG(
   evaluations: Array<any>,
   bonusPoints: number = 0
 ): MemberAVGBreakdown {
-  let earnedPoints = 0;
-  let maxPoints = 0;
+  let meetingsEarned = 0;
+  let meetingsMax = 0;
+  let tasksEarned = 0;
+  let tasksMax = 0;
 
   let onlineMeetingsCount = 0;
   let onlineMeetingsEarned = 0;
@@ -8379,7 +8386,6 @@ export function calculateMemberAVG(
   let offlineMeetingsEarned = 0;
   let excusedMeetingsCount = 0;
   let completedTasksCount = 0;
-  let tasksEarned = 0;
   let excusedTasksCount = 0;
 
   // Filter actual events performed or excused for THIS member
@@ -8417,10 +8423,15 @@ export function calculateMemberAVG(
       excusedTasksCount: 0,
       behaviorScore: 0,
       interactionScore: 0,
+      tasksWeightedScore: 0,
+      meetingsWeightedScore: 0,
+      evalWeightedScore: 0,
+      tasksMax: 0,
+      meetingsMax: 0,
     };
   }
 
-  // 1. Calculate meetings for this member
+  // 1. Calculate meetings for this member (Weight: 35%)
   (meetings || []).forEach(m => {
     const loc = (m.location || '').toLowerCase();
     const type = (m.type || '').toLowerCase();
@@ -8434,8 +8445,8 @@ export function calculateMemberAVG(
     );
 
     if (att && !att.isExcused) {
-      maxPoints += fullPoints;
-      earnedPoints += fullPoints;
+      meetingsMax += fullPoints;
+      meetingsEarned += fullPoints;
       if (isOnline) {
         onlineMeetingsCount++;
         onlineMeetingsEarned += fullPoints;
@@ -8444,9 +8455,9 @@ export function calculateMemberAVG(
         offlineMeetingsEarned += fullPoints;
       }
     } else if ((att && att.isExcused) || exc) {
-      maxPoints += fullPoints;
+      meetingsMax += fullPoints;
       const halfPoints = fullPoints * 0.5;
-      earnedPoints += halfPoints;
+      meetingsEarned += halfPoints;
       excusedMeetingsCount++;
       if (isOnline) {
         onlineMeetingsEarned += halfPoints;
@@ -8461,12 +8472,12 @@ export function calculateMemberAVG(
          (e.targetTitle && m.title && e.targetTitle.trim().toLowerCase() === m.title.trim().toLowerCase()))
       );
       if (rejectedExc) {
-        maxPoints += fullPoints;
+        meetingsMax += fullPoints;
       }
     }
   });
 
-  // 2. Calculate tasks for this member
+  // 2. Calculate tasks for this member (Weight: 40%)
   (tasks || []).forEach(t => {
     const fullPoints = 5;
     const sub = memberSubmissions.find(s => String(s.taskId) === String(t.id));
@@ -8476,16 +8487,14 @@ export function calculateMemberAVG(
     );
 
     if (sub) {
-      maxPoints += fullPoints;
-      earnedPoints += fullPoints;
-      completedTasksCount++;
+      tasksMax += fullPoints;
       tasksEarned += fullPoints;
+      completedTasksCount++;
     } else if (exc) {
-      maxPoints += fullPoints;
+      tasksMax += fullPoints;
       const halfPoints = fullPoints * 0.5;
-      earnedPoints += halfPoints;
-      excusedTasksCount++;
       tasksEarned += halfPoints;
+      excusedTasksCount++;
     } else {
       const rejectedTaskExc = (excuses || []).find(e =>
         (e.status === 'Rejected' || e.status === 'مرفوض' || e.status === 'rejected') &&
@@ -8494,14 +8503,14 @@ export function calculateMemberAVG(
          (e.targetTitle && (t.name || t.title) && e.targetTitle.trim().toLowerCase() === (t.name || t.title).trim().toLowerCase()))
       );
       if (rejectedTaskExc) {
-        maxPoints += fullPoints;
+        tasksMax += fullPoints;
       }
     }
   });
 
-  // 3. Evaluations (السلوك والانضباط 10ن + التفاعل والعمل الجماعي 13ن = 23ن)
-  let behaviorScore = 0;
-  let interactionScore = 0;
+  // 3. Evaluations (Weight: 25% | السلوك والانضباط 10ن + التفاعل والعمل الجماعي 13ن = 23ن)
+  let behaviorScore = 10;
+  let interactionScore = 13;
 
   if (userEvals.length > 0) {
     const totalCommitment = userEvals.reduce((acc, ev) => acc + (ev.commitmentRating !== undefined ? ev.commitmentRating : 5), 0);
@@ -8511,20 +8520,29 @@ export function calculateMemberAVG(
 
     behaviorScore = Math.min(10, Math.max(0, Math.round(((avgCommitment / 5) * 10) * 10) / 10));
     interactionScore = Math.min(13, Math.max(0, Math.round(((avgTeamwork / 5) * 13) * 10) / 10));
-
-    maxPoints += 10 + 13;
-    earnedPoints += behaviorScore + interactionScore;
-  } else if (hasActualEvents) {
-    // Default base evaluation points if member has attendance/tasks but not explicitly rated yet
-    behaviorScore = 10;
-    interactionScore = 13;
-    maxPoints += 10 + 13;
-    earnedPoints += behaviorScore + interactionScore;
   }
 
-  // 4. Calculate Final AVG (scaled to 95% base + bonusPoints on top)
-  const baseAvg = (hasActualEvents && maxPoints > 0) ? (earnedPoints / maxPoints) * 95 : 0;
+  // --- WEIGHTED FORMULA (التاسكات 40% | الاجتماعات 35% | التقييم 25%) ---
+  // Tasks (40%)
+  const tasksRatio = tasksMax > 0 ? (tasksEarned / tasksMax) : 1;
+  const tasksWeightedScore = Math.round((tasksRatio * 40) * 10) / 10;
+
+  // Meetings (35%)
+  const meetingsRatio = meetingsMax > 0 ? (meetingsEarned / meetingsMax) : 1;
+  const meetingsWeightedScore = Math.round((meetingsRatio * 35) * 10) / 10;
+
+  // Evaluation (25%)
+  const evalRatio = Math.min(1, Math.max(0, (behaviorScore + interactionScore) / 23));
+  const evalWeightedScore = Math.round((evalRatio * 25) * 10) / 10;
+
+  const earnedPoints = meetingsEarned + tasksEarned + behaviorScore + interactionScore;
+  const maxPoints = meetingsMax + tasksMax + 23;
+
+  // Base AVG = مجموع الأوزان الثلاثة (40% + 35% + 25% = 100%)
+  const baseAvg = hasActualEvents ? Math.min(100, Math.round((tasksWeightedScore + meetingsWeightedScore + evalWeightedScore) * 10) / 10) : 0;
   const roundedBaseAvg = Math.round(baseAvg * 10) / 10;
+
+  // Final AVG = Base AVG + Bonus (Cap at 105%)
   const finalAvg = hasActualEvents ? Math.min(105, Math.round((baseAvg + bonusPoints) * 10) / 10) : (bonusPoints > 0 ? bonusPoints : 0);
   const displayText = hasActualEvents ? `${finalAvg}%` : (bonusPoints > 0 ? `${bonusPoints}%` : 'لا توجد بيانات');
 
@@ -8546,6 +8564,11 @@ export function calculateMemberAVG(
     excusedTasksCount,
     behaviorScore,
     interactionScore,
+    tasksWeightedScore,
+    meetingsWeightedScore,
+    evalWeightedScore,
+    tasksMax,
+    meetingsMax,
   };
 }
 
