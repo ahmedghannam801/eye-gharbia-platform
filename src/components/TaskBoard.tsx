@@ -14,6 +14,14 @@ import { downloadCertificate } from '../lib/certificateGenerator';
 import { exportTaskSubmissionsToExcel, downloadExcelFile } from '../lib/excelExport';
 import { TaskComments } from './TaskComments';
 import { matchesSearch } from '../lib/searchUtils';
+import {
+  formatDate,
+  formatTime,
+  formatDateTime,
+  dateToLocalInputValue,
+  localInputToIso,
+  getAccurateCountdown,
+} from '../lib/dateUtils';
 
 interface TaskBoardProps {
   currentUser: UserProfile;
@@ -357,22 +365,8 @@ const TaskVideoPlayer: React.FC<{ task: Task; language: string }> = ({ task, lan
   );
 };
 
-const getCountdown = (deadline?: string) => {
-  if (!deadline) return { text: 'غير محدد', className: 'text-slate-400' };
-  const time = new Date(deadline).getTime();
-  if (isNaN(time)) return { text: 'غير محدد', className: 'text-slate-400' };
-
-  const diff = time - new Date().getTime();
-  if (diff <= 0) return { text: 'انتهى الوقت!', className: 'text-red-500 font-bold' };
-
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-
-  if (days > 2) return { text: `متبقي ${days} يوم`, className: 'text-slate-500' };
-  if (days > 0) return { text: `متبقي ${days} يوم و ${hours} ساعة`, className: 'text-amber-600 font-medium' };
-  if (hours > 2) return { text: `متبقي ${hours} ساعة`, className: 'text-orange-500 font-bold' };
-  return { text: `متبقي ${hours} ساعة و ${minutes} دقيقة!`, className: 'text-red-600 font-bold animate-pulse' };
+const getCountdown = (deadline?: string, lang: 'ar' | 'en' = 'ar') => {
+  return getAccurateCountdown(deadline, lang);
 };
 
 const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdFromNotification, onNavigateToView }) => {
@@ -728,7 +722,7 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
       description: newTaskDesc,
       instructions: newTaskInst,
       priority: newTaskPriority,
-      deadline: newTaskDeadline,
+      deadline: newTaskDeadline ? localInputToIso(newTaskDeadline) : '',
       committee: effectiveCommittee,
       department: targetAudienceMode === 'all_committee' ? 'All' : newTaskDepartment,
       status: newTaskStatus,
@@ -764,7 +758,7 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
     setEditTaskDesc(task.description || '');
     setEditTaskInst(task.instructions || '');
     setEditTaskPriority(task.priority || 'Medium');
-    setEditTaskDeadline(task.deadline ? new Date(task.deadline).toISOString().slice(0, 16) : '');
+    setEditTaskDeadline(task.deadline ? dateToLocalInputValue(task.deadline) : '');
     setEditTaskIsVideo(Boolean(task.isVideoTask));
     setEditTaskVideoUrl(task.videoUrl || extractVideoUrlFromTask(task) || '');
     setShowEditTaskModal(true);
@@ -777,7 +771,7 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
     setIsUpdatingTask(true);
     const effectiveVideoUrl = editTaskVideoUrl.trim();
     const isVideo = editTaskIsVideo || Boolean(effectiveVideoUrl);
-    const deadlineIso = editTaskDeadline ? new Date(editTaskDeadline).toISOString() : undefined;
+    const deadlineIso = editTaskDeadline ? localInputToIso(editTaskDeadline) : undefined;
 
     try {
       const updates = {
@@ -1132,8 +1126,7 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
     } else {
       initialDate.setDate(initialDate.getDate() + 2);
     }
-    const tzOffset = initialDate.getTimezoneOffset() * 60000;
-    const localISOTime = new Date(initialDate.getTime() - tzOffset).toISOString().slice(0, 16);
+    const localISOTime = dateToLocalInputValue(initialDate);
     setExtendDeadlineValue(localISOTime);
     setShowExtendDeadlineModal(true);
   };
@@ -1142,8 +1135,7 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
     const current = extendDeadlineValue ? new Date(extendDeadlineValue) : (selectedTask?.deadline ? new Date(selectedTask.deadline) : new Date());
     const target = isNaN(current.getTime()) ? new Date() : new Date(current);
     target.setDate(target.getDate() + days);
-    const tzOffset = target.getTimezoneOffset() * 60000;
-    const localISOTime = new Date(target.getTime() - tzOffset).toISOString().slice(0, 16);
+    const localISOTime = dateToLocalInputValue(target);
     setExtendDeadlineValue(localISOTime);
   };
 
@@ -1152,7 +1144,7 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
     if (!selectedTask || !extendDeadlineValue) return;
     setIsExtendingDeadline(true);
     try {
-      const isoDate = new Date(extendDeadlineValue).toISOString();
+      const isoDate = localInputToIso(extendDeadlineValue);
       const { error } = await supabase
         .from('tasks')
         .update({ deadline: isoDate })
@@ -1303,7 +1295,7 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
                 </p>
                 <p className="text-xs font-black text-slate-900 dark:text-slate-100 font-mono">
                   {selectedTask.deadline
-                    ? new Date(selectedTask.deadline).toLocaleString('ar-EG', { dateStyle: 'full', timeStyle: 'short' })
+                    ? formatDateTime(selectedTask.deadline, language as any)
                     : (language === 'ar' ? 'غير محدد' : 'Not specified')}
                 </p>
               </div>
@@ -2361,7 +2353,7 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
                         <div className="flex flex-col gap-0.5">
                           <span className="flex items-center gap-1">
                             <Calendar className="w-3 h-3 text-slate-400" />
-                            {task.deadline ? new Date(task.deadline).toLocaleDateString('ar-EG') : 'غير محدد'}
+                            {task.deadline ? formatDate(task.deadline, language as any) : 'غير محدد'}
                           </span>
                           <span className={`text-[8px] font-extrabold ${getCountdown(task.deadline).className}`}>
                             {getCountdown(task.deadline).text}
@@ -2820,7 +2812,7 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
                 </span>
                 <p className="font-mono font-bold text-slate-800 dark:text-slate-200">
                   {selectedTask.deadline
-                    ? new Date(selectedTask.deadline).toLocaleString('ar-EG', { dateStyle: 'full', timeStyle: 'short' })
+                    ? formatDateTime(selectedTask.deadline, language as any)
                     : (language === 'ar' ? 'غير محدد' : 'Not set')}
                 </p>
               </div>

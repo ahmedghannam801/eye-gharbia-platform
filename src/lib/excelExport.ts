@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs';
 import { UserProfile, IssuedCertificate, Task, Meeting, AttendanceRecord, Submission } from '../types';
+import { formatDateTime, formatTime, formatDate } from './dateUtils';
 
 /**
  * Trigger browser download for an ExcelJS buffer
@@ -152,9 +153,7 @@ export const exportMeetingAttendanceToExcel = async (
 
   // 2. Metadata Grid (Rows 2 - 4)
   const scheduledDateStr = meeting.scheduledAt
-    ? new Date(meeting.scheduledAt).toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) +
-      ' — ' +
-      new Date(meeting.scheduledAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })
+    ? formatDateTime(meeting.scheduledAt, 'ar')
     : 'غير محدد';
 
   const typeMap: Record<string, string> = {
@@ -319,7 +318,7 @@ export const exportMeetingAttendanceToExcel = async (
       const zebraColor = isEven ? 'FFF8FAFC' : 'FFFFFFFF';
 
       const checkInTimeStr = rec.checkedInAt
-        ? new Date(rec.checkedInAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        ? formatTime(rec.checkedInAt, 'ar', true)
         : '—';
 
       const ratingStr = rec.rating ? `${rec.rating} / 5 ⭐` : '—';

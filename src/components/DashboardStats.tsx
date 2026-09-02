@@ -8,6 +8,7 @@ import {
   CalendarDays, Megaphone, Flame, Star, Trophy, Sparkles, MessageSquare, BookOpen, Gift, CheckCheck, Lightbulb
 } from 'lucide-react';
 import { useLanguage } from '../lib/LanguageContext';
+import { formatDateTime } from '../lib/dateUtils';
 import { MinistryLogo } from './EyeLogo';
 import { MemberOfTheMonth } from './MemberOfTheMonth';
 
@@ -950,7 +951,11 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
                  m.department.toLowerCase().includes(currentUser.department.toLowerCase()) ||
                  currentUser.department.toLowerCase().includes(m.department.toLowerCase());
         });
-        const nextActiveMeeting = memberVisibleMeetings[0] || null;
+        const nextActiveMeeting = [...memberVisibleMeetings].sort((a, b) => {
+          const timeA = a.scheduledAt ? new Date(a.scheduledAt).getTime() : 0;
+          const timeB = b.scheduledAt ? new Date(b.scheduledAt).getTime() : 0;
+          return timeA - timeB;
+        })[0] || null;
         const myAttendanceList = db.getAllAttendance().filter(a => a.memberId === currentUser.id);
         const hasCheckedInNextMtg = nextActiveMeeting
           ? db.getAttendance(nextActiveMeeting.id).some(a => a.memberId === currentUser.id)
@@ -1107,7 +1112,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
                     <div>
                       <h4 className="text-base font-black text-slate-900 dark:text-white leading-snug">{nextActiveMeeting.title}</h4>
                       <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-1 mt-1.5 font-medium">
-                        📍 {nextActiveMeeting.location || (language === 'ar' ? 'أونلاين' : 'Online')} · 🕒 {new Date(nextActiveMeeting.scheduledAt).toLocaleString(language === 'ar' ? 'ar-EG' : 'en-GB', { dateStyle: 'short', timeStyle: 'short' })}
+                        📍 {nextActiveMeeting.location || (language === 'ar' ? 'أونلاين' : 'Online')} · 🕒 {formatDateTime(nextActiveMeeting.scheduledAt, language as any)}
                       </p>
                     </div>
                   ) : (

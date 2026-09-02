@@ -3,6 +3,7 @@ import { db } from '../db/localDb';
 import { VolunteerIdea, UserProfile } from '../types';
 import { useLanguage } from '../lib/LanguageContext';
 import { Lightbulb, ThumbsUp, MessageSquare, Plus, CheckCircle2, ArrowRightLeft, XCircle, Clock, Sparkles, Inbox, BarChart2 } from 'lucide-react';
+import { localInputToIso } from '../lib/dateUtils';
 import { SuggestionBox } from './SuggestionBox';
 import { PollsManager } from './PollsManager';
 
@@ -74,7 +75,7 @@ export const IdeaBank: React.FC<IdeaBankProps> = ({ currentUser, onNavigateToVie
   const handleConvertSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!convertingIdeaId) return;
-    db.convertIdeaToTask(convertingIdeaId, taskPriority, taskDeadline, currentUser);
+    db.convertIdeaToTask(convertingIdeaId, taskPriority, localInputToIso(taskDeadline), currentUser);
     setConvertingIdeaId(null);
     load();
   };

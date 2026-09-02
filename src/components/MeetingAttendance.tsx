@@ -8,12 +8,17 @@ import {
   downloadExcelFile,
   classifyAttendeeSubGroup
 } from '../lib/excelExport';
-import { matchesSearch } from '../lib/searchUtils';
+import {
+  formatDate,
+  formatTime,
+  dateToLocalInputValue,
+  localInputToIso,
+} from '../lib/dateUtils';
 import {
   CalendarDays, Users, Plus, CheckCircle2, XCircle, Clock, Lock, Unlock,
   MapPin, Trash2, ChevronDown, ChevronUp, QrCode, UserCheck, AlertCircle,
   Building2, FileUp, MessageSquare, Star, Shield,
-  FileSpreadsheet, Download, Layers, List, Search, Loader2, Sparkles, Filter
+  FileSpreadsheet, Download, Layers, List, Search, Loader2, Sparkles, Filter, Edit3
 } from 'lucide-react';
 
 interface MeetingsProps {
@@ -103,6 +108,47 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
     }
   };
 
+  // Edit form state
+  const [editingMeeting, setEditingMeeting] = useState<Meeting | null>(null);
+  const [editFormTitle, setEditFormTitle] = useState('');
+  const [editFormDesc, setEditFormDesc] = useState('');
+  const [editFormType, setEditFormType] = useState<MeetingType>('General');
+  const [editFormCommittee, setEditFormCommittee] = useState<string>('All');
+  const [editFormDept, setEditFormDept] = useState<string>('All');
+  const [editFormDate, setEditFormDate] = useState('');
+  const [editFormLocation, setEditFormLocation] = useState('');
+  const [editFormAttendeesCount, setEditFormAttendeesCount] = useState<string>('');
+
+  const handleOpenEdit = (mtg: Meeting, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setEditingMeeting(mtg);
+    setEditFormTitle(mtg.title || '');
+    setEditFormDesc(mtg.description || '');
+    setEditFormType(mtg.type || 'General');
+    setEditFormCommittee(mtg.committee || 'All');
+    setEditFormDept(mtg.department || 'All');
+    setEditFormDate(dateToLocalInputValue(mtg.scheduledAt));
+    setEditFormLocation(mtg.location || '');
+    setEditFormAttendeesCount(mtg.expectedAttendeesCount ? String(mtg.expectedAttendeesCount) : '');
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingMeeting) return;
+    await db.updateMeeting(editingMeeting.id, {
+      title: editFormTitle,
+      description: editFormDesc,
+      type: editFormType,
+      committee: isExecutiveAdmin ? editFormCommittee : editingMeeting.committee,
+      department: isExecutiveAdmin ? editFormDept : editingMeeting.department,
+      scheduledAt: localInputToIso(editFormDate),
+      location: editFormLocation,
+      expectedAttendeesCount: editFormAttendeesCount ? parseInt(editFormAttendeesCount, 10) : undefined,
+    }, currentUser);
+    setEditingMeeting(null);
+    load();
+  };
+
   const isExecutiveAdmin = ['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator'].includes(currentUser.role);
 
   const handleCreate = (e: React.FormEvent) => {
@@ -115,7 +161,7 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
       type: formType,
       committee: effectiveCommittee,
       department: effectiveDept,
-      scheduledAt: formDate,
+      scheduledAt: localInputToIso(formDate),
       location: formLocation,
       expectedAttendeesCount: formAttendeesCount ? parseInt(formAttendeesCount, 10) : undefined,
       createdBy: currentUser.id,
@@ -323,9 +369,9 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
                     <div className="flex items-center gap-2 sm:gap-3 flex-wrap mt-1.5 text-xs text-slate-500 font-semibold">
                       <span className="flex items-center gap-1 font-bold text-slate-700 dark:text-slate-300">
                         <Clock className="w-3.5 h-3.5 text-indigo-500" />
-                        {new Date(mtg.scheduledAt).toLocaleDateString(isAr ? 'ar-EG' : 'en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                        {formatDate(mtg.scheduledAt, isAr ? 'ar' : 'en')}
                         {' — '}
-                        {new Date(mtg.scheduledAt).toLocaleTimeString(isAr ? 'ar-EG' : 'en-GB', { hour: '2-digit', minute: '2-digit' })}
+                        <span className="text-eye-brand font-black">{formatTime(mtg.scheduledAt, isAr ? 'ar' : 'en')}</span>
                       </span>
                       {mtg.location && mtg.location.match(/^https?:\/\//i) ? (
                         <a
@@ -374,6 +420,15 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
                       >
                         <QrCode className="w-3.5 h-3.5" />
                         {isAr ? 'سجّل حضورك' : 'Check-in'}
+                      </button>
+                    )}
+                    {canManage && (
+                      <button
+                        onClick={(e) => handleOpenEdit(mtg, e)}
+                        className="p-2 rounded-xl bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-600 dark:hover:text-white border border-blue-200/60 dark:border-blue-800 transition-colors"
+                        title={isAr ? 'تعديل موعد وبيانات الاجتماع' : 'Edit Meeting & Time'}
+                      >
+                        <Edit3 className="w-4 h-4" />
                       </button>
                     )}
                     {canManage && (
@@ -555,6 +610,13 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
                               {isAr ? 'إعادة فتح تسجيل الحضور 🔓' : 'Reopen Check-in 🔓'}
                             </button>
                           )}
+                          <button
+                            onClick={() => handleOpenEdit(mtg)}
+                            className="flex items-center gap-1.5 px-4 py-2 bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-600 dark:hover:text-white rounded-xl text-xs font-bold transition-all border border-blue-200/60 dark:border-blue-800/60 cursor-pointer"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                            {isAr ? 'تعديل موعد وبيانات الاجتماع' : 'Edit Meeting & Time'}
+                          </button>
                           <button
                             onClick={() => handleDeleteMeeting(mtg.id)}
                             className="flex items-center gap-1.5 px-4 py-2 bg-red-50 hover:bg-red-600 text-red-600 hover:text-white rounded-xl text-xs font-bold transition-all border border-red-200/60 cursor-pointer"
@@ -812,7 +874,7 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
                                             )}
                                             <span className="text-[9px] text-slate-400 font-semibold flex items-center gap-0.5">
                                               <Clock className="w-2.5 h-2.5 text-indigo-400" />
-                                              {new Date(a.checkedInAt).toLocaleTimeString(isAr ? 'ar-EG' : 'en-GB', { hour: '2-digit', minute: '2-digit' })}
+                                              {formatTime(a.checkedInAt, isAr ? 'ar' : 'en')}
                                             </span>
                                           </div>
                                         </div>
@@ -862,7 +924,7 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
                                     <p className="text-[10px] text-slate-400 mt-0.5">
                                       <span className="font-bold text-indigo-600 dark:text-indigo-400">{item.subGroupLabelAr}</span>
                                       {' · '}
-                                      <span>{new Date(a.checkedInAt).toLocaleTimeString(isAr ? 'ar-EG' : 'en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+                                      <span>{formatTime(a.checkedInAt, isAr ? 'ar' : 'en', true)}</span>
                                     </p>
                                   </div>
                                 </div>
@@ -982,6 +1044,130 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
                 <button type="submit"
                   className="flex-1 bg-eye-brand hover:bg-eye-brand-dark text-white rounded-xl text-xs font-bold py-2.5 transition-all shadow-sm cursor-pointer">
                   {isAr ? 'إنشاء الاجتماع' : 'Create Meeting'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Meeting Modal */}
+      {editingMeeting && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 max-w-md w-full shadow-2xl space-y-4 animate-scale-in">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+                <Edit3 className="w-4 h-4 text-blue-500" />
+                {isAr ? 'تعديل موعد وبيانات الاجتماع ⏱️' : 'Edit Meeting & Time ⏱️'}
+              </h3>
+              <button onClick={() => setEditingMeeting(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
+                <XCircle className="w-4 h-4" />
+              </button>
+            </div>
+            <form onSubmit={handleSaveEdit} className="space-y-3">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1">
+                  {isAr ? 'عنوان الاجتماع *' : 'Meeting Title *'}
+                </label>
+                <input required value={editFormTitle} onChange={e => setEditFormTitle(e.target.value)}
+                  placeholder={isAr ? 'عنوان الاجتماع' : 'Meeting title'}
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-semibold focus:outline-none focus:border-eye-brand" />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1">
+                  {isAr ? 'الوصف (اختياري)' : 'Description (Optional)'}
+                </label>
+                <textarea value={editFormDesc} onChange={e => setEditFormDesc(e.target.value)} rows={2}
+                  placeholder={isAr ? 'وصف (اختياري)' : 'Description (optional)'}
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-semibold focus:outline-none focus:border-eye-brand resize-none" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1">
+                    {isAr ? 'نوع الاجتماع' : 'Meeting Type'}
+                  </label>
+                  <select value={editFormType} onChange={e => setEditFormType(e.target.value as MeetingType)}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold focus:outline-none focus:border-eye-brand">
+                    <option value="General">{isAr ? 'عام' : 'General'}</option>
+                    <option value="Committee">{isAr ? 'لجنة' : 'Committee'}</option>
+                    <option value="Department">{isAr ? 'قسم' : 'Department'}</option>
+                    <option value="Emergency">{isAr ? 'طارئ' : 'Emergency'}</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1">
+                    {isAr ? 'اللجنة المستهدفة' : 'Target Committee'}
+                  </label>
+                  {isExecutiveAdmin ? (
+                    <select value={editFormCommittee} onChange={e => setEditFormCommittee(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold focus:outline-none focus:border-eye-brand">
+                      <option value="All">{isAr ? 'كل اللجان' : 'All Committees'}</option>
+                      {['HR','PR','SM','OR'].map(c => <option key={c} value={c}>{c === 'HR' ? (isAr ? 'الموارد البشرية (HR)' : 'HR') : c}</option>)}
+                    </select>
+                  ) : (
+                    <div className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-200">
+                      {editingMeeting.committee}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Exact Date & Time */}
+              <div className="bg-blue-50/50 dark:bg-blue-950/20 p-3 rounded-2xl border border-blue-200/60 dark:border-blue-800/40 space-y-1.5">
+                <label className="block text-xs font-black text-blue-900 dark:text-blue-300 flex items-center gap-1.5">
+                  <Clock className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                  <span>{isAr ? '📅 الموعد والتوقيت الدقيق (بتوقيت مصر):' : '📅 Date & Time (Cairo Time):'}</span>
+                </label>
+                <input
+                  required
+                  value={editFormDate}
+                  onChange={e => setEditFormDate(e.target.value)}
+                  type="datetime-local"
+                  className="w-full bg-white dark:bg-slate-800 border-2 border-blue-300 dark:border-blue-700 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-blue-600"
+                />
+                {editFormDate && (
+                  <p className="text-[11px] font-bold text-blue-700 dark:text-blue-300 flex items-center gap-1">
+                    <span>{isAr ? 'التوقيت المختار:' : 'Selected:'}</span>
+                    <span className="font-black bg-white dark:bg-slate-800 px-2 py-0.5 rounded border border-blue-200 dark:border-blue-700">
+                      {formatDateTime(editFormDate, isAr ? 'ar' : 'en')}
+                    </span>
+                  </p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1">
+                    {isAr ? 'المكان أو رابط الاجتماع *' : 'Location or Link *'}
+                  </label>
+                  <input required value={editFormLocation} onChange={e => setEditFormLocation(e.target.value)}
+                    placeholder={isAr ? 'المكان أو رابط الاجتماع' : 'Location or meeting link'}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:border-eye-brand" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1">
+                    {isAr ? 'عدد الحضور المتوقع' : 'Target Attendees'}
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={editFormAttendeesCount}
+                    onChange={e => setEditFormAttendeesCount(e.target.value)}
+                    placeholder={isAr ? 'عدد الحضور' : 'Target count'}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:border-eye-brand" />
+                </div>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button type="button" onClick={() => setEditingMeeting(null)}
+                  className="flex-1 px-4 py-2.5 text-xs font-bold text-slate-500 hover:text-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl transition-all cursor-pointer">
+                  {isAr ? 'إلغاء' : 'Cancel'}
+                </button>
+                <button type="submit"
+                  className="flex-1 bg-eye-brand hover:bg-eye-brand-dark text-white rounded-xl text-xs font-bold py-2.5 transition-all shadow-sm cursor-pointer">
+                  {isAr ? 'حفظ التعديلات ✅' : 'Save Changes ✅'}
                 </button>
               </div>
             </form>

@@ -1,4 +1,5 @@
 import { supabase, isSupabaseConfigured, getPermanentStorageUrl } from '../lib/supabaseClient';
+import { localInputToIso } from '../lib/dateUtils';
 import { sendEmailAlert } from '../lib/emailService';
 import { triggerPushFromSystemNotif } from '../lib/pushNotifications';
 import { isHRM, filterEvaluationsByPermission, filterMembersByPermission, getEffectiveCommittee } from '../lib/permissions';
@@ -2677,8 +2678,10 @@ class SupabaseDatabase {
     creator: UserProfile
   ): Task {
     const tempId = 'tmp-' + Math.random().toString(36).slice(2);
+    const deadlineIso = taskData.deadline ? localInputToIso(taskData.deadline) : taskData.deadline;
     const newTask: Task = {
       ...taskData,
+      deadline: deadlineIso,
       id: tempId,
       createdBy: creator.id,
       createdByName: creator.fullName,
@@ -2694,7 +2697,7 @@ class SupabaseDatabase {
         description: taskData.description,
         instructions: taskData.instructions,
         priority: taskData.priority,
-        deadline: taskData.deadline,
+        deadline: deadlineIso,
         committee: taskData.committee,
         department: taskData.department,
         status: taskData.status,
@@ -2957,7 +2960,11 @@ class SupabaseDatabase {
     const previousStatus = task.status;
 
     // Apply updates to local cache
-    Object.assign(task, updates);
+    const sanitizedUpdates = { ...updates };
+    if (sanitizedUpdates.deadline) {
+      sanitizedUpdates.deadline = localInputToIso(sanitizedUpdates.deadline);
+    }
+    Object.assign(task, sanitizedUpdates);
 
     // Audit logging for assignment changes
     const assignedMemberIdsChanged =
@@ -3008,7 +3015,7 @@ class SupabaseDatabase {
       if (updates.description !== undefined) supabaseUpdates.description = updates.description;
       if (updates.instructions !== undefined) supabaseUpdates.instructions = updates.instructions;
       if (updates.priority !== undefined) supabaseUpdates.priority = updates.priority;
-      if (updates.deadline !== undefined) supabaseUpdates.deadline = updates.deadline;
+      if (sanitizedUpdates.deadline !== undefined) supabaseUpdates.deadline = sanitizedUpdates.deadline;
       if (updates.committee !== undefined) supabaseUpdates.committee = updates.committee;
       if (updates.department !== undefined) supabaseUpdates.department = updates.department;
       if (updates.status !== undefined) supabaseUpdates.status = updates.status;
@@ -3741,8 +3748,10 @@ class SupabaseDatabase {
   createMeeting(data: Omit<Meeting, 'id' | 'createdAt' | 'attendanceCode'>, creator: UserProfile): Meeting {
     const code = Math.random().toString(36).slice(2, 7).toUpperCase();
     const activeGov = this.getTargetGovernorate(creator) || creator.governorate || 'الغربية';
+    const scheduledAtIso = data.scheduledAt ? localInputToIso(data.scheduledAt) : data.scheduledAt;
     const meeting: Meeting = {
       ...data,
+      scheduledAt: scheduledAtIso,
       governorate: (data as any).governorate || activeGov,
       id: 'mtg-' + Math.random().toString(36).slice(2),
       createdAt: new Date().toISOString(),
@@ -3806,6 +3815,69 @@ class SupabaseDatabase {
     );
 
     return meeting;
+  }
+
+  async updateMeeting(
+    meetingId: string,
+    updates: Partial<Omit<Meeting, 'id' | 'createdAt' | 'attendanceCode'>>,
+    actor?: UserProfile
+  ): Promise<Meeting | null> {
+    try {
+      const current = this.getMeetings();
+      const targetMeeting = current.find(m => m.id === meetingId);
+      if (!targetMeeting) return null;
+
+      if (actor) {
+        const canManage = actor.role === 'Super Admin' || targetMeeting.createdBy === actor.id || targetMeeting.createdBy === actor.email;
+        if (!canManage) {
+          console.warn('[updateMeeting Unauthorized]: Only meeting creator or Super Admin can edit meeting');
+          return null;
+        }
+      }
+
+      const sanitizedUpdates = { ...updates };
+      if (sanitizedUpdates.scheduledAt) {
+        sanitizedUpdates.scheduledAt = localInputToIso(sanitizedUpdates.scheduledAt);
+      }
+
+      const updatedMeeting: Meeting = {
+        ...targetMeeting,
+        ...sanitizedUpdates,
+      };
+
+      this.cache.meetings = current.map(m => m.id === meetingId ? updatedMeeting : m);
+      this._lsSave('eye_meetings', this.cache.meetings);
+      this.notify();
+
+      if (isSupabaseConfigured && supabase) {
+        const supabasePayload: Record<string, any> = {};
+        if (sanitizedUpdates.title !== undefined) supabasePayload.title = sanitizedUpdates.title;
+        if (sanitizedUpdates.description !== undefined) supabasePayload.description = sanitizedUpdates.description;
+        if (sanitizedUpdates.type !== undefined) supabasePayload.type = sanitizedUpdates.type;
+        if (sanitizedUpdates.committee !== undefined) supabasePayload.committee = sanitizedUpdates.committee;
+        if (sanitizedUpdates.department !== undefined) supabasePayload.department = sanitizedUpdates.department;
+        if (sanitizedUpdates.scheduledAt !== undefined) supabasePayload.scheduled_at = sanitizedUpdates.scheduledAt;
+        if (sanitizedUpdates.location !== undefined) supabasePayload.location = sanitizedUpdates.location;
+        if (sanitizedUpdates.expectedAttendeesCount !== undefined) supabasePayload.expected_attendees_count = sanitizedUpdates.expectedAttendeesCount;
+        if (sanitizedUpdates.status !== undefined) supabasePayload.status = sanitizedUpdates.status;
+
+        const { error } = await supabase
+          .from('meetings')
+          .update(supabasePayload)
+          .eq('id', meetingId);
+
+        if (error) console.error('[Supabase updateMeeting Error]:', error);
+      }
+
+      if (actor) {
+        this.logActivity(actor.id, actor.fullName, actor.role, 'Meeting Updated', `Updated meeting "${updatedMeeting.title}"`);
+      }
+
+      return updatedMeeting;
+    } catch (err) {
+      console.error('[updateMeeting Error]:', err);
+      return null;
+    }
   }
 
   async updateMeetingStatus(meetingId: string, status: MeetingStatus, actor?: UserProfile): Promise<void> {
@@ -4510,13 +4582,14 @@ class SupabaseDatabase {
     this._lsSave('eye_ideas', ideas);
 
     // Create a new task objective from it
+    const deadlineIso = deadline ? localInputToIso(deadline) : deadline;
     const task: Task = {
       id: 'TSK-' + Math.random().toString(36).slice(2).toUpperCase(),
       name: `[Idea] ${idea.title}`,
       description: idea.description,
       instructions: `This task was converted from an approved member idea proposed by ${idea.createdByName}.`,
       priority: priority as any,
-      deadline,
+      deadline: deadlineIso,
       committee: idea.committee,
       department: 'All',
       status: 'Published',
