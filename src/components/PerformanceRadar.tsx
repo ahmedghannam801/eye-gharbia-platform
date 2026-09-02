@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../db/localDb';
 import { MonthlyPerformance, UserProfile, MemberEvaluation } from '../types';
 import { useLanguage } from '../lib/LanguageContext';
+import { canEvaluateMember, getHRAssignedCommittee, isHRMemberOrLeader, isAdminUser } from '../lib/permissions';
 import { Star, ShieldAlert, BarChart3, ChevronDown, ChevronUp, Award, Calendar, MessageSquare, Edit3, XCircle, FileSpreadsheet, Eye, EyeOff, Search } from 'lucide-react';
 import { GoogleSheetSyncModal } from './GoogleSheetSync';
 
@@ -14,7 +15,8 @@ const avg = (nums: number[]) => nums.length ? +(nums.reduce((a, b) => a + b, 0) 
 export const PerformanceRadar: React.FC<PerformanceRadarProps> = ({ currentUser }) => {
   const { language, isRtl } = useLanguage();
   const isAr = language === 'ar';
-  const isLeaderOrAdmin = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader', 'HRM'].includes(currentUser.role) || (currentUser.committee === 'HR' || !!currentUser.department?.includes('HR OF ') || !!(currentUser as any).subCommittee?.includes('HR OF '));
+  const hrAssigned = getHRAssignedCommittee(currentUser);
+  const isLeaderOrAdmin = isAdminUser(currentUser) || isHRMemberOrLeader(currentUser);
 
   const [members, setMembers] = useState<UserProfile[]>([]);
   const [memberSearchQuery, setMemberSearchQuery] = useState('');

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../db/localDb';
-import { UserProfile, ExcuseRequest, FreezeRequest, CommitteeChangeRequest, ExcuseType } from '../types';
+import { UserProfile, ExcuseRequest, FreezeRequest, CommitteeChangeRequest, ExcuseType, Meeting, Task } from '../types';
 import { useLanguage } from '../lib/LanguageContext';
 import { isAdminUser } from '../lib/permissions';
 import { FileText, Snowflake, Clock, CheckCircle2, XCircle, Send, MessageSquare, ArrowRightLeft } from 'lucide-react';
@@ -66,9 +66,14 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
   const [freezes, setFreezes] = useState<FreezeRequest[]>([]);
   const [committeeChanges, setCommitteeChanges] = useState<CommitteeChangeRequest[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
+  const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
 
   // Excuse Form state
   const [excuseType, setExcuseType] = useState<ExcuseType>('Meeting');
+  const [selectedMeetingId, setSelectedMeetingId] = useState<string>('');
+  const [selectedTaskId, setSelectedTaskId] = useState<string>('');
+  const [isCustomTarget, setIsCustomTarget] = useState<boolean>(false);
   const [excuseTarget, setExcuseTarget] = useState('');
   const [excuseReason, setExcuseReason] = useState('');
   const [excuseDate, setExcuseDate] = useState(new Date().toISOString().slice(0, 10));
@@ -101,6 +106,8 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
     setFreezes(db.getFreezeRequests());
     setCommitteeChanges(db.getCommitteeChangeRequests());
     setLogs(db.getLogs());
+    setMeetings(db.getMeetings());
+    setTasks(db.getTasks());
   };
 
   useEffect(() => {
@@ -118,9 +125,66 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
     }
   };
 
+  const userRelevantMeetings = meetings.filter(m => {
+    if (isHighboardOrHR || currentUser.role === 'Super Admin' || currentUser.committee === 'All') return true;
+    const matchComm = !m.committee || m.committee === 'All' || m.committee === 'None' || m.committee === 'General' || m.committee === currentUser.committee;
+    const matchDept = !m.department || m.department === 'All' || m.department === 'None' || m.department === 'General' || m.department === currentUser.department;
+    return matchComm && matchDept;
+  });
+
+  const userRelevantTasks = tasks.filter(t => {
+    if (isHighboardOrHR || currentUser.role === 'Super Admin' || currentUser.committee === 'All') return true;
+    const matchComm = !t.committee || t.committee === 'All' || t.committee === 'None' || t.committee === currentUser.committee;
+    return matchComm;
+  });
+
+  const handleMeetingChange = (meetingId: string) => {
+    setSelectedMeetingId(meetingId);
+    if (meetingId === '__custom__') {
+      setIsCustomTarget(true);
+      setExcuseTarget('');
+    } else {
+      setIsCustomTarget(false);
+      const m = meetings.find(item => item.id === meetingId);
+      if (m) {
+        setExcuseTarget(m.title);
+        if (m.scheduledAt) {
+          setExcuseDate(m.scheduledAt.slice(0, 10));
+        }
+      } else {
+        setExcuseTarget('');
+      }
+    }
+  };
+
+  const handleTaskChange = (taskId: string) => {
+    setSelectedTaskId(taskId);
+    if (taskId === '__custom__') {
+      setIsCustomTarget(true);
+      setExcuseTarget('');
+    } else {
+      setIsCustomTarget(false);
+      const t = tasks.find(item => item.id === taskId);
+      if (t) {
+        setExcuseTarget(t.title || (t as any).name || '');
+        if (t.deadline) {
+          setExcuseDate(t.deadline.slice(0, 10));
+        }
+      } else {
+        setExcuseTarget('');
+      }
+    }
+  };
+
   const handleCreateExcuse = (e: React.FormEvent) => {
     e.preventDefault();
     if (!excuseReason.trim()) return;
+
+    const targetId = excuseType === 'Meeting'
+      ? (selectedMeetingId !== '__custom__' && selectedMeetingId ? selectedMeetingId : undefined)
+      : excuseType === 'Task'
+      ? (selectedTaskId !== '__custom__' && selectedTaskId ? selectedTaskId : undefined)
+      : undefined;
 
     db.createExcuseRequest({
       memberId: currentUser.id,
@@ -128,13 +192,17 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
       committee: currentUser.committee,
       department: currentUser.department,
       type: excuseType,
-      targetTitle: excuseTarget,
+      targetId: targetId,
+      targetTitle: excuseTarget || (excuseType === 'Meeting' ? 'اجتماع' : excuseType === 'Task' ? 'مهمة' : 'عذر عام'),
       reason: excuseReason,
       date: excuseDate,
     }, currentUser);
 
     setExcuseReason('');
     setExcuseTarget('');
+    setSelectedMeetingId('');
+    setSelectedTaskId('');
+    setIsCustomTarget(false);
     setSuccessMsg(isAr ? 'تم تقديم طلب العذر بنجاح، وسوف تراجعه الإدارة وقادة اللجان قريباً.' : 'Excuse request submitted successfully.');
     setTimeout(() => setSuccessMsg(''), 3000);
     setActiveTab('manage');
@@ -428,35 +496,157 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
             <span>{isAr ? 'نموذج تقديم عذر رسمي جديد' : 'Submit Official Excuse'}</span>
           </h2>
 
+          {/* Explanation Banner on Excuse Scoring */}
+          <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/30 border border-blue-200 dark:border-blue-800/60 space-y-1.5 shadow-xs">
+            <div className="flex items-center gap-2 font-black text-xs text-blue-900 dark:text-blue-200">
+              <span className="text-base">⚖️</span>
+              <span>{isAr ? 'قواعد التقييم واحتساب درجات الأعذار الرسمية' : 'Official Excuse Evaluation Rules'}</span>
+            </div>
+            <p className="text-xs text-blue-800 dark:text-blue-300 leading-relaxed font-semibold">
+              {isAr
+                ? '• عند قبول العذر رسمياً من قِبل الليدر أو الإدارة: يحصل العضو على نصف درجة التقييم (50%) الخاصة بالاجتماع أو التكليف في الـ AVG.\n• عند رفض العذر أو الغياب بدون عذر مقبول: يحصل العضو على (0) درجة من تقييم الاجتماع.'
+                : '• If accepted by Leader/Admin: Member earns 50% (half score) of the meeting/task points.\n• If rejected or unexcused: Member earns 0 points.'}
+            </p>
+          </div>
+
           <form onSubmit={handleCreateExcuse} className="space-y-4 max-w-xl">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
                   {isAr ? 'نوع العذر' : 'Excuse Type'}
                 </label>
                 <select
                   value={excuseType}
-                  onChange={e => setExcuseType(e.target.value as ExcuseType)}
+                  onChange={e => {
+                    const newType = e.target.value as ExcuseType;
+                    setExcuseType(newType);
+                    setSelectedMeetingId('');
+                    setSelectedTaskId('');
+                    setIsCustomTarget(false);
+                    setExcuseTarget('');
+                  }}
                   className="w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 p-3 text-xs font-bold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 outline-none"
                 >
-                  <option value="Meeting">{isAr ? 'عذر عن اجتماع' : 'Meeting'}</option>
-                  <option value="Task">{isAr ? 'عذر عن تأخر تسليم مهمة' : 'Task'}</option>
-                  <option value="General">{isAr ? 'عذر عام / ظرف طارئ' : 'General'}</option>
+                  <option value="Meeting">{isAr ? '🏛️ عذر عن حضور اجتماع' : 'Meeting'}</option>
+                  <option value="Task">{isAr ? '🎯 عذر عن تأخر تسليم مهمة / تكليف' : 'Task'}</option>
+                  <option value="General">{isAr ? '🚨 عذر عام / ظرف طارئ' : 'General'}</option>
                 </select>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
-                  {isAr ? 'اسم الفاعلية / التكليف (اختياري)' : 'Target Item (Optional)'}
-                </label>
-                <input
-                  type="text"
-                  value={excuseTarget}
-                  onChange={e => setExcuseTarget(e.target.value)}
-                  placeholder={isAr ? 'مثال: اجتماع الجمعة، تكليف الإيفنت...' : 'Meeting / Task title...'}
-                  className="w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 p-3 text-xs font-bold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 outline-none"
-                />
-              </div>
+              {/* Dynamic Target Selection for Meetings */}
+              {excuseType === 'Meeting' && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
+                    {isAr ? 'اختر الاجتماع المراد تقديم العذر عنه' : 'Select Meeting'}
+                  </label>
+                  {userRelevantMeetings.length > 0 ? (
+                    <div className="space-y-2">
+                      <select
+                        value={selectedMeetingId}
+                        onChange={e => handleMeetingChange(e.target.value)}
+                        className="w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 p-3 text-xs font-bold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                      >
+                        <option value="">{isAr ? '-- اختر الاجتماع من القائمة --' : '-- Select a Meeting --'}</option>
+                        {userRelevantMeetings.map(m => {
+                          const isOnline = m.type === 'online' || (m.location || '').toLowerCase().includes('online') || (m.location || '').includes('زووم');
+                          const dateStr = m.scheduledAt ? m.scheduledAt.slice(0, 10) : '';
+                          return (
+                            <option key={m.id} value={m.id}>
+                              {isOnline ? '🌐' : '🏛️'} {m.title} {dateStr ? `(${dateStr})` : ''} — {m.committee === 'All' ? (isAr ? 'اجتماع عام' : 'General') : m.committee}
+                            </option>
+                          );
+                        })}
+                        <option value="__custom__">✏️ {isAr ? 'اجتماع آخر (كتابة يدوية)' : 'Other / Custom Meeting'}</option>
+                      </select>
+
+                      {isCustomTarget && (
+                        <input
+                          type="text"
+                          value={excuseTarget}
+                          onChange={e => setExcuseTarget(e.target.value)}
+                          placeholder={isAr ? 'اكتب اسم الاجتماع بالتفصيل...' : 'Enter meeting title...'}
+                          required
+                          className="w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 p-3 text-xs font-bold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 outline-none animate-fade-in"
+                        />
+                      )}
+                    </div>
+                  ) : (
+                    <input
+                      type="text"
+                      value={excuseTarget}
+                      onChange={e => setExcuseTarget(e.target.value)}
+                      placeholder={isAr ? 'اكتب اسم الاجتماع...' : 'Enter meeting title...'}
+                      required
+                      className="w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 p-3 text-xs font-bold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                    />
+                  )}
+                </div>
+              )}
+
+              {/* Dynamic Target Selection for Tasks */}
+              {excuseType === 'Task' && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
+                    {isAr ? 'اختر المهمة أو التكليف المراد تقديم العذر عنه' : 'Select Task'}
+                  </label>
+                  {userRelevantTasks.length > 0 ? (
+                    <div className="space-y-2">
+                      <select
+                        value={selectedTaskId}
+                        onChange={e => handleTaskChange(e.target.value)}
+                        className="w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 p-3 text-xs font-bold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                      >
+                        <option value="">{isAr ? '-- اختر المهمة من القائمة --' : '-- Select a Task --'}</option>
+                        {userRelevantTasks.map(t => {
+                          const deadlineStr = t.deadline ? t.deadline.slice(0, 10) : '';
+                          return (
+                            <option key={t.id} value={t.id}>
+                              🎯 {t.title || (t as any).name} {deadlineStr ? `(تاريخ التسليم: ${deadlineStr})` : ''}
+                            </option>
+                          );
+                        })}
+                        <option value="__custom__">✏️ {isAr ? 'تكليف آخر (كتابة يدوية)' : 'Other / Custom Task'}</option>
+                      </select>
+
+                      {isCustomTarget && (
+                        <input
+                          type="text"
+                          value={excuseTarget}
+                          onChange={e => setExcuseTarget(e.target.value)}
+                          placeholder={isAr ? 'اكتب اسم المهمة بالتفصيل...' : 'Enter task title...'}
+                          required
+                          className="w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 p-3 text-xs font-bold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 outline-none animate-fade-in"
+                        />
+                      )}
+                    </div>
+                  ) : (
+                    <input
+                      type="text"
+                      value={excuseTarget}
+                      onChange={e => setExcuseTarget(e.target.value)}
+                      placeholder={isAr ? 'اكتب اسم التكليف أو المهمة...' : 'Enter task title...'}
+                      required
+                      className="w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 p-3 text-xs font-bold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                    />
+                  )}
+                </div>
+              )}
+
+              {/* General Target Input */}
+              {excuseType === 'General' && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">
+                    {isAr ? 'عنوان أو مناسبة العذر (اختياري)' : 'Occasion / Title (Optional)'}
+                  </label>
+                  <input
+                    type="text"
+                    value={excuseTarget}
+                    onChange={e => setExcuseTarget(e.target.value)}
+                    placeholder={isAr ? 'مثال: ظرف طارئ، سفر مفاجئ...' : 'Emergency, travel...'}
+                    className="w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 p-3 text-xs font-bold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+              )}
             </div>
 
             <div>
@@ -1052,8 +1242,21 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
               <p className="font-bold text-slate-800 dark:text-slate-200">
                 {selectedRequest.item.memberName} {selectedRequest.type === 'committee' ? `(طلب نقل: من ${selectedRequest.item.currentCommittee} إلى ${selectedRequest.item.targetCommittee})` : `— ${selectedRequest.item.committee}`}
               </p>
+              {selectedRequest.type === 'excuse' && selectedRequest.item.targetTitle && (
+                <p className="text-xs font-semibold text-blue-600 dark:text-blue-400">
+                  {selectedRequest.item.type === 'Meeting' ? '🏛️ اجتماع:' : selectedRequest.item.type === 'Task' ? '🎯 تكليف:' : '📌'} {selectedRequest.item.targetTitle} ({selectedRequest.item.date})
+                </p>
+              )}
               <p className="text-slate-600 dark:text-slate-400">{selectedRequest.item.reason}</p>
             </div>
+
+            {selectedRequest.type === 'excuse' && (
+              <div className="p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-[11px] text-amber-800 dark:text-amber-300 font-semibold space-y-0.5">
+                <p>⚖️ <strong>{isAr ? 'تأثير القرار على التقييم (AVG):' : 'Scoring Impact:'}</strong></p>
+                <p>{isAr ? '• الموافقة: يُمنح العضو نصف درجة التقييم (50%) ويوثق كمعذور في سجل الحضور.' : '• Approve: Member earns 50% points and marked as excused in attendance.'}</p>
+                <p>{isAr ? '• الرفض: يُحتسب الاجتماع/التكليف ويحصل العضو على (0) درجة.' : '• Reject: Member earns 0 points for this item.'}</p>
+              </div>
+            )}
 
             <div>
               <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1">

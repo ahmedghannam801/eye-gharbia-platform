@@ -74,6 +74,9 @@ CREATE TABLE IF NOT EXISTS public.excuses_freezes (
 ALTER TABLE public.excuses_freezes
   ADD COLUMN IF NOT EXISTS request_type text,
   ADD COLUMN IF NOT EXISTS type text,
+  ADD COLUMN IF NOT EXISTS target_id text,
+  ADD COLUMN IF NOT EXISTS related_id text,
+  ADD COLUMN IF NOT EXISTS target_item_title text,
   ADD COLUMN IF NOT EXISTS target_committee text,
   ADD COLUMN IF NOT EXISTS target_department text,
   ADD COLUMN IF NOT EXISTS sub_committee text,

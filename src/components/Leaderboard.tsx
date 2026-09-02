@@ -6,6 +6,7 @@ import { useLanguage } from '../lib/LanguageContext';
 import { BadgesSystem } from './BadgesSystem';
 import { GoogleSheetSyncModal } from './GoogleSheetSync';
 import { matchesSearch } from '../lib/searchUtils';
+import { canEvaluateMember } from '../lib/permissions';
 
 interface LeaderboardProps {
   currentUser: UserProfile;
@@ -441,20 +442,11 @@ const AllMembersEvaluationsView: React.FC<{
                 </button>
 
                 {(() => {
-                  const evaluator = currentUser;
                   const target = u;
-                  if (evaluator.id === target.id) return null;
-
-                  const isLeadershipTarget = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM'].includes(target.role);
-                  if (isLeadershipTarget) return null; // Leadership roles have no evaluations
-
-                  const isExecOrVice = ['Super Admin', 'Head', 'Coordinator', 'Deputy Coordinator', 'Vice', 'HRM'].includes(evaluator.role);
-                  const isLeader = evaluator.role === 'Leader';
-                  const targetIsLeader = target.role === 'Leader';
-
-                  const canRate = isExecOrVice || (isLeader && !targetIsLeader);
+                  const canRate = canEvaluateMember(currentUser, target);
                   if (!canRate) return null;
 
+                  const targetIsLeader = target.role === 'Leader';
                   return (
                     <button
                       onClick={() => setEvalTargetUser(u)}

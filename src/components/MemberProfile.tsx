@@ -10,6 +10,7 @@ import { printDedicatedOfficialDocument } from '../lib/dedicatedPrint';
 import PremiumCertificate from './PremiumCertificate';
 import { fillAndDownloadDocxTemplate } from '../lib/docxFiller';
 import { CareerCompass } from './CareerCompass';
+import { canEvaluateMember } from '../lib/permissions';
 
 const COMMITTEES_OPTIONS = ['HR', 'PR', 'SM', 'OR'];
 const COMMITTEE_DEPTS_MAPPING: Record<string, string[]> = {
@@ -805,12 +806,8 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({
     printWindow.document.close();
   };
 
-  const isLeadershipTarget = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM'].includes(activeUser.role);
-  const isExecOrVice = ['Super Admin', 'Head', 'Coordinator', 'Deputy Coordinator', 'Vice', 'HRM'].includes(currentUser.role);
-  // Leadership roles have NO evaluations ("ملناش تقييم")
-  const canEvaluateTarget = !isOwnProfile && !isLeadershipTarget && (
-    isExecOrVice || (currentUser.role === 'Leader' && activeUser.role === 'Member')
-  );
+  // Leadership roles have NO evaluations ("ملناش تقييم"), checked by canEvaluateMember
+  const canEvaluateTarget = !isOwnProfile && canEvaluateMember(currentUser, activeUser);
 
   const handleSaveEvaluation = async (e: React.FormEvent) => {
     e.preventDefault();

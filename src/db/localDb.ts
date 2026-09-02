@@ -356,6 +356,7 @@ const excuseFromRow = (r: any): ExcuseRequest => ({
   committee: r.committee || 'None',
   department: r.department || 'None',
   type: r.type || 'General',
+  targetId: r.target_id || r.related_id || r.target_item_id || undefined,
   targetTitle: r.target_item_title || r.target_title || undefined,
   reason: r.reason || '',
   date: r.date || r.created_at,
@@ -7370,6 +7371,8 @@ class SupabaseDatabase {
           type: req.type || 'Excuse',
           reason: req.reason,
           target_item_title: req.targetTitle || null,
+          target_id: req.targetId || null,
+          related_id: req.targetId || null,
           date: req.date,
           start_date: req.date,
           status: 'Pending',
@@ -7439,10 +7442,75 @@ class SupabaseDatabase {
         });
 
         this._lsSave('eye_excuse_requests', list);
+
+        // Sync Attendance record when Excuse for Meeting is Approved / Rejected
+        if (target.type === 'Meeting') {
+          const allMeetings = this.getMeetings();
+          const targetMeeting = (target.targetId ? allMeetings.find(m => m.id === target.targetId) : null) ||
+            allMeetings.find(m => target.targetTitle && m.title && m.title.trim().toLowerCase() === target.targetTitle.trim().toLowerCase()) ||
+            allMeetings.find(m => m.scheduledAt && m.scheduledAt.startsWith(target.date));
+
+          if (targetMeeting) {
+            const allAtt = this.getAllAttendance();
+            const existingAtt = allAtt.find(a => a.meetingId === targetMeeting.id && a.memberId === target.memberId);
+
+            if (status === 'Approved') {
+              if (existingAtt) {
+                existingAtt.isExcused = true;
+                existingAtt.excuseReason = target.reason || 'عذر مقبول';
+                this.cache.attendance = [...allAtt];
+                this._lsSave('eye_attendance', this.cache.attendance);
+              } else {
+                const newAtt: AttendanceRecord = {
+                  id: 'att-' + Math.random().toString(36).slice(2),
+                  meetingId: targetMeeting.id,
+                  memberId: target.memberId,
+                  memberName: target.memberName,
+                  memberEmail: '',
+                  committee: target.committee,
+                  department: target.department,
+                  checkedInAt: new Date().toISOString(),
+                  isExcused: true,
+                  excuseReason: target.reason || 'عذر مقبول',
+                };
+                this.cache.attendance = [...allAtt, newAtt];
+                this._lsSave('eye_attendance', this.cache.attendance);
+              }
+
+              if (isSupabaseConfigured && supabase) {
+                supabase.from('attendance').upsert({
+                  meeting_id: targetMeeting.id,
+                  member_id: target.memberId,
+                  member_name: target.memberName,
+                  committee: target.committee,
+                  department: target.department,
+                  checked_in_at: new Date().toISOString(),
+                  is_excused: true,
+                  excuse_reason: target.reason || 'عذر مقبول',
+                }, { onConflict: 'meeting_id,member_id' as any }).then();
+              }
+            } else if (status === 'Rejected') {
+              if (existingAtt && existingAtt.isExcused) {
+                existingAtt.isExcused = false;
+                existingAtt.excuseReason = undefined;
+                this.cache.attendance = [...allAtt];
+                this._lsSave('eye_attendance', this.cache.attendance);
+
+                if (isSupabaseConfigured && supabase) {
+                  supabase.from('attendance').update({
+                    is_excused: false,
+                    excuse_reason: null,
+                  }).eq('meeting_id', targetMeeting.id).eq('member_id', target.memberId).then();
+                }
+              }
+            }
+          }
+        }
+
         this.addNotification(
           target.memberId,
-          status === 'Approved' ? '✅ تم قبول عذرك' : '❌ تم رفض العذر',
-          `تم رد الادارة على طلب العذر: ${adminResponse || (status === 'Approved' ? 'تم القبول' : 'تم الرفض')}`,
+          status === 'Approved' ? '✅ تم قبول عذرك (احتساب 50% من التقييم)' : '❌ تم رفض العذر (احتساب 0 من التقييم)',
+          `تم رد الإدارة على طلب العذر: ${adminResponse || (status === 'Approved' ? 'تم قبول العذر واحتساب نصف الدرجة' : 'تم الرفض واحتساب 0')}`,
           status === 'Approved' ? 'success' : 'warning',
           target.id
         );
@@ -7461,6 +7529,8 @@ class SupabaseDatabase {
             type: target.type || 'Excuse',
             reason: target.reason,
             target_item_title: target.targetTitle || null,
+            target_id: target.targetId || null,
+            related_id: target.targetId || null,
             date: target.date,
             start_date: target.date,
             status,
@@ -8361,7 +8431,7 @@ export function calculateMemberAVG(
       (e.targetTitle && m.title && e.targetTitle.trim().toLowerCase() === m.title.trim().toLowerCase())
     );
 
-    if (att) {
+    if (att && !att.isExcused) {
       maxPoints += fullPoints;
       earnedPoints += fullPoints;
       if (isOnline) {
@@ -8371,7 +8441,7 @@ export function calculateMemberAVG(
         offlineMeetingsCount++;
         offlineMeetingsEarned += fullPoints;
       }
-    } else if (exc) {
+    } else if ((att && att.isExcused) || exc) {
       maxPoints += fullPoints;
       const halfPoints = fullPoints * 0.5;
       earnedPoints += halfPoints;
@@ -8380,6 +8450,17 @@ export function calculateMemberAVG(
         onlineMeetingsEarned += halfPoints;
       } else {
         offlineMeetingsEarned += halfPoints;
+      }
+    } else {
+      const rejectedExc = (excuses || []).find(e =>
+        (e.status === 'Rejected' || e.status === 'مرفوض' || e.status === 'rejected') &&
+        (String(e.memberId) === String(userId) || String(e.userId) === String(userId)) &&
+        ((e.targetId && String(e.targetId) === String(m.id)) ||
+         (e.targetTitle && m.title && e.targetTitle.trim().toLowerCase() === m.title.trim().toLowerCase()))
+      );
+      if (rejectedExc) {
+        maxPoints += fullPoints;
+        // earnedPoints += 0;
       }
     }
   });
@@ -8404,6 +8485,17 @@ export function calculateMemberAVG(
       earnedPoints += halfPoints;
       excusedTasksCount++;
       tasksEarned += halfPoints;
+    } else {
+      const rejectedTaskExc = (excuses || []).find(e =>
+        (e.status === 'Rejected' || e.status === 'مرفوض' || e.status === 'rejected') &&
+        (String(e.memberId) === String(userId) || String(e.userId) === String(userId)) &&
+        ((e.targetId && String(e.targetId) === String(t.id)) ||
+         (e.targetTitle && (t.name || t.title) && e.targetTitle.trim().toLowerCase() === (t.name || t.title).trim().toLowerCase()))
+      );
+      if (rejectedTaskExc) {
+        maxPoints += fullPoints;
+        // earnedPoints += 0;
+      }
     }
   });
 

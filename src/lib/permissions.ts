@@ -129,35 +129,92 @@ export const canManageMember = (currentUser: UserProfile | null | undefined, tar
 };
 
 /**
- * Checks if current user can evaluate a target member
+ * Returns the specific target committee assigned to an HRM sub-committee member (e.g. 'HR OF PR' -> 'PR')
+ */
+export const getHRAssignedCommittee = (user: Partial<UserProfile> | null | undefined): string | null => {
+  if (!user) return null;
+  const dept = (user.department || '').toUpperCase();
+  const subComm = ((user as any).subCommittee || '').toUpperCase();
+
+  if (subComm.includes('HR OF PR') || dept.includes('HR OF PR') || dept.includes('العلاقات العامة')) return 'PR';
+  if (subComm.includes('HR OF SM') || dept.includes('HR OF SM') || dept.includes('السوشيال ميديا') || dept.includes('سوشيال')) return 'SM';
+  if (subComm.includes('HR OF OR') || dept.includes('HR OF OR') || dept.includes('التنظيم') || dept.includes('تنظيم')) return 'OR';
+  if (subComm.includes('HR OF MEDIA') || dept.includes('HR OF MEDIA') || dept.includes('الميديا')) return 'Media';
+  if (subComm.includes('HR OF HR') || dept.includes('HR OF HR')) return 'HR';
+
+  const match = (subComm + ' ' + dept).match(/HR\s+OF\s+([A-Za-z0-9_-]+)/i);
+  if (match) return match[1].toUpperCase();
+
+  return null;
+};
+
+/**
+ * Returns true if the user is an HR member, HR Leader, HRM, or executive admin.
+ */
+export const isHRMemberOrLeader = (user: Partial<UserProfile> | null | undefined): boolean => {
+  if (!user) return false;
+  if (isAdminUser(user)) return true;
+  if (user.role === 'HRM') return true;
+  const comm = (user.committee || '').toUpperCase();
+  const dept = (user.department || '').toUpperCase();
+  const subComm = ((user as any).subCommittee || '').toUpperCase();
+  return comm === 'HR' || comm === 'HRM' || dept.includes('HR') || subComm.includes('HR');
+};
+
+/**
+ * Checks if current user can evaluate a target member.
+ * STRICT RULE: Evaluations are exclusively restricted to HR members/leaders and Executive Admins.
+ * Non-HR members and non-HR leaders can ONLY view evaluations (Read-Only).
+ * - HR Sub-Committee officers (e.g. HR OF PR) evaluate their assigned committee members.
+ * - HR Leaders evaluate their HR members.
+ * - Executive Leadership / General HRM evaluate across all committees.
  */
 export const canEvaluateMember = (currentUser: UserProfile | null | undefined, targetMember: UserProfile): boolean => {
   if (!currentUser || !targetMember) return false;
   if (currentUser.id === targetMember.id) return false; // cannot self-evaluate
   if (isLeadershipRole(targetMember.role)) return false; // Leadership roles are NOT subject to member evaluations
-  if (isAdminUser(currentUser)) return true;
 
-  const dept = (currentUser.department || '').toUpperCase();
-  const subComm = ((currentUser as any).subCommittee || '').toUpperCase();
-  const isSubHRM = dept.includes('HR OF ') || subComm.includes('HR OF ');
-
-  // General HRM without sub-committee evaluates everyone
-  if (currentUser.role === 'HRM' && !isSubHRM) return true;
-
-  const currentUserComm = getEffectiveCommittee(currentUser);
-  const targetComm = getEffectiveCommittee(targetMember);
-
-  if (currentUserComm === 'All') return true;
-
-  if (currentUserComm === targetComm || currentUser.committee === targetMember.committee) {
-    return true;
+  // Strict Rule: Non-HR users have NO evaluation permissions (View Only)
+  if (!isHRMemberOrLeader(currentUser)) {
+    return false;
   }
 
-  if (isSubHRM) {
-    const hrTargetComm = (subComm || dept).split('HR OF ')[1]?.trim().toUpperCase() || '';
-    if (hrTargetComm && (targetComm.toUpperCase() === hrTargetComm || targetMember.committee?.toUpperCase() === hrTargetComm)) {
+  // 1. Executive Admin Tier (Super Admin, Head, Vice, Coordinator, Deputy Coordinator, General HRM)
+  if (isAdminUser(currentUser)) return true;
+  if (currentUser.role === 'HRM') return true;
+
+  const hrAssignedComm = getHRAssignedCommittee(currentUser);
+  const targetComm = getEffectiveCommittee(targetMember).toUpperCase();
+  const targetRawComm = (targetMember.committee || '').toUpperCase();
+
+  // 2. HR Sub-Committee Member / Officer (e.g. HR OF PR evaluates PR, HR OF SM evaluates SM, HR OF OR evaluates OR)
+  if (hrAssignedComm) {
+    if (targetComm === hrAssignedComm || targetRawComm === hrAssignedComm) {
       return true;
     }
+  }
+
+  const isCurrentUserHRLeader = currentUser.role === 'Leader' || currentUser.role === 'Head';
+  const isTargetHRMember = isHRMemberOrLeader(targetMember);
+
+  // 3. HR Leaders evaluate HR members in their committee/department
+  if (isCurrentUserHRLeader) {
+    if (isTargetHRMember || targetRawComm === 'HR' || targetRawComm === 'HRM') {
+      const curDept = (currentUser.department || '').toUpperCase();
+      const targetDept = (targetMember.department || '').toUpperCase();
+      // If HR leader in a specific HR department (e.g. HRD, HRS, HRIS), evaluate HR members in same department or HR general
+      if (curDept && curDept !== 'NONE' && curDept !== 'ALL') {
+        if (targetDept === curDept || targetDept.includes(curDept) || curDept.includes(targetDept)) {
+          return true;
+        }
+      }
+      return true;
+    }
+  }
+
+  // 4. Regular HR Member evaluates fellow HR members if in HR committee
+  if ((currentUser.committee || '').toUpperCase() === 'HR' && (targetRawComm === 'HR' || isTargetHRMember)) {
+    return true;
   }
 
   return false;
@@ -171,11 +228,8 @@ export const filterMembersByPermission = (currentUser: UserProfile | null | unde
   const safeMembers = members || [];
   if (isAdminUser(currentUser)) return safeMembers;
 
-  const dept = (currentUser.department || '').toUpperCase();
-  const subComm = ((currentUser as any).subCommittee || '').toUpperCase();
-  const isSubHRM = dept.includes('HR OF ') || subComm.includes('HR OF ');
-
-  if (currentUser.role === 'HRM' && !isSubHRM) return safeMembers;
+  const hrAssignedComm = getHRAssignedCommittee(currentUser);
+  if (currentUser.role === 'HRM' && !hrAssignedComm) return safeMembers;
 
   const userComm = getEffectiveCommittee(currentUser);
   if (userComm === 'All') return safeMembers;
@@ -185,11 +239,8 @@ export const filterMembersByPermission = (currentUser: UserProfile | null | unde
     if (m.id === currentUser.id) return true;
     const targetComm = getEffectiveCommittee(m);
     if (targetComm === userComm || m.committee === currentUser.committee) return true;
-    if (isSubHRM) {
-      const hrTargetComm = (subComm || dept).split('HR OF ')[1]?.trim().toUpperCase() || '';
-      if (hrTargetComm && (targetComm.toUpperCase() === hrTargetComm || m.committee?.toUpperCase() === hrTargetComm)) {
-        return true;
-      }
+    if (hrAssignedComm && (targetComm.toUpperCase() === hrAssignedComm || m.committee?.toUpperCase() === hrAssignedComm)) {
+      return true;
     }
     return false;
   });

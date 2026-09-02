@@ -905,6 +905,7 @@ export interface ExcuseRequest {
   committee: string;
   department: string;
   type: ExcuseType;
+  targetId?: string;
   targetTitle?: string;
   reason: string;
   date: string;

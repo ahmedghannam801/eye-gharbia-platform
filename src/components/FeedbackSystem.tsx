@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { db, calculateMemberAVG } from '../db/localDb';
 import { UserProfile, LeaderFeedback, MemberEvaluation } from '../types';
 import { useLanguage } from '../lib/LanguageContext';
+import { canEvaluateMember, getHRAssignedCommittee, isHRMemberOrLeader, isAdminUser } from '../lib/permissions';
 import { Star, MessageSquare, CheckCircle2, ShieldAlert, BarChart3, ChevronDown, ChevronUp, Eye, EyeOff, Sparkles, Search, Sliders, X, Users, Award, FileSpreadsheet, Trophy, Printer, Download, FileText, ArrowRight } from 'lucide-react';
 import { GoogleSheetSyncModal } from './GoogleSheetSync';
 import { Leaderboard } from './Leaderboard';
@@ -33,6 +34,8 @@ export const FeedbackSystem: React.FC<FeedbackSystemProps> = ({ currentUser, ini
   const { language, isRtl, translateCommittee, translateDepartment } = useLanguage();
   const isAr = language === 'ar';
 
+  const hrAssigned = getHRAssignedCommittee(currentUser);
+
   const [activeTab, setActiveTab] = useState<'leaderboard' | 'evaluations'>(initialTab);
   const [allUsersList, setAllUsersList] = useState<UserProfile[]>([]);
   const [evaluationsMap, setEvaluationsMap] = useState<Record<string, MemberEvaluation[]>>({});
@@ -40,7 +43,13 @@ export const FeedbackSystem: React.FC<FeedbackSystemProps> = ({ currentUser, ini
   
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
-  const [committeeFilter, setCommitteeFilter] = useState('all');
+  const [committeeFilter, setCommitteeFilter] = useState<string>(() => {
+    if (hrAssigned) return hrAssigned;
+    if (currentUser.role === 'Leader' && currentUser.committee && currentUser.committee !== 'All' && currentUser.committee !== 'None') {
+      return currentUser.committee;
+    }
+    return 'all';
+  });
   const [subCommitteeFilter, setSubCommitteeFilter] = useState('all');
   const [roleFilter, setRoleFilter] = useState<'all' | 'leaders' | 'members' | 'executive'>('all');
 
@@ -108,22 +117,9 @@ export const FeedbackSystem: React.FC<FeedbackSystemProps> = ({ currentUser, ini
     });
   }, [allUsersList, searchQuery, committeeFilter, subCommitteeFilter, roleFilter]);
 
-  // Permission logic: Leadership & Leaders can rate regular members
+  // Permission logic: Using RBAC engine (allows HRM sub-committee members to evaluate their assigned committee members)
   const canUserRateTarget = (evaluator: UserProfile, target: UserProfile): boolean => {
-    if (evaluator.id === target.id) return false;
-
-    // Leadership roles are not evaluated
-    const isLeadershipTarget = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM'].includes(target.role);
-    if (isLeadershipTarget) return false;
-
-    const isExecOrVice = ['Super Admin', 'Head', 'Coordinator', 'Deputy Coordinator', 'Vice', 'HRM'].includes(evaluator.role);
-    const isLeader = evaluator.role === 'Leader';
-    const targetIsLeader = target.role === 'Leader';
-    const targetIsMember = target.role === 'Member';
-
-    if (isExecOrVice && (targetIsLeader || targetIsMember)) return true; // Leadership can rate Leaders and Members
-    if (isLeader && targetIsMember) return true; // Leaders can rate regular Members
-    return false;
+    return canEvaluateMember(evaluator, target);
   };
 
   const handleGenerateAiFeedbackDraft = () => {
@@ -825,6 +821,51 @@ export const FeedbackSystem: React.FC<FeedbackSystemProps> = ({ currentUser, ini
         <Leaderboard currentUser={currentUser} onNavigateToView={onNavigateToView} />
       ) : (
         <>
+          {hrAssigned ? (
+            <div className="p-4 rounded-3xl bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white shadow-md border border-blue-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in">
+              <div className="space-y-1">
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 text-[10px] font-bold border border-blue-400/30">
+                  <span>🛡️</span>
+                  <span>{isAr ? 'صلاحية تقييم الموارد البشرية (HR Officer)' : 'HR Evaluation Authority'}</span>
+                </div>
+                <h3 className="text-sm sm:text-base font-extrabold text-white flex items-center gap-2">
+                  <span>{isAr ? `أنت مسؤول HR لـ لجنة ${translateCommittee(hrAssigned)} (${hrAssigned})` : `You are HR Officer for ${hrAssigned}`}</span>
+                </h3>
+                <p className="text-xs text-slate-300 font-semibold max-w-2xl">
+                  {isAr
+                    ? `أنت مخول رسمياً بتقييم ومتابعة كافة أعضاء وقادة لجنة ${translateCommittee(hrAssigned)}، وتدوين تقييمات السلوك والتفاعل والبونص الخاصة بهم.`
+                    : `You are officially authorized to evaluate all members and leaders of the ${hrAssigned} committee.`}
+                </p>
+              </div>
+              <div className="shrink-0 flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-2xl border border-white/10 text-xs font-bold text-blue-200 w-fit">
+                <span>🎯 {isAr ? 'اللجنة المخصصة:' : 'Assigned:'}</span>
+                <span className="text-amber-300 font-black">{translateCommittee(hrAssigned)} ({hrAssigned})</span>
+              </div>
+            </div>
+          ) : isHRMemberOrLeader(currentUser) && currentUser.role === 'Leader' ? (
+            <div className="p-4 rounded-3xl bg-gradient-to-r from-purple-900 via-indigo-900 to-slate-900 text-white shadow-md border border-purple-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in">
+              <div className="space-y-1">
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 text-[10px] font-bold border border-purple-400/30">
+                  <span>👑</span>
+                  <span>{isAr ? 'قائد لجنة الموارد البشرية (HR Leader)' : 'HR Leader Authority'}</span>
+                </div>
+                <h3 className="text-sm sm:text-base font-extrabold text-white flex items-center gap-2">
+                  <span>{isAr ? 'تقييم ومتابعة أداء أعضاء الموارد البشرية (HR Members)' : 'Evaluating HR Members'}</span>
+                </h3>
+                <p className="text-xs text-slate-300 font-semibold max-w-2xl">
+                  {isAr
+                    ? 'أنت مخول رسمياً بتقييم ومتابعة أداء أعضاء لجنة الموارد البشرية واللجان الفرعية التابعة لها.'
+                    : 'You are authorized to evaluate and monitor performance for HR committee members.'}
+                </p>
+              </div>
+            </div>
+          ) : !isHRMemberOrLeader(currentUser) && !isAdminUser(currentUser) ? (
+            <div className="p-3.5 rounded-2xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold flex items-center gap-2 animate-fade-in">
+              <span className="text-base">👁️</span>
+              <span>{isAr ? 'وضع المشاهدة والاطلاع: إدخال وتعديل التقييمات مخصص لمسؤولي وقادة الموارد البشرية (HR) والإدارة العليا فقط.' : 'View Only Mode: Evaluation submissions are managed exclusively by HR and Executive Admins.'}</span>
+            </div>
+          ) : null}
+
           {/* Filter and Search Bar */}
       <div className="bg-white dark:bg-slate-900 p-4 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between max-w-full overflow-hidden">
         <div className="relative w-full md:w-80 min-w-0">
