@@ -806,6 +806,7 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({
     printWindow.document.close();
   };
 
+  const isLeadershipTarget = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM'].includes(activeUser.role);
   // Leadership roles have NO evaluations ("ملناش تقييم"), checked by canEvaluateMember
   const canEvaluateTarget = !isOwnProfile && canEvaluateMember(currentUser, activeUser);
 

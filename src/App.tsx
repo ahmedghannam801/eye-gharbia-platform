@@ -227,11 +227,29 @@ export default function App() {
       db.checkDeadlineNotifications();
     }, 60000);
 
-    // Subscribe to DB changes to synchronize current user state
+    // Subscribe to DB changes to synchronize current user state without triggering full-app re-renders
     const unsubscribe = db.onChange(() => {
       if (!isPasswordRecovery) {
         const saved = db.getCurrentUser();
-        setCurrentUser(saved);
+        if (saved) {
+          setCurrentUser(prev => {
+            if (!prev) return saved;
+            if (
+              prev.id === saved.id &&
+              prev.fullName === saved.fullName &&
+              prev.role === saved.role &&
+              prev.committee === saved.committee &&
+              prev.department === saved.department &&
+              prev.status === saved.status &&
+              prev.avatarUrl === saved.avatarUrl &&
+              prev.bonusPoints === saved.bonusPoints &&
+              prev.membershipCode === saved.membershipCode
+            ) {
+              return prev;
+            }
+            return saved;
+          });
+        }
       }
     });
 

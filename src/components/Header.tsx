@@ -364,8 +364,9 @@ export const Header: React.FC<HeaderProps> = ({
     const interval = setInterval(() => {
       loadNotifications();
       checkLiveBroadcast();
-    }, 5000);
+    }, 45000);
     const unsub = db.onChange(() => {
+      loadNotifications();
       checkLiveBroadcast();
     });
     return () => {

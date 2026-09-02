@@ -87,7 +87,8 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
       : typeof (db as any).subscribe === 'function' 
       ? (db as any).subscribe(loadData) 
       : () => {};
-    const interval = setInterval(loadData, 4000);
+    // Real-time updates are handled immediately by db.onChange, with a gentle 60s backup interval
+    const interval = setInterval(loadData, 60000);
     return () => {
       if (typeof unsub === 'function') unsub();
       clearInterval(interval);
