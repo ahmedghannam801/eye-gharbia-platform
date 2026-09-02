@@ -48,6 +48,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const unreadCount = db.getNotifications(currentUser.id).filter(n => !n.isRead).length;
   const hasLiveBroadcast = db.getLiveWorkshops(currentUser.committee).some(w => w.status === 'Live');
 
+  const pendingRequestsCount = useMemo(() => {
+    try {
+      const isLead = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader', 'HRM'].includes(currentUser.role) ||
+        currentUser.department === 'HRM' || currentUser.committee === 'HR';
+      if (isLead) {
+        const excuses = db.getExcuses().filter(e => e.status === 'Pending').length;
+        const freezes = db.getFreezes().filter(f => f.status === 'Pending').length;
+        const commChanges = db.getCommitteeChangeRequests().filter(c => c.status === 'Pending').length;
+        return excuses + freezes + commChanges;
+      }
+      return 0;
+    } catch {
+      return 0;
+    }
+  }, [currentUser]);
+
   const ALL_ROLES = ['Member', 'Leader', 'Super Admin', 'HRM', 'Vice', 'Coordinator', 'Deputy Coordinator'];
   const ADMIN_PLUS = ['Leader', 'Super Admin', 'Head', 'Vice', 'HRM', 'Coordinator', 'Deputy Coordinator'];
   const TOP_ROLES = ['Super Admin', 'Head', 'Vice', 'HRM', 'Coordinator', 'Deputy Coordinator'];
@@ -73,7 +89,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           groupLabel: language === 'ar' ? 'حسابي ومتابعتي' : 'My Space',
           items: [
             { id: 'profile',       label: language === 'ar' ? 'ملفي الشخصي ونقاطي' : t('profile'), icon: User,        roles: ALL_ROLES },
-            { id: 'excuses-freeze', label: language === 'ar' ? 'تقديم عذر / تجميد' : 'Excuses & Freeze', icon: Clock, roles: ALL_ROLES },
+            { id: 'excuses-freeze', label: language === 'ar' ? 'الأعذار وطلبات النقل والتجميد' : 'Excuses & Transfers', icon: Clock, roles: ALL_ROLES },
             { id: 'certificates',  label: language === 'ar' ? 'شهاداتي التقديرية' : 'Certificates', icon: Star,     roles: ALL_ROLES },
             { id: 'disciplinary', label: language === 'ar' ? 'السجل الانضباطي' : 'Disciplinary Vault', icon: ShieldAlert, roles: ALL_ROLES },
           ],
@@ -98,7 +114,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             { id: 'meetings',      label: language === 'ar' ? 'الاجتماعات وتسجيل الحضور' : 'Meetings', icon: CalendarDays, roles: ALL_ROLES },
             { id: 'announcements', label: language === 'ar' ? 'الإعلانات والتعاميم' : t('announcements'), icon: Megaphone, roles: ALL_ROLES, badge: unreadCount },
             { id: 'profile',       label: t('profile'), icon: User, roles: ALL_ROLES },
-            { id: 'excuses-freeze', label: language === 'ar' ? 'الأعذار وطلبات التجميد' : 'Excuses & Requests', icon: Clock, roles: ALL_ROLES },
+            { id: 'excuses-freeze', label: language === 'ar' ? 'الأعذار وطلبات النقل والتجميد' : 'Excuses & Transfers', icon: Clock, roles: ALL_ROLES, badge: pendingRequestsCount > 0 ? pendingRequestsCount : undefined },
           ],
         },
         {

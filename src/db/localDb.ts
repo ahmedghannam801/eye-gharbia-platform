@@ -1940,6 +1940,7 @@ class SupabaseDatabase {
     if (updates.phoneNumber !== undefined) row.phone_number = updates.phoneNumber;
     if (updates.avatarUrl !== undefined) row.avatar_url = updates.avatarUrl;
     if (updates.fullName !== undefined) row.full_name = updates.fullName;
+    if (updates.email !== undefined) row.email = updates.email;
     if (updates.role !== undefined) row.role = updates.role;
     if (updates.status !== undefined) row.status = updates.status;
     if (updates.committee !== undefined) row.committee = updates.committee;
@@ -1952,18 +1953,25 @@ class SupabaseDatabase {
     if (updates.skills !== undefined) row.skills = updates.skills;
     if (updates.lftNazarCount !== undefined) row.lft_nazar_count = updates.lftNazarCount;
     if (updates.inzarCount !== undefined) row.inzar_count = updates.inzarCount;
+    if (updates.bonusPoints !== undefined) row.bonus_points = updates.bonusPoints;
+    if (updates.governorate !== undefined) row.governorate = updates.governorate;
+    if (updates.membershipCode !== undefined) row.membership_code = updates.membershipCode;
 
-    supabase
-      .from('profiles')
-      .update(row)
-      .eq('id', id)
-      .then(({ error }) => {
-        if (error) {
-          console.warn('[Profile Update] Supabase profiles update warning:', error.message);
-        } else {
-          this.refreshAll();
-        }
-      });
+    if (isSupabaseConfigured && supabase && Object.keys(row).length > 0) {
+      supabase
+        .from('profiles')
+        .update(row)
+        .eq('id', id)
+        .select()
+        .then(({ data, error }) => {
+          if (error) {
+            console.warn('[Profile Update] Supabase profiles update warning:', error.message);
+          } else if (!data || data.length === 0) {
+            // Row not found in profiles, upsert it
+            supabase.from('profiles').upsert({ id, ...row }, { onConflict: 'id' }).catch(() => {});
+          }
+        });
+    }
 
     this.logActivity(updater.id, updater.fullName, updater.role, 'Profile Update', 'Modified profile information.');
   }
@@ -2140,17 +2148,20 @@ class SupabaseDatabase {
       row.facebook_url = updates.facebookUrl;
     }
 
-    supabase
-      .from('profiles')
-      .update(row)
-      .eq('id', id)
-      .then(({ error }) => {
-        if (error) {
-          console.warn('[Admin Profile Update] Supabase update warning:', error.message);
-        } else {
-          this.refreshAll();
-        }
-      });
+    if (isSupabaseConfigured && supabase && Object.keys(row).length > 0) {
+      supabase
+        .from('profiles')
+        .update(row)
+        .eq('id', id)
+        .select()
+        .then(({ data, error }) => {
+          if (error) {
+            console.warn('[Admin Profile Update] Supabase update warning:', error.message);
+          } else if (!data || data.length === 0) {
+            supabase.from('profiles').upsert({ id, ...row }, { onConflict: 'id' }).catch(() => {});
+          }
+        });
+    }
 
     this.logActivity(
       updater.id,
@@ -7843,12 +7854,17 @@ class SupabaseDatabase {
         const { error } = await supabase.from('excuses_freezes').upsert({
           id: newReq.id,
           user_id: req.memberId,
+          member_id: req.memberId,
           user_name: req.memberName,
+          member_name: req.memberName,
           governorate: actor.governorate || 'الغربية',
           committee: req.currentCommittee,
           department: req.currentDepartment || null,
           request_type: 'CommitteeChange',
           type: req.targetCommittee,
+          target_committee: req.targetCommittee,
+          target_department: req.targetDepartment || null,
+          sub_committee: req.subCommittee || null,
           target_item_title: req.targetDepartment || null,
           reason: req.reason,
           date: new Date().toISOString().slice(0, 10),
@@ -7923,7 +7939,7 @@ class SupabaseDatabase {
         target.adminResponse = adminResponse;
 
         list.forEach((r) => {
-          if (r.id === id || (r.memberId === target.memberId && r.targetCommittee === target.targetCommittee)) {
+          if (r.id === id || (r.memberId === target.memberId && r.targetCommittee === target.targetCommittee && r.status === 'Pending')) {
             r.status = status;
             r.adminResponse = adminResponse;
           }
@@ -7931,77 +7947,84 @@ class SupabaseDatabase {
 
         this._lsSave('eye_committee_requests', list);
 
-        // If Approved, officially update the member's committee and department in the database!
+        // If Approved, officially transfer the member to the new committee & department/sub-committee!
         if (status === 'Approved') {
-          const targetMember = this.getUsers().find((u) => u.id === target.memberId);
-          if (targetMember) {
-            this.updateProfile(
-              target.memberId,
-              {
-                committee: target.targetCommittee,
-                department: target.targetDepartment || 'None',
-              },
-              actor
-            );
+          const rawTargetDept = target.targetDepartment || 'None';
+          let newDept = rawTargetDept;
+          let newSubComm = target.subCommittee;
+
+          if (target.targetCommittee === 'HR') {
+            if (rawTargetDept.startsWith('HR OF ') || rawTargetDept.includes('HR OF')) {
+              newDept = 'HRM';
+              newSubComm = rawTargetDept.replace('HRM - ', '').trim();
+            } else if (rawTargetDept === 'HRM') {
+              newDept = 'HRM';
+              newSubComm = newSubComm || 'HR OF PR';
+            }
+          }
+
+          const profileUpdates: Partial<UserProfile> = {
+            committee: target.targetCommittee,
+            department: newDept,
+          };
+          if (newSubComm) {
+            profileUpdates.subCommittee = newSubComm;
+          }
+
+          // Update local cache and localStorage
+          this.updateProfile(target.memberId, profileUpdates, actor);
+
+          // Guaranteed direct cloud update to Supabase `profiles` table
+          if (isSupabaseConfigured && supabase) {
+            const profRow: Record<string, any> = {
+              committee: target.targetCommittee,
+              department: newDept,
+            };
+            if (newSubComm) profRow.sub_committee = newSubComm;
+
+            await supabase
+              .from('profiles')
+              .update(profRow)
+              .eq('id', target.memberId);
           }
         }
 
+        // Notification to the member
         this.addNotification(
           target.memberId,
-          status === 'Approved' ? '🎉 تمت الموافقة على طلب نقل اللجنة' : '❌ تم رفض طلب نقل اللجنة',
-          `رد الإدارة والقادة على طلب نقلك إلى لجنة (${target.targetCommittee}): ${adminResponse || (status === 'Approved' ? 'تمت الموافقة وتحديث لجنتك بنجاح!' : 'تم رفض الطلب.')}`,
+          status === 'Approved' ? '🎉 تمت الموافقة على نقل لجنتك بنجاح' : '❌ تم رفض طلب نقل اللجنة',
+          status === 'Approved'
+            ? `تمت الموافقة الرسمية على نقلك إلى لجنة (${target.targetCommittee}${target.targetDepartment ? ' - ' + target.targetDepartment : ''}). تم تحديث لجنتك تلقائياً في حسابك وقاعدة البيانات.${adminResponse ? `\nملاحظة الإدارة: ${adminResponse}` : ''}`
+            : `تم رفض طلب نقلك إلى لجنة (${target.targetCommittee}).${adminResponse ? `\nسبب/ملاحظة الرفض: ${adminResponse}` : ''}`,
           status === 'Approved' ? 'success' : 'warning',
           target.id
         );
-        this.notify();
 
+        // Cloud sync to `excuses_freezes` table in Supabase
         if (isSupabaseConfigured && supabase) {
           const reviewedAt = new Date().toISOString();
           const updatePayload: any = {
-            id: target.id,
-            user_id: target.memberId,
-            user_name: target.memberName,
-            governorate: actor.governorate || 'الغربية',
-            committee: target.currentCommittee,
-            department: target.currentDepartment || null,
-            request_type: 'CommitteeChange',
-            type: target.targetCommittee,
-            target_item_title: target.targetDepartment || null,
-            reason: target.reason,
-            date: new Date().toISOString().slice(0, 10),
             status,
             decision_notes: adminResponse || null,
             admin_response: adminResponse || null,
             reviewed_by: actor.fullName,
+            reviewed_by_name: actor.fullName,
+            decision_by: actor.id,
+            decision_by_name: actor.fullName,
             reviewed_at: reviewedAt,
           };
 
-          const res = await supabase.from('excuses_freezes').update({
-            status,
-            decision_notes: adminResponse || null,
-            admin_response: adminResponse || null,
-            reviewed_by: actor.fullName,
-            reviewed_at: reviewedAt,
-          }).eq('id', id).select();
+          const res = await supabase
+            .from('excuses_freezes')
+            .update(updatePayload)
+            .eq('id', id);
 
-          if (!res.data || res.data.length === 0) {
-            const { error: upsertErr } = await supabase
+          if (res.error) {
+            await supabase
               .from('excuses_freezes')
-              .upsert(updatePayload, { onConflict: 'id' });
-
-            if (upsertErr) {
-              await supabase
-                .from('excuses_freezes')
-                .update({
-                  status,
-                  decision_notes: adminResponse || null,
-                  admin_response: adminResponse || null,
-                  reviewed_by: actor.fullName,
-                  reviewed_at: reviewedAt,
-                })
-                .eq('user_id', target.memberId)
-                .eq('request_type', 'CommitteeChange');
-            }
+              .update(updatePayload)
+              .or(`user_id.eq.${target.memberId},member_id.eq.${target.memberId}`)
+              .eq('status', 'Pending');
           }
         }
 
@@ -8010,8 +8033,10 @@ class SupabaseDatabase {
           actor.fullName,
           actor.role,
           'Committee Change Status Updated',
-          `Updated committee change request ${id} for ${target.memberName} to ${status}`
+          `Updated committee transfer request ${id} for ${target.memberName} to ${status} (New Committee: ${target.targetCommittee})`
         );
+
+        this.notify();
       }
     } catch (err) {
       console.error('[updateCommitteeChangeRequestStatus Error]:', err);

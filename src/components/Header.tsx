@@ -65,8 +65,17 @@ const getNotifDestination = (
     return { view: 'certificates', targetId: relatedId };
   }
 
-  // 5) Excuses & Freeze Requests (الأعذار والتجميد)
-  if (text.includes('عذر') || text.includes('تجميد') || text.includes('excuse') || text.includes('freeze') || text.includes('طلب فريز')) {
+  // 5) Excuses, Freeze & Committee Transfer Requests (الأعذار والتجميد ونقل اللجان)
+  if (
+    text.includes('عذر') ||
+    text.includes('تجميد') ||
+    text.includes('excuse') ||
+    text.includes('freeze') ||
+    text.includes('طلب فريز') ||
+    text.includes('تغيير لجنه') ||
+    text.includes('نقل لجنه') ||
+    text.includes('transfer')
+  ) {
     return { view: 'excuses-freeze', targetId: relatedId };
   }
 

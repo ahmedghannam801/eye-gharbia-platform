@@ -1,13 +1,13 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { db } from '../db/localDb';
-import { UserProfile, OrganizationSettings, UserRole, UserStatus, COMMITTEE_STRUCTURE, EGYPTIAN_GOVERNORATES, generateGovernorateLeaderCode, UpdatableProfileField, ProfileUpdateRequest } from '../types';
+import { UserProfile, OrganizationSettings, UserRole, UserStatus, COMMITTEE_STRUCTURE, EGYPTIAN_GOVERNORATES, generateGovernorateLeaderCode, UpdatableProfileField, ProfileUpdateRequest, CommitteeChangeRequest } from '../types';
 import {
   Settings, Shield, Bell, HardDrive, Save, Users, Trash2,
   Search, ChevronDown, UserCheck, UserX, Crown, AlertTriangle,
   CheckCircle, XCircle, Filter, RefreshCw, Mail, Send, Edit3,
   Database, FileText, CheckSquare, Activity, Sliders, Key, X,
   Lock, ArrowRight, Download, Sparkles, Cake, RotateCcw,
-  User, Phone, Building2, Layers, Check, Square
+  User, Phone, Building2, Layers, Check, Square, ArrowRightLeft
 } from 'lucide-react';
 import { useLanguage } from '../lib/LanguageContext';
 import { getEmailQueue, retryQueuedEmails, clearEmailQueue, QueuedEmail } from '../lib/emailService';
@@ -47,9 +47,18 @@ const AVAILABLE_UPDATE_FIELDS: { id: UpdatableProfileField; titleAr: string; des
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNavigateToView }) => {
   const { language, isRtl } = useLanguage();
   const ar = language === 'ar';
-  const [activeTab, setActiveTab] = useState<'members' | 'update-requests' | 'config' | 'master' | 'logs' | 'security-codes'>('members');
+  const [activeTab, setActiveTab] = useState<'members' | 'committee-transfers' | 'update-requests' | 'config' | 'master' | 'logs' | 'security-codes'>('members');
   const [settings, setSettings] = useState<OrganizationSettings>(db.getSettings());
   const [isSaved, setIsSaved] = useState(false);
+
+  // Committee Transfers Review State
+  const [commReqSearch, setCommReqSearch] = useState('');
+  const [commReqStatusFilter, setCommReqStatusFilter] = useState<'all' | 'Pending' | 'Approved' | 'Rejected'>('all');
+  const [commReqCommitteeFilter, setCommReqCommitteeFilter] = useState('all');
+  const [reviewingCommReq, setReviewingCommReq] = useState<CommitteeChangeRequest | null>(null);
+  const [commReviewDecision, setCommReviewDecision] = useState<'Approved' | 'Rejected'>('Approved');
+  const [commReviewNote, setCommReviewNote] = useState('');
+  const [isSubmittingCommReview, setIsSubmittingCommReview] = useState(false);
 
   // Profile Update Requests State
   const [targetScope, setTargetScope] = useState<'all' | 'committee' | 'specific'>('specific');
@@ -284,6 +293,44 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
     db.cancelProfileUpdateRequest(reqId, currentUser);
     showFeedback(ar ? 'تم إلغاء الطلب بنجاح.' : 'Request cancelled.', true);
     setRefreshKey(k => k + 1);
+  };
+
+  // Committee Transfers data & handlers
+  const allCommitteeRequests = useMemo(() => {
+    return db.getCommitteeChangeRequests();
+  }, [refreshKey]);
+
+  const pendingTransfersCount = useMemo(() => {
+    return allCommitteeRequests.filter(r => r.status === 'Pending').length;
+  }, [allCommitteeRequests]);
+
+  const filteredCommitteeRequests = useMemo(() => {
+    return allCommitteeRequests.filter(req => {
+      const matchSearch = matchesSearch([req.memberName, req.currentCommittee, req.targetCommittee, req.targetDepartment, req.reason], commReqSearch);
+      const matchStatus = commReqStatusFilter === 'all' || req.status === commReqStatusFilter;
+      const matchComm = commReqCommitteeFilter === 'all' || req.currentCommittee === commReqCommitteeFilter || req.targetCommittee === commReqCommitteeFilter;
+      return matchSearch && matchStatus && matchComm;
+    });
+  }, [allCommitteeRequests, commReqSearch, commReqStatusFilter, commReqCommitteeFilter]);
+
+  const handleExecuteCommReview = async (reqId: string, decision: 'Approved' | 'Rejected', note: string) => {
+    setIsSubmittingCommReview(true);
+    try {
+      await db.updateCommitteeChangeRequestStatus(reqId, decision, note, currentUser);
+      showFeedback(
+        ar
+          ? (decision === 'Approved' ? 'تمت الموافقة ونقل العضو وتحديث قاعدة البيانات بنجاح! 🎉' : 'تم رفض طلب نقل اللجنة.')
+          : (decision === 'Approved' ? 'Member transferred successfully and database updated! 🎉' : 'Transfer request rejected.'),
+        true
+      );
+      setReviewingCommReq(null);
+      setCommReviewNote('');
+      setRefreshKey(k => k + 1);
+    } catch (err: any) {
+      showFeedback(err?.message || (ar ? 'حدث خطأ أثناء معالجة الطلب' : 'Failed to process request'), false);
+    } finally {
+      setIsSubmittingCommReview(false);
+    }
   };
 
   const filteredLogs = useMemo(() => {
@@ -783,6 +830,23 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
         </button>
 
         <button
+          onClick={() => setActiveTab('committee-transfers')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-black transition-all cursor-pointer ${
+            activeTab === 'committee-transfers'
+              ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-500/20'
+              : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:bg-slate-50'
+          }`}
+        >
+          <ArrowRightLeft className="w-4 h-4 text-emerald-400" />
+          <span>{ar ? 'طلبات نقل وتغيير اللجان 🔄' : 'Committee Transfers 🔄'}</span>
+          {pendingTransfersCount > 0 && (
+            <span className="px-2 py-0.5 rounded-full text-[10px] bg-amber-400 text-slate-950 font-black animate-pulse shadow-sm">
+              {pendingTransfersCount} {ar ? 'معلق' : 'Pending'}
+            </span>
+          )}
+        </button>
+
+        <button
           onClick={() => setActiveTab('master')}
           className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-black transition-all ${
             activeTab === 'master'
@@ -911,6 +975,20 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
               </button>
 
               <button
+                type="button"
+                onClick={() => setActiveTab('committee-transfers')}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer active:scale-95"
+              >
+                <ArrowRightLeft className="w-3.5 h-3.5 text-white" />
+                <span>{ar ? 'طلبات نقل اللجان 🔄' : 'Committee Transfers 🔄'}</span>
+                {pendingTransfersCount > 0 && (
+                  <span className="px-1.5 py-0.5 rounded-full text-[9px] bg-amber-400 text-slate-950 font-black animate-pulse">
+                    {pendingTransfersCount}
+                  </span>
+                )}
+              </button>
+
+              <button
                 onClick={handleExportMembersCSV}
                 className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
               >
@@ -1027,6 +1105,248 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
               </table>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* TAB: COMMITTEE TRANSFERS */}
+      {activeTab === 'committee-transfers' && (
+        <div className="space-y-6 animate-fade-in">
+          
+          {/* Header Card */}
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-bold text-xs uppercase tracking-wider">
+                  <ArrowRightLeft className="w-4 h-4" />
+                  <span>{ar ? 'طلبات نقل وتغيير اللجان' : 'Committee Change Requests'}</span>
+                </div>
+                <h2 className="text-xl font-black text-slate-900 dark:text-white">
+                  {ar ? 'إدارة واعتماد طلبات نقل وتغيير اللجان 🔄' : 'Review Committee Transfer Requests 🔄'}
+                </h2>
+                <p className="text-xs text-slate-500 font-medium">
+                  {ar
+                    ? 'عند قبولك للطلب، يتم تحويل العضو رسمياً للجنة الجديدة وقسمه فوراً وتحديث بياناته في قاعدة البيانات السحابية Supabase تلقائياً.'
+                    : 'Approving a transfer automatically updates the member profile and committee in Supabase database.'}
+                </p>
+              </div>
+
+              {pendingTransfersCount > 0 && (
+                <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-950/50 p-3 rounded-2xl border border-amber-300 dark:border-amber-700/60 shrink-0 animate-pulse">
+                  <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                  <div className="text-xs font-black">
+                    <span className="text-amber-900 dark:text-amber-300 block">
+                      {ar ? `${pendingTransfersCount} طلب بانتظار قرارك` : `${pendingTransfersCount} requests pending`}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Quick Stats Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="bg-slate-50 dark:bg-slate-800/50 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800">
+                <span className="text-[11px] text-slate-500 font-bold block">{ar ? 'إجمالي الطلبات' : 'Total'}</span>
+                <span className="text-lg font-black text-slate-900 dark:text-white">{allCommitteeRequests.length}</span>
+              </div>
+              <div className="bg-amber-50 dark:bg-amber-950/30 p-3.5 rounded-2xl border border-amber-200 dark:border-amber-800/50">
+                <span className="text-[11px] text-amber-700 dark:text-amber-400 font-bold block">{ar ? 'قيد المراجعة ⏳' : 'Pending'}</span>
+                <span className="text-lg font-black text-amber-600 dark:text-amber-400">{pendingTransfersCount}</span>
+              </div>
+              <div className="bg-emerald-50 dark:bg-emerald-950/30 p-3.5 rounded-2xl border border-emerald-200 dark:border-emerald-800/50">
+                <span className="text-[11px] text-emerald-700 dark:text-emerald-400 font-bold block">{ar ? 'تمت الموافقة ✅' : 'Approved'}</span>
+                <span className="text-lg font-black text-emerald-600 dark:text-emerald-400">
+                  {allCommitteeRequests.filter(r => r.status === 'Approved').length}
+                </span>
+              </div>
+              <div className="bg-rose-50 dark:bg-rose-950/30 p-3.5 rounded-2xl border border-rose-200 dark:border-rose-800/50">
+                <span className="text-[11px] text-rose-700 dark:text-rose-400 font-bold block">{ar ? 'مرفوض ❌' : 'Rejected'}</span>
+                <span className="text-lg font-black text-rose-600 dark:text-rose-400">
+                  {allCommitteeRequests.filter(r => r.status === 'Rejected').length}
+                </span>
+              </div>
+            </div>
+
+            {/* Filters Bar */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={commReqStatusFilter}
+                  onChange={e => setCommReqStatusFilter(e.target.value as any)}
+                  className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs font-bold"
+                >
+                  <option value="all">{ar ? 'كل الحالات' : 'All Status'}</option>
+                  <option value="Pending">{ar ? 'قيد المراجعة فقط ⏳' : 'Pending Only'}</option>
+                  <option value="Approved">{ar ? 'المقبولة فقط ✅' : 'Approved Only'}</option>
+                  <option value="Rejected">{ar ? 'المرفوضة فقط ❌' : 'Rejected Only'}</option>
+                </select>
+
+                <select
+                  value={commReqCommitteeFilter}
+                  onChange={e => setCommReqCommitteeFilter(e.target.value)}
+                  className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs font-bold"
+                >
+                  <option value="all">{ar ? 'كل اللجان' : 'All Committees'}</option>
+                  <option value="HR">HR</option>
+                  <option value="PR">PR</option>
+                  <option value="SM">SM</option>
+                  <option value="OR">OR</option>
+                </select>
+              </div>
+
+              <div className="relative w-full sm:w-64">
+                <input
+                  type="text"
+                  value={commReqSearch}
+                  onChange={e => setCommReqSearch(e.target.value)}
+                  placeholder={ar ? 'بحث بالعضو أو اللجنة أو السبب...' : 'Search requests...'}
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-500"
+                />
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute end-2.5 top-2.5 pointer-events-none" />
+              </div>
+            </div>
+
+            {/* Requests List */}
+            {filteredCommitteeRequests.length === 0 ? (
+              <div className="text-center py-12 text-slate-400 font-bold text-xs">
+                {ar ? 'لا توجد طلبات تغيير لجان مطابقة للبحث حالياً.' : 'No matching committee transfer requests found.'}
+              </div>
+            ) : (
+              <div className="space-y-3 pt-2">
+                {filteredCommitteeRequests.map(req => {
+                  const isPending = req.status === 'Pending';
+                  const member = allUsers.find(u => u.id === req.memberId);
+
+                  return (
+                    <div
+                      key={req.id}
+                      className={`p-4 sm:p-5 rounded-2xl border transition-all ${
+                        isPending
+                          ? 'bg-amber-50/40 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800/60 shadow-sm'
+                          : 'bg-slate-50/60 dark:bg-slate-850/60 border-slate-200 dark:border-slate-800'
+                      }`}
+                    >
+                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                        
+                        {/* Member & Transfer Info */}
+                        <div className="space-y-2 flex-1">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center font-black text-xs shrink-0 shadow-sm">
+                              {(req.memberName || 'ع').charAt(0)}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h4 className="text-xs font-black text-slate-900 dark:text-white">
+                                  {req.memberName}
+                                </h4>
+                                {member?.membershipCode && (
+                                  <span className="text-[10px] font-mono text-slate-400 font-bold">
+                                    {member.membershipCode}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[10px] text-slate-400 font-medium">
+                                {ar ? `تاريخ تقديم الطلب: ` : `Submitted: `}
+                                {new Date(req.createdAt).toLocaleDateString('ar-EG')}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Committee Transfer Route */}
+                          <div className="flex items-center gap-2 text-xs font-black bg-white dark:bg-slate-800 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 w-fit shadow-xs">
+                            <div className="flex items-center gap-1 text-slate-600 dark:text-slate-300">
+                              <span className="text-[10px] text-slate-400 font-medium">{ar ? 'اللجنة الحالية:' : 'Current:'}</span>
+                              <span className="text-amber-600 dark:text-amber-400 px-1.5 py-0.5 bg-amber-50 dark:bg-amber-950/60 rounded">
+                                {req.currentCommittee}
+                              </span>
+                            </div>
+
+                            <ArrowRightLeft className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+
+                            <div className="flex items-center gap-1 text-slate-900 dark:text-white">
+                              <span className="text-[10px] text-slate-400 font-medium">{ar ? 'اللجنة المطلوبة:' : 'Target:'}</span>
+                              <span className="text-emerald-600 dark:text-emerald-400 px-1.5 py-0.5 bg-emerald-50 dark:bg-emerald-950/60 rounded font-black">
+                                {req.targetCommittee}
+                                {req.targetDepartment && req.targetDepartment !== 'None' ? ` (${req.targetDepartment})` : ''}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Reason */}
+                          <div className="bg-white/70 dark:bg-slate-800/70 p-2.5 rounded-xl border border-slate-200/60 dark:border-slate-700/60 text-xs">
+                            <span className="font-bold text-slate-500 block text-[10px] mb-0.5">{ar ? 'سبب طلب النقل:' : 'Reason:'}</span>
+                            <p className="text-slate-800 dark:text-slate-200 font-medium leading-relaxed">{req.reason}</p>
+                          </div>
+
+                          {/* Admin Response Note if exists */}
+                          {req.adminResponse && (
+                            <div className="bg-indigo-50/70 dark:bg-indigo-950/40 p-2.5 rounded-xl border border-indigo-200 dark:border-indigo-800 text-xs text-indigo-900 dark:text-indigo-200">
+                              <span className="font-black text-[10px] block mb-0.5">{ar ? 'ملاحظة وقرار الإدارة:' : 'Admin Decision Note:'}</span>
+                              <p className="font-medium">{req.adminResponse}</p>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Status and Action Buttons */}
+                        <div className="flex flex-row lg:flex-col items-center lg:items-end justify-between gap-3 shrink-0">
+                          {/* Status Badge */}
+                          <div>
+                            {req.status === 'Approved' ? (
+                              <span className="px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-black text-xs flex items-center gap-1">
+                                <CheckCircle className="w-3.5 h-3.5" />
+                                <span>{ar ? 'تمت الموافقة وتحديث اللجنة ✅' : 'Approved & Transferred ✅'}</span>
+                              </span>
+                            ) : req.status === 'Rejected' ? (
+                              <span className="px-3 py-1 rounded-full bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 font-black text-xs flex items-center gap-1">
+                                <XCircle className="w-3.5 h-3.5" />
+                                <span>{ar ? 'تم رفض الطلب ❌' : 'Rejected ❌'}</span>
+                              </span>
+                            ) : (
+                              <span className="px-3 py-1 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 font-black text-xs flex items-center gap-1 animate-pulse">
+                                <Clock className="w-3.5 h-3.5" />
+                                <span>{ar ? 'بانتظار قرار الإدارة ⏳' : 'Pending Decision ⏳'}</span>
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Quick Action Buttons for Pending */}
+                          {isPending && (
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setReviewingCommReq(req);
+                                  setCommReviewDecision('Rejected');
+                                  setCommAdminNote('');
+                                }}
+                                className="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/50 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-300 font-bold text-xs border border-rose-200 dark:border-rose-800 transition-colors cursor-pointer"
+                              >
+                                {ar ? 'رفض ❌' : 'Reject'}
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setReviewingCommReq(req);
+                                  setCommReviewDecision('Approved');
+                                  setCommAdminNote('تمت الموافقة ونقل العضو وتحديث السجلات الرسمية بنجاح.');
+                                }}
+                                className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-xs shadow-md shadow-emerald-500/20 active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                                <span>{ar ? 'قبول ونقل العضو فوراً ✅' : 'Approve & Transfer ✅'}</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
         </div>
       )}
 
@@ -2293,6 +2613,108 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* COMMITTEE TRANSFER DECISION MODAL */}
+      {reviewingCommReq && (
+        <div className="fixed inset-0 z-[99999] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 border-2 border-indigo-500/40 rounded-3xl p-6 shadow-2xl space-y-5 animate-scale-in text-slate-900 dark:text-white" dir={isRtl ? 'rtl' : 'ltr'}>
+            
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <ArrowRightLeft className="w-5 h-5 text-indigo-500" />
+                <h3 className="text-base font-black">
+                  {commReviewDecision === 'Approved'
+                    ? (ar ? 'تأكيد نقل العضو وتحديث اللجنة' : 'Approve Member Transfer')
+                    : (ar ? 'رفض طلب نقل اللجنة' : 'Reject Transfer Request')}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReviewingCommReq(null)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-slate-50 dark:bg-slate-850 p-4 rounded-2xl space-y-2 text-xs">
+              <div className="flex justify-between font-bold">
+                <span className="text-slate-500">{ar ? 'العضو:' : 'Member:'}</span>
+                <span className="font-black text-slate-900 dark:text-white">{reviewingCommReq.memberName}</span>
+              </div>
+              <div className="flex justify-between font-bold">
+                <span className="text-slate-500">{ar ? 'اللجنة الحالية:' : 'Current Committee:'}</span>
+                <span className="text-amber-600 dark:text-amber-400 font-black">{reviewingCommReq.currentCommittee}</span>
+              </div>
+              <div className="flex justify-between font-bold">
+                <span className="text-slate-500">{ar ? 'اللجنة الجديدة المطلوبة:' : 'New Committee:'}</span>
+                <span className="text-emerald-600 dark:text-emerald-400 font-black">
+                  {reviewingCommReq.targetCommittee} {reviewingCommReq.targetDepartment && reviewingCommReq.targetDepartment !== 'None' ? `(${reviewingCommReq.targetDepartment})` : ''}
+                </span>
+              </div>
+              <div className="pt-2 border-t border-slate-200 dark:border-slate-700">
+                <span className="text-slate-500 block text-[11px] mb-1 font-bold">{ar ? 'سبب النقل المكتوب من العضو:' : 'Reason:'}</span>
+                <p className="font-medium text-slate-800 dark:text-slate-200 leading-relaxed bg-white dark:bg-slate-800 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700">
+                  {reviewingCommReq.reason}
+                </p>
+              </div>
+            </div>
+
+            {commReviewDecision === 'Approved' && (
+              <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-2xl text-xs text-emerald-800 dark:text-emerald-300 font-bold flex items-start gap-2">
+                <CheckCircle className="w-4 h-4 shrink-0 text-emerald-600 mt-0.5" />
+                <div>
+                  <span className="block font-black">{ar ? 'تأثير الموافقة الفوري:' : 'Immediate Effect:'}</span>
+                  <p className="text-[11px] font-medium mt-0.5">
+                    {ar
+                      ? `سيتم تحويل العضو رسمياً إلى لجنة (${reviewingCommReq.targetCommittee})، وتحديث حسابه في قاعدة البيانات السحابية Supabase وإرسال إشعار فوري له.`
+                      : `Member will be transferred to ${reviewingCommReq.targetCommittee} and Supabase profiles table will be updated immediately.`}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <div>
+              <label className="text-xs font-black text-slate-700 dark:text-slate-300 block mb-1">
+                {ar ? 'ملاحظة الإدارة أو سبب القرار (تظهر للعضو في الإشعار):' : 'Admin Note (Optional):'}
+              </label>
+              <input
+                type="text"
+                value={commAdminNote}
+                onChange={e => setCommAdminNote(e.target.value)}
+                placeholder={ar ? 'اكتب ملاحظة أو توجيهات للعضو...' : 'Enter note for member...'}
+                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setReviewingCommReq(null)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 cursor-pointer"
+              >
+                {ar ? 'إلغاء' : 'Cancel'}
+              </button>
+
+              <button
+                type="button"
+                disabled={isSubmittingCommReview}
+                onClick={() => handleExecuteCommReview(reviewingCommReq.id, commReviewDecision, commAdminNote)}
+                className={`flex-1 py-2.5 rounded-xl text-white font-black text-xs shadow-md transition-all active:scale-95 disabled:opacity-50 cursor-pointer ${
+                  commReviewDecision === 'Approved'
+                    ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/20'
+                    : 'bg-rose-600 hover:bg-rose-700 shadow-rose-500/20'
+                }`}
+              >
+                {isSubmittingCommReview
+                  ? (ar ? 'جاري المعالجة...' : 'Processing...')
+                  : (commReviewDecision === 'Approved' ? (ar ? 'تأكيد الموافقة والنقل ✅' : 'Confirm Approval ✅') : (ar ? 'تأكيد الرفض ❌' : 'Confirm Rejection ❌'))}
+              </button>
+            </div>
+
           </div>
         </div>
       )}
