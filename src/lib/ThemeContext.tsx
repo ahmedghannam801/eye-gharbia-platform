@@ -15,30 +15,48 @@ const ThemeContext = createContext<ThemeContextProps | undefined>(undefined);
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [theme, setThemeState] = useState<Theme>(() => {
-    const saved = localStorage.getItem('eye_theme');
-    if (saved === 'light' || saved === 'dark') return saved;
-    if (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      return 'dark';
-    }
-    return 'light';
+    try {
+      // Check if user explicitly chose a theme under current preferences
+      const savedV2 = localStorage.getItem('eye_theme_v2');
+      if (savedV2 === 'light' || savedV2 === 'dark') return savedV2;
+    } catch (e) {}
+    // Default mode for all users across the platform is 'dark'
+    return 'dark';
   });
 
   const [accentTheme, setAccentThemeState] = useState<AccentTheme>(() => {
-    const saved = localStorage.getItem('eye_accent_theme');
-    return (saved as AccentTheme) || 'blue';
+    try {
+      const saved = localStorage.getItem('eye_accent_theme');
+      return (saved as AccentTheme) || 'blue';
+    } catch (e) {
+      return 'blue';
+    }
   });
 
   const toggleTheme = () => {
-    setThemeState((prev) => (prev === 'light' ? 'dark' : 'light'));
+    setThemeState((prev) => {
+      const next = prev === 'light' ? 'dark' : 'light';
+      try {
+        localStorage.setItem('eye_theme_v2', next);
+        localStorage.setItem('eye_theme', next);
+      } catch (e) {}
+      return next;
+    });
   };
 
   const setTheme = (newTheme: Theme) => {
     setThemeState(newTheme);
+    try {
+      localStorage.setItem('eye_theme_v2', newTheme);
+      localStorage.setItem('eye_theme', newTheme);
+    } catch (e) {}
   };
 
   const setAccentTheme = (accent: AccentTheme) => {
     setAccentThemeState(accent);
-    localStorage.setItem('eye_accent_theme', accent);
+    try {
+      localStorage.setItem('eye_accent_theme', accent);
+    } catch (e) {}
   };
 
   useEffect(() => {
@@ -48,7 +66,10 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } else {
       root.classList.remove('dark');
     }
-    localStorage.setItem('eye_theme', theme);
+    try {
+      localStorage.setItem('eye_theme_v2', theme);
+      localStorage.setItem('eye_theme', theme);
+    } catch (e) {}
   }, [theme]);
 
   useEffect(() => {

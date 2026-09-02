@@ -1,14 +1,30 @@
 <!doctype html>
-<html lang="ar" dir="rtl" translate="no" class="notranslate">
+<html lang="ar" dir="rtl" translate="no" class="notranslate dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <meta name="theme-color" content="#1b4cd3" />
+    <meta name="theme-color" content="#080d1a" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="EYE Hub" />
     <meta name="google" content="notranslate" />
     <meta name="referrer" content="strict-origin-when-cross-origin" />
     <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+
+    <!-- Immediate theme initializer to avoid light flicker -->
+    <script>
+      (function() {
+        try {
+          var saved = localStorage.getItem('eye_theme_v2');
+          if (saved === 'light') {
+            document.documentElement.classList.remove('dark');
+          } else {
+            document.documentElement.classList.add('dark');
+          }
+        } catch (e) {
+          document.documentElement.classList.add('dark');
+        }
+      })();
+    </script>
 
 
     <link rel="icon" type="image/png" href="/eye-logo.png" />
