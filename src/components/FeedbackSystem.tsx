@@ -650,17 +650,66 @@ export const FeedbackSystem: React.FC<FeedbackSystemProps> = ({ currentUser, ini
               {/* AVG Preview */}
               {(() => {
                 const livePreview = calculateMemberAVG(
-                  targetPerson.id, db.getMeetings(), db.getAllAttendance(), db.getTasks(), db.getSubmissions(), db.getExcuseRequests(),
-                  [...(evaluationsMap[targetPerson.id] || []), { id: 'prev', targetUserId: targetPerson.id, targetUserName: targetPerson.fullName, commitmentRating: (bhvScore / 10) * 5, teamworkRating: (interactionScore / 13) * 5, overallRating: 5, createdAt: new Date().toISOString() }],
+                  targetPerson.id,
+                  db.getMeetings(),
+                  db.getAllAttendance(),
+                  db.getTasks(),
+                  db.getSubmissions(),
+                  db.getExcuseRequests(),
+                  [
+                    {
+                      id: 'prev',
+                      targetUserId: targetPerson.id,
+                      targetUserName: targetPerson.fullName,
+                      commitmentRating: (bhvScore / 10) * 5,
+                      teamworkRating: (interactionScore / 13) * 5,
+                      overallRating: 5,
+                      createdAt: new Date().toISOString()
+                    }
+                  ],
                   bonusScore
                 );
                 return (
-                  <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-900 to-indigo-950 text-white border border-amber-400/40 flex items-center justify-between shadow-lg">
-                    <div>
-                      <span className="text-xs font-black text-amber-300 block">{isAr ? 'الـ AVG المتوقع:' : 'AVG Preview:'}</span>
-                      <span className="text-[11px] text-slate-300">{livePreview.hasActualEvents ? `النقاط: ${livePreview.earnedPoints} / ${livePreview.maxPoints} | بونص +${bonusScore}` : 'سيتم الحساب فور تسجيل ميتينج أو مهمة'}</span>
+                  <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white border border-amber-400/50 shadow-xl space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-xs font-black text-amber-300 block flex items-center gap-1.5">
+                          <span>🎯</span>
+                          <span>{isAr ? 'الـ AVG المتوقع بعد تطبيق التقييم:' : 'Calculated AVG Preview:'}</span>
+                        </span>
+                        <span className="text-[11px] text-slate-300">
+                          {isAr ? `إجمالي النقاط: ${livePreview.earnedPoints} من ${livePreview.maxPoints} نقطة` : `Total Points: ${livePreview.earnedPoints} / ${livePreview.maxPoints}`}
+                          {bonusScore > 0 ? ` (+${bonusScore}% بونص)` : ''}
+                        </span>
+                      </div>
+                      <div className="text-end">
+                        <span className="text-xl sm:text-2xl font-black text-amber-400 bg-amber-400/20 px-3.5 py-1.5 rounded-xl border border-amber-400/40 font-mono inline-block">
+                          {livePreview.displayText}
+                        </span>
+                      </div>
                     </div>
-                    <span className="text-lg font-black text-amber-400 bg-amber-400/20 px-4 py-2 rounded-xl border border-amber-400/30 font-mono">{livePreview.displayText}</span>
+
+                    {/* Breakdown Pillars: Meetings + Tasks + Behavior & Interaction */}
+                    <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/10 text-center text-[10px]">
+                      <div className="bg-white/5 p-1.5 rounded-xl border border-white/5">
+                        <span className="text-slate-400 block mb-0.5">📅 {isAr ? 'الاجتماعات' : 'Meetings'}</span>
+                        <span className="font-bold text-amber-300 font-mono">
+                          {livePreview.onlineMeetingsEarned + livePreview.offlineMeetingsEarned}ن
+                        </span>
+                      </div>
+                      <div className="bg-white/5 p-1.5 rounded-xl border border-white/5">
+                        <span className="text-slate-400 block mb-0.5">📋 {isAr ? 'المهام' : 'Tasks'}</span>
+                        <span className="font-bold text-emerald-300 font-mono">
+                          {livePreview.tasksEarned}ن
+                        </span>
+                      </div>
+                      <div className="bg-white/5 p-1.5 rounded-xl border border-white/5">
+                        <span className="text-slate-400 block mb-0.5">⭐ {isAr ? 'سلوك وتفاعل' : 'BHV & Inter'}</span>
+                        <span className="font-bold text-indigo-300 font-mono">
+                          {(bhvScore + interactionScore).toFixed(1)} / 23ن
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 );
               })()}

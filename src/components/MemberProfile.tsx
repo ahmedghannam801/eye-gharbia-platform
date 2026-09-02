@@ -3132,7 +3132,6 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({
                     db.getSubmissions(),
                     db.getExcuseRequests(),
                     [
-                      ...evaluations,
                       {
                         id: 'preview',
                         targetUserId: activeUser.id,
@@ -3146,20 +3145,46 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({
                     bonusInput
                   );
                   return (
-                    <div className="p-3.5 rounded-2xl bg-gradient-to-r from-slate-900 to-indigo-950 text-white border border-amber-400/40 flex items-center justify-between shadow-lg">
-                      <div className="space-y-0.5">
-                        <span className="text-xs font-black text-amber-300 block">
-                          {language === 'ar' ? 'الـ AVG المحسوب تلقائياً بعد الإدخال:' : 'Calculated AVG Preview:'}
-                        </span>
-                        <span className="text-[10px] text-slate-300">
-                          {livePreviewBreakdown.hasActualEvents
-                            ? `النقاط: ${livePreviewBreakdown.earnedPoints} / ${livePreviewBreakdown.maxPoints} | بونص +${bonusInput}ن`
-                            : 'سيتم احتساب الدرجة فور تسجيل ميتينج أو مهمة للعضو'}
+                    <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white border border-amber-400/50 shadow-xl space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <span className="text-xs font-black text-amber-300 block flex items-center gap-1.5">
+                            <span>🎯</span>
+                            <span>{language === 'ar' ? 'الـ AVG المتوقع بعد التقييم:' : 'Calculated AVG Preview:'}</span>
+                          </span>
+                          <span className="text-[11px] text-slate-300">
+                            {language === 'ar'
+                              ? `مجموع النقاط: ${livePreviewBreakdown.earnedPoints} من ${livePreviewBreakdown.maxPoints} نقطة`
+                              : `Total: ${livePreviewBreakdown.earnedPoints} / ${livePreviewBreakdown.maxPoints}`}
+                            {bonusInput > 0 ? ` (+${bonusInput}% بونص)` : ''}
+                          </span>
+                        </div>
+                        <span className="text-xl sm:text-2xl font-black text-amber-400 bg-amber-400/20 px-3.5 py-1.5 rounded-xl border border-amber-400/40 font-mono">
+                          {livePreviewBreakdown.displayText}
                         </span>
                       </div>
-                      <span className="text-base font-black text-amber-400 bg-amber-400/20 px-3 py-1.5 rounded-xl border border-amber-400/30 font-mono">
-                        {livePreviewBreakdown.displayText}
-                      </span>
+
+                      {/* Pillars Breakdown */}
+                      <div className="grid grid-cols-3 gap-2 pt-2 border-t border-white/10 text-center text-[10px]">
+                        <div className="bg-white/5 p-1.5 rounded-xl border border-white/5">
+                          <span className="text-slate-400 block mb-0.5">📅 {language === 'ar' ? 'الاجتماعات' : 'Meetings'}</span>
+                          <span className="font-bold text-amber-300 font-mono">
+                            {livePreviewBreakdown.onlineMeetingsEarned + livePreviewBreakdown.offlineMeetingsEarned}ن
+                          </span>
+                        </div>
+                        <div className="bg-white/5 p-1.5 rounded-xl border border-white/5">
+                          <span className="text-slate-400 block mb-0.5">📋 {language === 'ar' ? 'المهام' : 'Tasks'}</span>
+                          <span className="font-bold text-emerald-300 font-mono">
+                            {livePreviewBreakdown.tasksEarned}ن
+                          </span>
+                        </div>
+                        <div className="bg-white/5 p-1.5 rounded-xl border border-white/5">
+                          <span className="text-slate-400 block mb-0.5">⭐ {language === 'ar' ? 'سلوك وتفاعل' : 'BHV & Inter'}</span>
+                          <span className="font-bold text-indigo-300 font-mono">
+                            {(behaviorScoreInput + interactionScoreInput).toFixed(1)} / 23ن
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   );
                 })()}

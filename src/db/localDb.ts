@@ -8393,9 +8393,11 @@ export function calculateMemberAVG(
     (String(e.memberId) === String(userId) || String(e.userId) === String(userId))
   );
 
-  const hasActualEvents = memberAttendance.length > 0 || memberSubmissions.length > 0 || memberExcuses.length > 0;
+  const userEvals = (evaluations || []).filter(e => e.targetUserId === userId || e.memberId === userId);
 
-  // If member has NO actual events (0 attendance, 0 submissions, 0 excuses) and NO bonus:
+  const hasActualEvents = memberAttendance.length > 0 || memberSubmissions.length > 0 || memberExcuses.length > 0 || userEvals.length > 0;
+
+  // If member has NO actual events (0 attendance, 0 submissions, 0 excuses, 0 evaluations) and NO bonus:
   if (!hasActualEvents && bonusPoints <= 0) {
     return {
       avgScore: 0,
@@ -8418,7 +8420,7 @@ export function calculateMemberAVG(
     };
   }
 
-  // Calculate meetings for this member
+  // 1. Calculate meetings for this member
   (meetings || []).forEach(m => {
     const loc = (m.location || '').toLowerCase();
     const type = (m.type || '').toLowerCase();
@@ -8460,12 +8462,11 @@ export function calculateMemberAVG(
       );
       if (rejectedExc) {
         maxPoints += fullPoints;
-        // earnedPoints += 0;
       }
     }
   });
 
-  // Calculate tasks for this member
+  // 2. Calculate tasks for this member
   (tasks || []).forEach(t => {
     const fullPoints = 5;
     const sub = memberSubmissions.find(s => String(s.taskId) === String(t.id));
@@ -8494,32 +8495,34 @@ export function calculateMemberAVG(
       );
       if (rejectedTaskExc) {
         maxPoints += fullPoints;
-        // earnedPoints += 0;
       }
     }
   });
 
-  const userEvals = (evaluations || []).filter(e => e.targetUserId === userId || e.memberId === userId);
+  // 3. Evaluations (السلوك والانضباط 10ن + التفاعل والعمل الجماعي 13ن = 23ن)
   let behaviorScore = 0;
   let interactionScore = 0;
 
-  if (hasActualEvents) {
-    if (userEvals.length > 0) {
-      const totalCommitment = userEvals.reduce((acc, ev) => acc + (ev.commitmentRating || 5), 0);
-      const totalTeamwork = userEvals.reduce((acc, ev) => acc + (ev.teamworkRating || ev.interactionRating || 5), 0);
-      const avgCommitment = totalCommitment / userEvals.length;
-      const avgTeamwork = totalTeamwork / userEvals.length;
+  if (userEvals.length > 0) {
+    const totalCommitment = userEvals.reduce((acc, ev) => acc + (ev.commitmentRating !== undefined ? ev.commitmentRating : 5), 0);
+    const totalTeamwork = userEvals.reduce((acc, ev) => acc + (ev.teamworkRating !== undefined ? ev.teamworkRating : (ev.interactionRating !== undefined ? ev.interactionRating : 5)), 0);
+    const avgCommitment = totalCommitment / userEvals.length;
+    const avgTeamwork = totalTeamwork / userEvals.length;
 
-      behaviorScore = Math.round(((avgCommitment / 5) * 10) * 10) / 10;
-      interactionScore = Math.round(((avgTeamwork / 5) * 13) * 10) / 10;
-    } else {
-      behaviorScore = 10;
-      interactionScore = 13;
-    }
+    behaviorScore = Math.min(10, Math.max(0, Math.round(((avgCommitment / 5) * 10) * 10) / 10));
+    interactionScore = Math.min(13, Math.max(0, Math.round(((avgTeamwork / 5) * 13) * 10) / 10));
+
+    maxPoints += 10 + 13;
+    earnedPoints += behaviorScore + interactionScore;
+  } else if (hasActualEvents) {
+    // Default base evaluation points if member has attendance/tasks but not explicitly rated yet
+    behaviorScore = 10;
+    interactionScore = 13;
     maxPoints += 10 + 13;
     earnedPoints += behaviorScore + interactionScore;
   }
 
+  // 4. Calculate Final AVG (scaled to 95% base + bonusPoints on top)
   const baseAvg = (hasActualEvents && maxPoints > 0) ? (earnedPoints / maxPoints) * 95 : 0;
   const roundedBaseAvg = Math.round(baseAvg * 10) / 10;
   const finalAvg = hasActualEvents ? Math.min(105, Math.round((baseAvg + bonusPoints) * 10) / 10) : (bonusPoints > 0 ? bonusPoints : 0);
