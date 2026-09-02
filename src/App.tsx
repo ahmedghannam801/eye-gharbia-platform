@@ -17,6 +17,7 @@ import { BirthdayModal } from './components/BirthdayModal';
 import { YouthWelcomeModal } from './components/YouthWelcomeModal';
 import { OccasionBanner } from './components/OccasionBanner';
 import { ProfileCompletionModal } from './components/ProfileCompletionModal';
+import { ProfileUpdatePromptModal } from './components/ProfileUpdatePromptModal';
 import { OzyAIAssistant } from './components/OzyAIAssistant';
 import { DeveloperWatermark } from './components/DeveloperWatermark';
 import { playRoyalNotificationSound } from './lib/notificationSound';
@@ -636,6 +637,12 @@ export default function App() {
       <ProfileCompletionModal
         currentUser={currentUser}
         onComplete={(updated) => setCurrentUser(updated)}
+      />
+
+      {/* Targeted Profile Update Request Modal */}
+      <ProfileUpdatePromptModal
+        currentUser={currentUser}
+        onUpdated={(updated) => setCurrentUser(updated)}
       />
 
       {/* Birthday Greeting Modal */}

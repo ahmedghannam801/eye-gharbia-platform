@@ -33,6 +33,8 @@ import {
   ExcuseRequest,
   FreezeRequest,
   MonthlyPerformance,
+  ProfileUpdateRequest,
+  UpdatableProfileField,
   WeeklyQuiz,
   QuizQuestionItem,
   QuizSubmission,
@@ -8410,6 +8412,209 @@ class SupabaseDatabase {
         }
       });
     });
+  }
+
+  getProfileUpdateRequests(): ProfileUpdateRequest[] {
+    try {
+      const stored = localStorage.getItem('eye_profile_update_requests');
+      if (stored) return JSON.parse(stored);
+    } catch {}
+    return [];
+  }
+
+  createProfileUpdateRequest(
+    data: Omit<ProfileUpdateRequest, 'id' | 'createdAt' | 'status' | 'completedUserIds'>,
+    creator: UserProfile
+  ): ProfileUpdateRequest {
+    const allUsers = this.getUsers().filter(u => u.status === 'Active');
+    let targetUserIds: string[] = [];
+
+    if (data.targetScope === 'all') {
+      targetUserIds = allUsers.map(u => u.id);
+    } else if (data.targetScope === 'committee' && data.targetCommittee) {
+      const comm = data.targetCommittee;
+      const isHrm = comm === 'HR' || comm === 'HRM';
+      targetUserIds = allUsers
+        .filter(u => isHrm ? (u.committee === 'HR' || u.committee === 'HRM') : u.committee === comm)
+        .map(u => u.id);
+    } else {
+      targetUserIds = data.targetUserIds || [];
+    }
+
+    targetUserIds = Array.from(new Set(targetUserIds));
+
+    const requestId = 'req-upd-' + Math.random().toString(36).slice(2, 9);
+    const newRequest: ProfileUpdateRequest = {
+      ...data,
+      id: requestId,
+      targetUserIds,
+      createdAt: new Date().toISOString(),
+      status: 'Active',
+      completedUserIds: [],
+    };
+
+    const currentRequests = this.getProfileUpdateRequests();
+    const updatedRequests = [newRequest, ...currentRequests.filter(r => r.id !== requestId)];
+    this._lsSave('eye_profile_update_requests', updatedRequests);
+
+    const targetSet = new Set(targetUserIds);
+    this.cache.users = this.cache.users.map(u => {
+      if (targetSet.has(u.id)) {
+        return {
+          ...u,
+          pendingProfileUpdate: {
+            requestId,
+            requestedFields: data.requestedFields,
+            message: data.message,
+            requestedAt: newRequest.createdAt,
+            requestedByName: creator.fullName,
+          },
+        };
+      }
+      return u;
+    });
+    this._lsSave('eye_users', this.cache.users);
+
+    if (this.cache.currentUser && targetSet.has(this.cache.currentUser.id)) {
+      this.cache.currentUser = {
+        ...this.cache.currentUser,
+        pendingProfileUpdate: {
+          requestId,
+          requestedFields: data.requestedFields,
+          message: data.message,
+          requestedAt: newRequest.createdAt,
+          requestedByName: creator.fullName,
+        },
+      };
+      this._lsSave('eye_current_user', this.cache.currentUser);
+    }
+
+    const fieldMapAr: Record<string, string> = {
+      fullName: 'الاسم الكامل',
+      phoneNumber: 'رقم الهاتف',
+      committee: 'اللجنة',
+      department: 'اللجنة الفرعية / القسم',
+      email: 'البريد الإلكتروني',
+    };
+    const fieldsText = data.requestedFields.map(f => fieldMapAr[f] || f).join('، ');
+
+    const notifTitle = '📝 مطلوب تحديث بياناتك في الكيان';
+    const notifBody = `طلبت الإدارة (${creator.fullName}) منك مراجعة وتحديث: [${fieldsText}].${data.message ? `\nتوجيهات الإدارة: ${data.message}` : ''}`;
+
+    this.addNotificationsBulk(targetUserIds, notifTitle, notifBody, 'info', requestId);
+
+    this.logActivity(
+      creator.id,
+      creator.fullName,
+      creator.role,
+      'Profile Update Requested',
+      `Sent data update request (${fieldsText}) to ${targetUserIds.length} members (Scope: ${data.targetScope})`
+    );
+
+    this.notify();
+    return newRequest;
+  }
+
+  submitProfileUpdate(userId: string, updates: Partial<UserProfile>, requestId?: string): void {
+    const user = this.cache.users.find(u => u.id === userId);
+    if (!user) return;
+
+    this.updateProfile(userId, updates, user);
+
+    this.cache.users = this.cache.users.map(u => {
+      if (u.id === userId) {
+        const copy = { ...u };
+        delete copy.pendingProfileUpdate;
+        return copy;
+      }
+      return u;
+    });
+    this._lsSave('eye_users', this.cache.users);
+
+    if (this.cache.currentUser && this.cache.currentUser.id === userId) {
+      const copy = { ...this.cache.currentUser };
+      delete copy.pendingProfileUpdate;
+      this.cache.currentUser = copy;
+      this._lsSave('eye_current_user', this.cache.currentUser);
+    }
+
+    const requests = this.getProfileUpdateRequests();
+    let updatedRequests = requests;
+    const reqToUpdate = requestId
+      ? requests.find(r => r.id === requestId)
+      : requests.find(r => r.status === 'Active' && r.targetUserIds.includes(userId));
+
+    if (reqToUpdate) {
+      const completed = Array.from(new Set([...(reqToUpdate.completedUserIds || []), userId]));
+      const isAllDone = reqToUpdate.targetUserIds.every(id => completed.includes(id));
+      updatedRequests = requests.map(r => {
+        if (r.id === reqToUpdate.id) {
+          return {
+            ...r,
+            completedUserIds: completed,
+            status: isAllDone ? ('Completed' as const) : r.status,
+          };
+        }
+        return r;
+      });
+      this._lsSave('eye_profile_update_requests', updatedRequests);
+
+      if (reqToUpdate.createdBy && reqToUpdate.createdBy !== userId) {
+        this.addNotification(
+          reqToUpdate.createdBy,
+          '✅ عضو أتمّ تحديث بياناته',
+          `قام العضو ${user.fullName} بتحديث بياناته المطلوبة بنجاح.`,
+          'success',
+          reqToUpdate.id
+        );
+      }
+    }
+
+    this.addNotification(
+      userId,
+      '🎉 تم تحديث وتأكيد بياناتك بنجاح',
+      'شكرًا لك! تم حفظ وتأكيد بياناتك بنجاح في سجلات الكيان الرسمية.',
+      'success'
+    );
+
+    this.notify();
+  }
+
+  cancelProfileUpdateRequest(requestId: string, actor: UserProfile): void {
+    const requests = this.getProfileUpdateRequests();
+    const targetReq = requests.find(r => r.id === requestId);
+    if (!targetReq) return;
+
+    const updated = requests.map(r => r.id === requestId ? { ...r, status: 'Cancelled' as const } : r);
+    this._lsSave('eye_profile_update_requests', updated);
+
+    const targetSet = new Set(targetReq.targetUserIds);
+    this.cache.users = this.cache.users.map(u => {
+      if (targetSet.has(u.id) && u.pendingProfileUpdate?.requestId === requestId) {
+        const copy = { ...u };
+        delete copy.pendingProfileUpdate;
+        return copy;
+      }
+      return u;
+    });
+    this._lsSave('eye_users', this.cache.users);
+
+    if (this.cache.currentUser && this.cache.currentUser.pendingProfileUpdate?.requestId === requestId) {
+      const copy = { ...this.cache.currentUser };
+      delete copy.pendingProfileUpdate;
+      this.cache.currentUser = copy;
+      this._lsSave('eye_current_user', this.cache.currentUser);
+    }
+
+    this.logActivity(
+      actor.id,
+      actor.fullName,
+      actor.role,
+      'Profile Update Cancelled',
+      `Cancelled profile update request "${requestId}"`
+    );
+
+    this.notify();
   }
 }
 

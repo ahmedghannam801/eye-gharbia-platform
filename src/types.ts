@@ -35,6 +35,29 @@ export interface UserProfile {
   bonusPoints?: number;    // نقاط البونص المضافة على تقييم AVG
   governorate?: string;    // المحافظة التابع لها العضو (الغربية دائماً)
   subCommittee?: string;   // اللجنة الفرعية (e.g. 'HR OF OR')
+  pendingProfileUpdate?: {
+    requestId: string;
+    requestedFields: UpdatableProfileField[];
+    message?: string;
+    requestedAt: string;
+    requestedByName: string;
+  };
+}
+
+export type UpdatableProfileField = 'fullName' | 'phoneNumber' | 'committee' | 'department' | 'email';
+
+export interface ProfileUpdateRequest {
+  id: string;
+  targetScope: 'all' | 'committee' | 'specific';
+  targetCommittee?: string;
+  targetUserIds: string[];
+  requestedFields: UpdatableProfileField[];
+  message?: string;
+  createdBy: string;
+  createdByName: string;
+  createdAt: string;
+  status: 'Active' | 'Completed' | 'Cancelled';
+  completedUserIds: string[];
 }
 
 export const EGYPTIAN_GOVERNORATES = [

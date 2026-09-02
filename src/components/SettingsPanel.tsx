@@ -1,12 +1,13 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { db } from '../db/localDb';
-import { UserProfile, OrganizationSettings, UserRole, UserStatus, COMMITTEE_STRUCTURE, EGYPTIAN_GOVERNORATES, generateGovernorateLeaderCode } from '../types';
+import { UserProfile, OrganizationSettings, UserRole, UserStatus, COMMITTEE_STRUCTURE, EGYPTIAN_GOVERNORATES, generateGovernorateLeaderCode, UpdatableProfileField, ProfileUpdateRequest } from '../types';
 import {
   Settings, Shield, Bell, HardDrive, Save, Users, Trash2,
   Search, ChevronDown, UserCheck, UserX, Crown, AlertTriangle,
   CheckCircle, XCircle, Filter, RefreshCw, Mail, Send, Edit3,
   Database, FileText, CheckSquare, Activity, Sliders, Key, X,
-  Lock, ArrowRight, Download, Sparkles, Cake, RotateCcw
+  Lock, ArrowRight, Download, Sparkles, Cake, RotateCcw,
+  User, Phone, Building2, Layers, Check, Square
 } from 'lucide-react';
 import { useLanguage } from '../lib/LanguageContext';
 import { getEmailQueue, retryQueuedEmails, clearEmailQueue, QueuedEmail } from '../lib/emailService';
@@ -35,12 +36,34 @@ const STATUS_COLORS: Record<string, string> = {
   'Pending Approval': 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800/60',
 };
 
+const AVAILABLE_UPDATE_FIELDS: { id: UpdatableProfileField; titleAr: string; descAr: string; icon: any }[] = [
+  { id: 'fullName', titleAr: 'الاسم الكامل', descAr: 'تأكيد وكتابة الاسم الثلاثي الرسمي', icon: User },
+  { id: 'phoneNumber', titleAr: 'رقم الهاتف / الواتساب', descAr: 'رقم هاتف مصري متاح للتواصل والمتابعة', icon: Phone },
+  { id: 'committee', titleAr: 'اللجنة التابع لها', descAr: 'تسكين وتأكيد اللجنة الرئيسية (HR, PR, SM, OR)', icon: Building2 },
+  { id: 'department', titleAr: 'اللجنة الفرعية / القسم', descAr: 'تسكين القسم التخصصي واللجنة الفرعية', icon: Layers },
+  { id: 'email', titleAr: 'البريد الإلكتروني', descAr: 'البريد الإلكتروني المعتمد لاستلام الإشعارات', icon: Mail },
+];
+
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNavigateToView }) => {
   const { language, isRtl } = useLanguage();
   const ar = language === 'ar';
-  const [activeTab, setActiveTab] = useState<'members' | 'config' | 'master' | 'logs' | 'security-codes'>('members');
+  const [activeTab, setActiveTab] = useState<'members' | 'update-requests' | 'config' | 'master' | 'logs' | 'security-codes'>('members');
   const [settings, setSettings] = useState<OrganizationSettings>(db.getSettings());
   const [isSaved, setIsSaved] = useState(false);
+
+  // Profile Update Requests State
+  const [targetScope, setTargetScope] = useState<'all' | 'committee' | 'specific'>('specific');
+  const [targetCommittee, setTargetCommittee] = useState('HR');
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+  const [requestedFields, setRequestedFields] = useState<UpdatableProfileField[]>([
+    'phoneNumber',
+    'department'
+  ]);
+  const [updateMessage, setUpdateMessage] = useState('');
+  const [reqTableSearch, setReqTableSearch] = useState('');
+  const [reqTableCommFilter, setReqTableCommFilter] = useState('all');
+  const [onlyMissingFilter, setOnlyMissingFilter] = useState(false);
+  const [isSendingRequest, setIsSendingRequest] = useState(false);
 
   // Security Codes Sheet State
   const [secSearch, setSecSearch] = useState('');
@@ -176,6 +199,92 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
       return matchSearch && matchRole && matchStatus && matchComm && matchSub;
     });
   }, [allUsers, search, roleFilter, statusFilter, committeeFilter, subCommitteeFilter]);
+
+  // Profile Update Requests - Audit missing fields helper
+  const getMissingFieldsForUser = (u: UserProfile) => {
+    const isNameBad = !u.fullName || !u.fullName.trim().includes(' ') || /\d/.test(u.fullName);
+    const isPhoneBad = !u.phoneNumber || u.phoneNumber.trim() === '+201000000000' || u.phoneNumber.trim().length < 10;
+    const isCommBad = !u.committee || u.committee === 'None' || u.committee === 'General' || !['HR', 'PR', 'SM', 'OR'].includes(u.committee);
+    const isDeptBad = !u.department || u.department === 'None' || u.department === 'Events' || u.department === 'General';
+    const isEmailBad = !u.email || !u.email.includes('@') || !u.email.includes('.');
+
+    const list: { field: UpdatableProfileField; label: string; isMissing: boolean }[] = [
+      { field: 'fullName', label: 'الاسم', isMissing: isNameBad },
+      { field: 'phoneNumber', label: 'رقم الهاتف', isMissing: isPhoneBad },
+      { field: 'committee', label: 'اللجنة', isMissing: isCommBad },
+      { field: 'department', label: 'القسم / الفرع', isMissing: isDeptBad },
+      { field: 'email', label: 'البريد الإلكتروني', isMissing: isEmailBad },
+    ];
+    const missingOnly = list.filter(item => item.isMissing);
+    return {
+      all: list,
+      missing: missingOnly,
+      hasMissing: missingOnly.length > 0,
+    };
+  };
+
+  // Filtered members for the Profile Update Requests selection table
+  const reqTableFilteredUsers = useMemo(() => {
+    return allUsers.filter(u => {
+      if (u.status !== 'Active') return false;
+      const matchSearch = matchesSearch([u.fullName, u.membershipCode, u.phoneNumber, u.email, u.committee, u.department], reqTableSearch);
+      const isHrm = reqTableCommFilter === 'HR' || reqTableCommFilter === 'HRM';
+      const matchComm = reqTableCommFilter === 'all' || u.committee === reqTableCommFilter || (isHrm && (u.committee === 'HR' || u.committee === 'HRM'));
+      if (!matchSearch || !matchComm) return false;
+
+      if (onlyMissingFilter) {
+        const audit = getMissingFieldsForUser(u);
+        return audit.hasMissing;
+      }
+      return true;
+    });
+  }, [allUsers, reqTableSearch, reqTableCommFilter, onlyMissingFilter]);
+
+  const handleSendProfileUpdateRequest = async () => {
+    if (requestedFields.length === 0) {
+      showFeedback(ar ? 'يرجى اختيار حقل واحد على الأقل مطلوب تحديثه!' : 'Please select at least one field to update!', false);
+      return;
+    }
+
+    if (targetScope === 'specific' && selectedUserIds.length === 0) {
+      showFeedback(ar ? 'يرجى تحديد عضو واحد على الأقل لإرسال طلب التحديث إليه!' : 'Please select at least one member!', false);
+      return;
+    }
+
+    setIsSendingRequest(true);
+    try {
+      const created = db.createProfileUpdateRequest({
+        targetScope,
+        targetCommittee: targetScope === 'committee' ? targetCommittee : undefined,
+        targetUserIds: targetScope === 'specific' ? selectedUserIds : [],
+        requestedFields,
+        message: updateMessage.trim() || undefined,
+        createdBy: currentUser.id,
+        createdByName: currentUser.fullName,
+      }, currentUser);
+
+      showFeedback(
+        ar
+          ? `تم إرسال طلب تحديث البيانات لـ (${created.targetUserIds.length}) عضو بنجاح! 🚀`
+          : `Profile update request sent to ${created.targetUserIds.length} members! 🚀`,
+        true
+      );
+      setSelectedUserIds([]);
+      setUpdateMessage('');
+      setRefreshKey(k => k + 1);
+    } catch (err: any) {
+      showFeedback(err?.message || (ar ? 'حدث خطأ أثناء الإرسال' : 'Failed to send request'), false);
+    } finally {
+      setIsSendingRequest(false);
+    }
+  };
+
+  const handleCancelProfileUpdateRequest = (reqId: string) => {
+    if (!confirm(ar ? 'هل أنت متأكد من إلغاء هذا الطلب وسحبه من عند الأعضاء؟' : 'Are you sure you want to cancel this request?')) return;
+    db.cancelProfileUpdateRequest(reqId, currentUser);
+    showFeedback(ar ? 'تم إلغاء الطلب بنجاح.' : 'Request cancelled.', true);
+    setRefreshKey(k => k + 1);
+  };
 
   const filteredLogs = useMemo(() => {
     if (!logSearch) return logs;
@@ -657,6 +766,23 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
         </button>
 
         <button
+          onClick={() => setActiveTab('update-requests')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-black transition-all ${
+            activeTab === 'update-requests'
+              ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/20'
+              : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:bg-slate-50'
+          }`}
+        >
+          <UserCheck className="w-4 h-4 text-emerald-400" />
+          <span>{ar ? 'طلب تحديث بيانات الأعضاء 📝' : 'Profile Update Requests 📝'}</span>
+          {db.getProfileUpdateRequests().filter(r => r.status === 'Active').length > 0 && (
+            <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-500 text-white font-black animate-pulse">
+              {db.getProfileUpdateRequests().filter(r => r.status === 'Active').length} {ar ? 'نشط' : 'Active'}
+            </span>
+          )}
+        </button>
+
+        <button
           onClick={() => setActiveTab('master')}
           className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-xs font-black transition-all ${
             activeTab === 'master'
@@ -776,6 +902,15 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
               )}
 
               <button
+                type="button"
+                onClick={() => setActiveTab('update-requests')}
+                className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer active:scale-95"
+              >
+                <UserCheck className="w-3.5 h-3.5 text-emerald-300" />
+                <span>{ar ? 'طلب تحديث بيانات الأعضاء 📝' : 'Request Profile Updates 📝'}</span>
+              </button>
+
+              <button
                 onClick={handleExportMembersCSV}
                 className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
               >
@@ -892,6 +1027,605 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
               </table>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* TAB: PROFILE UPDATE REQUESTS */}
+      {activeTab === 'update-requests' && (
+        <div className="space-y-6 animate-fade-in">
+          
+          {/* Main Request Form & Configuration Card */}
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-6">
+            
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-bold text-xs uppercase tracking-wider">
+                  <UserCheck className="w-4 h-4 text-emerald-500" />
+                  <span>{ar ? 'تحديث وتدقيق بيانات العضوية' : 'Member Profile Update & Verification'}</span>
+                </div>
+                <h2 className="text-xl font-black text-slate-900 dark:text-white">
+                  {ar ? 'إرسال طلب تحديث بيانات للأعضاء 📝' : 'Dispatch Profile Update Request 📝'}
+                </h2>
+                <p className="text-xs text-slate-500 font-medium">
+                  {ar
+                    ? 'يمكنك تحديد أعضاء معينين، أو لجنة كاملة، أو المنصة بأسرها، وتحديد الحقول المطلوبة (الاسم، الهاتف، اللجنة، القسم، الإيميل).'
+                    : 'Select target members or committees and choose specific fields to request an update for.'}
+                </p>
+              </div>
+
+              {/* Status summary pill */}
+              <div className="flex items-center gap-2 bg-indigo-50 dark:bg-indigo-950/50 p-2.5 rounded-2xl border border-indigo-200 dark:border-indigo-800/60 shrink-0">
+                <Users className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                <div className="text-xs font-black">
+                  <span className="text-slate-500 font-medium block text-[10px]">{ar ? 'الأعضاء المحددين:' : 'Selected:'}</span>
+                  <span className="text-indigo-600 dark:text-indigo-400">
+                    {targetScope === 'all'
+                      ? (ar ? 'جميع أعضاء المنصة' : 'All Members')
+                      : targetScope === 'committee'
+                      ? (ar ? `لجنة ${targetCommittee}` : `${targetCommittee} Committee`)
+                      : `${selectedUserIds.length} ${ar ? 'عضو' : 'members'}`}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Scope Selection */}
+            <div className="space-y-2">
+              <label className="text-xs font-black text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                <span>1. {ar ? 'نطاق الإرسال المستهدف:' : 'Target Scope:'}</span>
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setTargetScope('specific')}
+                  className={`p-4 rounded-2xl border-2 text-start transition-all cursor-pointer flex items-start gap-3 ${
+                    targetScope === 'specific'
+                      ? 'border-indigo-600 bg-indigo-50/70 dark:bg-indigo-950/40 text-indigo-950 dark:text-indigo-100 shadow-sm'
+                      : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50'
+                  }`}
+                >
+                  <div className={`w-5 h-5 rounded-full border-2 mt-0.5 flex items-center justify-center shrink-0 ${targetScope === 'specific' ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-400'}`}>
+                    {targetScope === 'specific' && <div className="w-2 h-2 rounded-full bg-white" />}
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black">{ar ? 'أعضاء محددين بالاسم 👤' : 'Specific Members'}</h4>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{ar ? 'اختر الأعضاء من الجدول أدناه بالاسم والكود' : 'Pick members from table below'}</p>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setTargetScope('committee')}
+                  className={`p-4 rounded-2xl border-2 text-start transition-all cursor-pointer flex items-start gap-3 ${
+                    targetScope === 'committee'
+                      ? 'border-indigo-600 bg-indigo-50/70 dark:bg-indigo-950/40 text-indigo-950 dark:text-indigo-100 shadow-sm'
+                      : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50'
+                  }`}
+                >
+                  <div className={`w-5 h-5 rounded-full border-2 mt-0.5 flex items-center justify-center shrink-0 ${targetScope === 'committee' ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-400'}`}>
+                    {targetScope === 'committee' && <div className="w-2 h-2 rounded-full bg-white" />}
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black">{ar ? 'لجنة معينة بالكامل 🏢' : 'Specific Committee'}</h4>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{ar ? 'إرسال لجميع أعضاء لجنة محددة' : 'Send to all committee members'}</p>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setTargetScope('all')}
+                  className={`p-4 rounded-2xl border-2 text-start transition-all cursor-pointer flex items-start gap-3 ${
+                    targetScope === 'all'
+                      ? 'border-indigo-600 bg-indigo-50/70 dark:bg-indigo-950/40 text-indigo-950 dark:text-indigo-100 shadow-sm'
+                      : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50'
+                  }`}
+                >
+                  <div className={`w-5 h-5 rounded-full border-2 mt-0.5 flex items-center justify-center shrink-0 ${targetScope === 'all' ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-400'}`}>
+                    {targetScope === 'all' && <div className="w-2 h-2 rounded-full bg-white" />}
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black">{ar ? 'المنصة بالكامل 🌐' : 'Entire Platform'}</h4>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{ar ? 'تحديث عام لجميع الأعضاء المسجلين' : 'Send to all active members'}</p>
+                  </div>
+                </button>
+              </div>
+
+              {/* Committee dropdown if committee scope */}
+              {targetScope === 'committee' && (
+                <div className="bg-indigo-50/60 dark:bg-indigo-950/30 p-4 rounded-2xl border border-indigo-200 dark:border-indigo-800/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fadeIn mt-2">
+                  <span className="text-xs font-black text-indigo-950 dark:text-indigo-200">
+                    {ar ? 'اختر اللجنة المستهدفة بالإرسال:' : 'Select Target Committee:'}
+                  </span>
+                  <select
+                    value={targetCommittee}
+                    onChange={e => setTargetCommittee(e.target.value)}
+                    className="bg-white dark:bg-slate-800 border-2 border-indigo-300 dark:border-indigo-700 rounded-xl px-4 py-2 text-xs font-bold text-slate-900 dark:text-white"
+                  >
+                    <option value="HR">{ar ? 'الموارد البشرية (HR)' : 'HR'}</option>
+                    <option value="PR">{ar ? 'العلاقات العامة (PR)' : 'PR'}</option>
+                    <option value="SM">{ar ? 'السوشيال ميديا (SM)' : 'SM'}</option>
+                    <option value="OR">{ar ? 'التنظيم واللوجستيات (OR)' : 'OR'}</option>
+                  </select>
+                </div>
+              )}
+            </div>
+
+            {/* Field Chooser */}
+            <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <label className="text-xs font-black text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                  <span>2. {ar ? 'ما هي الحقول المطلوب من الأعضاء تحديثها؟ (اختر ما ينطبق):' : 'Select Fields to Request:'}</span>
+                </label>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setRequestedFields(['fullName', 'phoneNumber', 'committee', 'department', 'email'])}
+                    className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline font-bold cursor-pointer"
+                  >
+                    {ar ? 'تحديد كل الحقول' : 'Select All'}
+                  </button>
+                  <span className="text-slate-300">|</span>
+                  <button
+                    type="button"
+                    onClick={() => setRequestedFields([])}
+                    className="text-[11px] text-slate-500 hover:underline font-bold cursor-pointer"
+                  >
+                    {ar ? 'إلغاء التحديد' : 'Deselect All'}
+                  </button>
+                </div>
+              </div>
+
+              {/* 5 Checkboxes */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {AVAILABLE_UPDATE_FIELDS.map(f => {
+                  const Icon = f.icon;
+                  const isChecked = requestedFields.includes(f.id);
+                  return (
+                    <label
+                      key={f.id}
+                      className={`flex items-start gap-3 p-3.5 rounded-2xl border-2 cursor-pointer transition-all ${
+                        isChecked
+                          ? 'border-indigo-600 bg-indigo-50/60 dark:bg-indigo-950/40 text-indigo-950 dark:text-indigo-100 shadow-sm'
+                          : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-white dark:bg-slate-800/40 text-slate-700 dark:text-slate-300'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={e => {
+                          if (e.target.checked) {
+                            setRequestedFields(prev => [...prev, f.id]);
+                          } else {
+                            setRequestedFields(prev => prev.filter(x => x !== f.id));
+                          }
+                        }}
+                        className="mt-0.5 w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <Icon className={`w-3.5 h-3.5 ${isChecked ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} />
+                          <span className="text-xs font-black">{f.titleAr}</span>
+                        </div>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">{f.descAr}</p>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+
+              {/* Optional Custom Note */}
+              <div className="pt-2">
+                <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-1">
+                  {ar ? 'توجيهات أو ملاحظة تظهر للأعضاء في نافذة التحديث (اختياري):' : 'Custom Note for Members (Optional):'}
+                </label>
+                <input
+                  type="text"
+                  value={updateMessage}
+                  onChange={e => setUpdateMessage(e.target.value)}
+                  placeholder={ar ? 'مثال: يرجى كتابة رقم واتساب متاح للمتابعة، والتأكد من تسكين اللجنة الفرعية قبل نهاية الأسبوع...' : 'e.g. Please ensure your WhatsApp number and sub-committee are accurate...'}
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-semibold focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+            </div>
+
+            {/* Interactive Members Selection Table */}
+            <div className="space-y-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-2">
+                    <Users className="w-4 h-4 text-indigo-500" />
+                    <span>{ar ? 'قائمة الأعضاء وبياناتهم التفصيلية' : 'Members Directory & Missing Data Audit'}</span>
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    {ar
+                      ? 'يمكنك فحص بيانات كل عضو (الاسم، اللجنة، القسم، الهاتف، الإيميل) وحالة الاكتمال، وتحديد من تود إرسال التحديث له.'
+                      : 'Audit all details per member to target exactly what needs updating.'}
+                  </p>
+                </div>
+
+                {/* Filters */}
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Missing Only Toggle */}
+                  <button
+                    type="button"
+                    onClick={() => setOnlyMissingFilter(!onlyMissingFilter)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 border cursor-pointer ${
+                      onlyMissingFilter
+                        ? 'bg-rose-500 text-white border-rose-600 shadow-sm animate-pulse'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    <span>{ar ? 'الأعضاء أصحاب البيانات الناقصة فقط ⚠️' : 'Missing Data Only ⚠️'}</span>
+                  </button>
+
+                  {/* Committee filter */}
+                  <select
+                    value={reqTableCommFilter}
+                    onChange={e => setReqTableCommFilter(e.target.value)}
+                    className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs font-bold"
+                  >
+                    <option value="all">{ar ? 'كل اللجان' : 'All'}</option>
+                    <option value="HR">HR</option>
+                    <option value="PR">PR</option>
+                    <option value="SM">SM</option>
+                    <option value="OR">OR</option>
+                  </select>
+
+                  {/* Search box */}
+                  <div className="relative w-48 sm:w-56">
+                    <input
+                      type="text"
+                      value={reqTableSearch}
+                      onChange={e => setReqTableSearch(e.target.value)}
+                      placeholder={ar ? 'بحث بالعضو أو الكود...' : 'Search...'}
+                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none focus:border-indigo-500"
+                    />
+                    <Search className="w-3.5 h-3.5 text-slate-400 absolute end-2.5 top-2.5 pointer-events-none" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Select all bar */}
+              <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300 flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <span>
+                    {ar
+                      ? `تم تحديد ${selectedUserIds.length} عضو من بين ${reqTableFilteredUsers.length} معروض`
+                      : `Selected ${selectedUserIds.length} of ${reqTableFilteredUsers.length}`}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const visibleIds = reqTableFilteredUsers.map(u => u.id);
+                      setSelectedUserIds(Array.from(new Set([...selectedUserIds, ...visibleIds])));
+                    }}
+                    className="text-indigo-600 dark:text-indigo-400 hover:underline font-bold text-xs cursor-pointer"
+                  >
+                    {ar ? 'تحديد كل المعروضين' : 'Select All Visible'}
+                  </button>
+                  <span className="text-slate-300">|</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const visibleIds = new Set(reqTableFilteredUsers.map(u => u.id));
+                      setSelectedUserIds(selectedUserIds.filter(id => !visibleIds.has(id)));
+                    }}
+                    className="text-slate-500 hover:underline font-bold text-xs cursor-pointer"
+                  >
+                    {ar ? 'إلغاء تحديد المعروضين' : 'Deselect Visible'}
+                  </button>
+                </div>
+              </div>
+
+              {/* The Directory Table */}
+              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-inner">
+                <div className="overflow-x-auto max-h-[420px]">
+                  <table className="w-full text-xs text-start border-collapse">
+                    <thead className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 sticky top-0 z-10 font-black shadow-sm">
+                      <tr>
+                        <th className="p-3 text-center w-10">
+                          <input
+                            type="checkbox"
+                            checked={reqTableFilteredUsers.length > 0 && reqTableFilteredUsers.every(u => selectedUserIds.includes(u.id))}
+                            onChange={e => {
+                              if (e.target.checked) {
+                                const visibleIds = reqTableFilteredUsers.map(u => u.id);
+                                setSelectedUserIds(Array.from(new Set([...selectedUserIds, ...visibleIds])));
+                              } else {
+                                const visibleIds = new Set(reqTableFilteredUsers.map(u => u.id));
+                                setSelectedUserIds(selectedUserIds.filter(id => !visibleIds.has(id)));
+                              }
+                            }}
+                            className="w-4 h-4 rounded text-indigo-600"
+                          />
+                        </th>
+                        <th className="p-3 text-start">{ar ? 'العضو' : 'Member'}</th>
+                        <th className="p-3 text-start">{ar ? 'اللجنة' : 'Committee'}</th>
+                        <th className="p-3 text-start">{ar ? 'القسم / الفرع' : 'Department'}</th>
+                        <th className="p-3 text-start">{ar ? 'رقم الهاتف' : 'Phone'}</th>
+                        <th className="p-3 text-start">{ar ? 'البريد الإلكتروني' : 'Email'}</th>
+                        <th className="p-3 text-start">{ar ? 'حالة البيانات (نواقص)' : 'Data Status'}</th>
+                        <th className="p-3 text-center">{ar ? 'إجراء سريع' : 'Action'}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
+                      {reqTableFilteredUsers.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="p-8 text-center text-slate-400 font-bold">
+                            {ar ? 'لا يوجد أعضاء يطابقون شروط البحث الحالية.' : 'No members found matching filters.'}
+                          </td>
+                        </tr>
+                      ) : (
+                        reqTableFilteredUsers.map(u => {
+                          const isSelected = selectedUserIds.includes(u.id);
+                          const audit = getMissingFieldsForUser(u);
+                          const isPhoneMissing = !u.phoneNumber || u.phoneNumber === '+201000000000';
+
+                          return (
+                            <tr
+                              key={u.id}
+                              onClick={() => {
+                                if (isSelected) {
+                                  setSelectedUserIds(selectedUserIds.filter(id => id !== u.id));
+                                } else {
+                                  setSelectedUserIds([...selectedUserIds, u.id]);
+                                }
+                              }}
+                              className={`transition-colors cursor-pointer ${
+                                isSelected
+                                  ? 'bg-indigo-50/70 dark:bg-indigo-950/40'
+                                  : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                              }`}
+                            >
+                              <td className="p-3 text-center" onClick={e => e.stopPropagation()}>
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={e => {
+                                    if (e.target.checked) {
+                                      setSelectedUserIds([...selectedUserIds, u.id]);
+                                    } else {
+                                      setSelectedUserIds(selectedUserIds.filter(id => id !== u.id));
+                                    }
+                                  }}
+                                  className="w-4 h-4 rounded text-indigo-600"
+                                />
+                              </td>
+                              <td className="p-3">
+                                <div className="flex items-center gap-2.5">
+                                  <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-black text-xs shrink-0">
+                                    {(u.fullName || 'ع').charAt(0)}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="font-black text-slate-900 dark:text-white truncate" title={u.fullName}>
+                                      {u.fullName || (ar ? 'بدون اسم' : 'No Name')}
+                                    </p>
+                                    <span className="text-[10px] font-mono text-slate-400 font-bold block">
+                                      {u.membershipCode || '—'}
+                                    </span>
+                                  </div>
+                                </div>
+                              </td>
+
+                              <td className="p-3">
+                                <span className={`px-2 py-0.5 rounded-md text-[10px] font-black ${
+                                  u.committee && u.committee !== 'None'
+                                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
+                                    : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                                }`}>
+                                  {u.committee && u.committee !== 'None' ? u.committee : (ar ? '⚠️ غير مسكن' : 'None')}
+                                </span>
+                              </td>
+
+                              <td className="p-3">
+                                <div className="space-y-0.5">
+                                  <span className="font-bold text-slate-700 dark:text-slate-300 block text-[11px]">
+                                    {u.department && u.department !== 'None' ? u.department : (ar ? '⚠️ غير محدد' : '—')}
+                                  </span>
+                                  {u.subCommittee && (
+                                    <span className="text-[9px] text-amber-700 dark:text-amber-300 font-bold block">
+                                      {u.subCommittee}
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+
+                              <td className="p-3 font-mono font-bold">
+                                {isPhoneMissing ? (
+                                  <span className="text-rose-600 dark:text-rose-400 text-[11px] font-black flex items-center gap-1">
+                                    <AlertCircle className="w-3 h-3" />
+                                    <span>{ar ? 'غير مسجل' : 'Missing'}</span>
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-800 dark:text-slate-200">{u.phoneNumber}</span>
+                                )}
+                              </td>
+
+                              <td className="p-3 font-mono text-[11px] text-slate-600 dark:text-slate-400">
+                                {u.email || '—'}
+                              </td>
+
+                              <td className="p-3">
+                                {audit.hasMissing ? (
+                                  <div className="flex flex-wrap gap-1">
+                                    {audit.missing.map(m => (
+                                      <span
+                                        key={m.field}
+                                        className="text-[9px] font-black bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800 px-1.5 py-0.5 rounded"
+                                      >
+                                        ⚠️ {m.label}
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <span className="text-[10px] font-black bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 px-2 py-0.5 rounded-full">
+                                    {ar ? 'مكتملة ✅' : 'Complete ✅'}
+                                  </span>
+                                )}
+                              </td>
+
+                              <td className="p-3 text-center" onClick={e => e.stopPropagation()}>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (!selectedUserIds.includes(u.id)) {
+                                      setSelectedUserIds([...selectedUserIds, u.id]);
+                                    }
+                                    const missingKeys = audit.missing.map(m => m.field);
+                                    if (missingKeys.length > 0) {
+                                      setRequestedFields(Array.from(new Set([...requestedFields, ...missingKeys])));
+                                    }
+                                  }}
+                                  className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 dark:text-indigo-400 dark:hover:text-indigo-200 bg-indigo-50 dark:bg-indigo-950 px-2 py-1 rounded-lg border border-indigo-200 dark:border-indigo-800 transition-colors cursor-pointer"
+                                  title={ar ? 'تحديد العضو واختيار حقوله الناقصة' : 'Select & target missing'}
+                                >
+                                  {ar ? 'تحديد وتدقيق' : 'Target'}
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            {/* Submit Action Bar */}
+            <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="text-xs font-bold text-slate-500">
+                {targetScope === 'specific' ? (
+                  <span>
+                    {ar ? `سيتم إرسال الطلب لـ ` : `Will send to `}
+                    <strong className="text-indigo-600 dark:text-indigo-400 font-black">{selectedUserIds.length}</strong>
+                    {ar ? ` عضو محدد.` : ` selected members.`}
+                  </span>
+                ) : targetScope === 'committee' ? (
+                  <span>{ar ? `سيتم إرسال الطلب لجميع أعضاء لجنة (${targetCommittee}).` : `Will send to all members of ${targetCommittee}.`}</span>
+                ) : (
+                  <span>{ar ? `سيتم إرسال الطلب لجميع الأعضاء بالمنصة بالكامل.` : `Will send to all platform members.`}</span>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={handleSendProfileUpdateRequest}
+                disabled={isSendingRequest || (targetScope === 'specific' && selectedUserIds.length === 0) || requestedFields.length === 0}
+                className="w-full sm:w-auto py-3.5 px-8 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-black text-xs transition-all shadow-lg shadow-indigo-500/25 active:scale-95 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
+              >
+                <Send className="w-4 h-4" />
+                <span>
+                  {isSendingRequest
+                    ? (ar ? 'جاري إرسال الطلبات...' : 'Sending...')
+                    : (ar ? 'إرسال طلب تحديث البيانات للأعضاء 🚀' : 'Dispatch Update Request 🚀')}
+                </span>
+              </button>
+            </div>
+
+          </div>
+
+          {/* Active & Previous Requests History */}
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+            <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+              <RotateCcw className="w-4 h-4 text-amber-500" />
+              <span>{ar ? 'سجل طلبات التحديث المرسلة ومتابعة الاستجابة' : 'Sent Update Requests & Response Tracking'}</span>
+            </h3>
+
+            {db.getProfileUpdateRequests().length === 0 ? (
+              <p className="text-xs text-slate-400 font-bold py-4 text-center">
+                {ar ? 'لم يتم إرسال أي طلبات تحديث بيانات حتى الآن.' : 'No update requests sent yet.'}
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {db.getProfileUpdateRequests().map(req => {
+                  const total = req.targetUserIds.length;
+                  const completed = (req.completedUserIds || []).length;
+                  const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+                  const isFinished = req.status === 'Completed' || (total > 0 && completed >= total);
+
+                  return (
+                    <div
+                      key={req.id}
+                      className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 space-y-3"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full ${
+                              req.status === 'Active'
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                : req.status === 'Completed'
+                                ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
+                                : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
+                            }`}>
+                              {req.status === 'Active' ? (ar ? 'نشط ومستمر' : 'Active') : req.status === 'Completed' ? (ar ? 'مكتمل بنجاح' : 'Completed') : (ar ? 'ملغي' : 'Cancelled')}
+                            </span>
+                            <h4 className="text-xs font-black text-slate-900 dark:text-white">
+                              {ar ? `طلب تحديث: ` : `Update: `}
+                              <span className="text-indigo-600 dark:text-indigo-400">
+                                {req.targetScope === 'all'
+                                  ? (ar ? 'المنصة بالكامل' : 'All Platform')
+                                  : req.targetScope === 'committee'
+                                  ? (ar ? `لجنة ${req.targetCommittee}` : `${req.targetCommittee} Committee`)
+                                  : (ar ? `${total} أعضاء محددين` : `${total} Specific Members`)}
+                              </span>
+                            </h4>
+                          </div>
+                          <p className="text-[11px] text-slate-400 font-medium">
+                            {ar ? `مرسل بواسطة: ${req.createdByName || 'المشرف'} · ${new Date(req.createdAt).toLocaleDateString('ar-EG')}` : `By ${req.createdByName || 'Admin'} on ${new Date(req.createdAt).toLocaleDateString()}`}
+                          </p>
+                        </div>
+
+                        {req.status === 'Active' && (
+                          <button
+                            type="button"
+                            onClick={() => handleCancelProfileUpdateRequest(req.id)}
+                            className="text-xs font-bold text-rose-600 hover:text-rose-800 border border-rose-200 dark:border-rose-800 rounded-xl px-3 py-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+                          >
+                            {ar ? 'إلغاء وسحب الطلب 🚫' : 'Cancel Request 🚫'}
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Fields badge */}
+                      <div className="flex flex-wrap gap-1.5 items-center text-xs">
+                        <span className="text-[10px] text-slate-500 font-bold">{ar ? 'الحقول المطلوبة:' : 'Requested:'}</span>
+                        {req.requestedFields.map(f => (
+                          <span key={f} className="text-[10px] font-black bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-md">
+                            {f === 'fullName' ? 'الاسم' : f === 'phoneNumber' ? 'الهاتف' : f === 'committee' ? 'اللجنة' : f === 'department' ? 'القسم' : 'الإيميل'}
+                          </span>
+                        ))}
+                      </div>
+
+                      {/* Progress bar */}
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-[11px] font-black">
+                          <span className="text-slate-600 dark:text-slate-300">
+                            {ar ? `نسبة الاستجابة وتحديث البيانات:` : `Response Rate:`}
+                          </span>
+                          <span className="text-indigo-600 dark:text-indigo-400 font-mono">
+                            {completed} / {total} ({percent}%)
+                          </span>
+                        </div>
+                        <div className="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full transition-all duration-500 rounded-full ${isFinished ? 'bg-emerald-500' : 'bg-indigo-600'}`}
+                            style={{ width: `${percent}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
         </div>
       )}
 
