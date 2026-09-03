@@ -8,7 +8,7 @@ import {
   Database, FileText, CheckSquare, Activity, Sliders, Key, X,
   Lock, ArrowRight, Download, Sparkles, Cake, RotateCcw,
   User, Phone, Building2, Layers, Check, Square, ArrowRightLeft,
-  Clock, AlertCircle
+  Clock, AlertCircle, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { useLanguage } from '../lib/LanguageContext';
 import { getEmailQueue, retryQueuedEmails, clearEmailQueue, QueuedEmail } from '../lib/emailService';
@@ -74,6 +74,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
   const [reqTableCommFilter, setReqTableCommFilter] = useState('all');
   const [onlyMissingFilter, setOnlyMissingFilter] = useState(false);
   const [isSendingRequest, setIsSendingRequest] = useState(false);
+  const [reqTablePage, setReqTablePage] = useState(1);
+  const [reqTablePageSize, setReqTablePageSize] = useState(25);
 
   // Security Codes Sheet State
   const [secSearch, setSecSearch] = useState('');
@@ -136,6 +138,15 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
   const logs = useMemo(() => db.getLogs(), [refreshKey]);
   const tasks = db.getTasks();
   const submissions = db.getSubmissions();
+
+  const selectedUserIdsSet = useMemo(() => new Set(selectedUserIds), [selectedUserIds]);
+  const profileUpdateRequests = useMemo(() => {
+    try {
+      return db.getProfileUpdateRequests() || [];
+    } catch {
+      return [];
+    }
+  }, [refreshKey]);
 
   // Email delivery queue
   const [emailQueue, setEmailQueue] = useState<QueuedEmail[]>(getEmailQueue());
@@ -210,13 +221,20 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
     });
   }, [allUsers, search, roleFilter, statusFilter, committeeFilter, subCommitteeFilter]);
 
-  // Profile Update Requests - Audit missing fields helper
+  // Profile Update Requests - Audit missing fields helper (safe against non-string and null fields)
   const getMissingFieldsForUser = (u: UserProfile) => {
-    const isNameBad = !u.fullName || !u.fullName.trim().includes(' ') || /\d/.test(u.fullName);
-    const isPhoneBad = !u.phoneNumber || u.phoneNumber.trim() === '+201000000000' || u.phoneNumber.trim().length < 10;
-    const isCommBad = !u.committee || u.committee === 'None' || u.committee === 'General' || !['HR', 'PR', 'SM', 'OR'].includes(u.committee);
-    const isDeptBad = !u.department || u.department === 'None' || u.department === 'Events' || u.department === 'General';
-    const isEmailBad = !u.email || !u.email.includes('@') || !u.email.includes('.');
+    if (!u) return { all: [], missing: [], hasMissing: false };
+    const nameStr = String(u.fullName || '').trim();
+    const phoneStr = String(u.phoneNumber || '').trim();
+    const commStr = String(u.committee || '').trim();
+    const deptStr = String(u.department || '').trim();
+    const emailStr = String(u.email || '').trim();
+
+    const isNameBad = !nameStr || !nameStr.includes(' ') || /\d/.test(nameStr);
+    const isPhoneBad = !phoneStr || phoneStr === '+201000000000' || phoneStr.replace(/\D/g, '').length < 10;
+    const isCommBad = !commStr || commStr === 'None' || commStr === 'General' || !['HR', 'PR', 'SM', 'OR'].includes(commStr);
+    const isDeptBad = !deptStr || deptStr === 'None' || deptStr === 'Events' || deptStr === 'General';
+    const isEmailBad = !emailStr || !emailStr.includes('@') || !emailStr.includes('.');
 
     const list: { field: UpdatableProfileField; label: string; isMissing: boolean }[] = [
       { field: 'fullName', label: 'الاسم', isMissing: isNameBad },
@@ -233,6 +251,15 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
     };
   };
 
+  // Precompute user audits in a Map to avoid recomputing in render loops
+  const userAuditsMap = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof getMissingFieldsForUser>>();
+    for (const u of allUsers) {
+      map.set(u.id, getMissingFieldsForUser(u));
+    }
+    return map;
+  }, [allUsers]);
+
   // Filtered members for the Profile Update Requests selection table
   const reqTableFilteredUsers = useMemo(() => {
     return allUsers.filter(u => {
@@ -243,12 +270,23 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
       if (!matchSearch || !matchComm) return false;
 
       if (onlyMissingFilter) {
-        const audit = getMissingFieldsForUser(u);
-        return audit.hasMissing;
+        const audit = userAuditsMap.get(u.id);
+        return audit ? audit.hasMissing : false;
       }
       return true;
     });
-  }, [allUsers, reqTableSearch, reqTableCommFilter, onlyMissingFilter]);
+  }, [allUsers, reqTableSearch, reqTableCommFilter, onlyMissingFilter, userAuditsMap]);
+
+  useEffect(() => {
+    setReqTablePage(1);
+  }, [reqTableSearch, reqTableCommFilter, onlyMissingFilter]);
+
+  const reqTableTotalPages = Math.max(1, Math.ceil(reqTableFilteredUsers.length / (reqTablePageSize === -1 ? reqTableFilteredUsers.length || 1 : reqTablePageSize)));
+  const paginatedReqTableUsers = useMemo(() => {
+    if (reqTablePageSize === -1) return reqTableFilteredUsers;
+    const start = (reqTablePage - 1) * reqTablePageSize;
+    return reqTableFilteredUsers.slice(start, start + reqTablePageSize);
+  }, [reqTableFilteredUsers, reqTablePage, reqTablePageSize]);
 
   const handleSendProfileUpdateRequest = async () => {
     if (requestedFields.length === 0) {
@@ -823,9 +861,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
         >
           <UserCheck className="w-4 h-4 text-emerald-400" />
           <span>{ar ? 'طلب تحديث بيانات الأعضاء 📝' : 'Profile Update Requests 📝'}</span>
-          {db.getProfileUpdateRequests().filter(r => r.status === 'Active').length > 0 && (
+          {profileUpdateRequests.filter(r => r.status === 'Active').length > 0 && (
             <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-500 text-white font-black animate-pulse">
-              {db.getProfileUpdateRequests().filter(r => r.status === 'Active').length} {ar ? 'نشط' : 'Active'}
+              {profileUpdateRequests.filter(r => r.status === 'Active').length} {ar ? 'نشط' : 'Active'}
             </span>
           )}
         </button>
@@ -1617,27 +1655,37 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                       : `Selected ${selectedUserIds.length} of ${reqTableFilteredUsers.length}`}
                   </span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <button
                     type="button"
                     onClick={() => {
-                      const visibleIds = reqTableFilteredUsers.map(u => u.id);
-                      setSelectedUserIds(Array.from(new Set([...selectedUserIds, ...visibleIds])));
+                      const pageIds = paginatedReqTableUsers.map(u => u.id);
+                      setSelectedUserIds(Array.from(new Set([...selectedUserIds, ...pageIds])));
                     }}
                     className="text-indigo-600 dark:text-indigo-400 hover:underline font-bold text-xs cursor-pointer"
                   >
-                    {ar ? 'تحديد كل المعروضين' : 'Select All Visible'}
+                    {ar ? `تحديد الصفحة (${paginatedReqTableUsers.length})` : 'Select Page'}
                   </button>
                   <span className="text-slate-300">|</span>
                   <button
                     type="button"
                     onClick={() => {
-                      const visibleIds = new Set(reqTableFilteredUsers.map(u => u.id));
-                      setSelectedUserIds(selectedUserIds.filter(id => !visibleIds.has(id)));
+                      const allIds = reqTableFilteredUsers.map(u => u.id);
+                      setSelectedUserIds(Array.from(new Set([...selectedUserIds, ...allIds])));
+                    }}
+                    className="text-blue-600 dark:text-blue-400 hover:underline font-bold text-xs cursor-pointer"
+                  >
+                    {ar ? `تحديد الكل (${reqTableFilteredUsers.length})` : 'Select All Filtered'}
+                  </button>
+                  <span className="text-slate-300">|</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedUserIds([]);
                     }}
                     className="text-slate-500 hover:underline font-bold text-xs cursor-pointer"
                   >
-                    {ar ? 'إلغاء تحديد المعروضين' : 'Deselect Visible'}
+                    {ar ? 'إلغاء التحديد بالكامل' : 'Deselect All'}
                   </button>
                 </div>
               </div>
@@ -1651,17 +1699,17 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                         <th className="p-3 text-center w-10">
                           <input
                             type="checkbox"
-                            checked={reqTableFilteredUsers.length > 0 && reqTableFilteredUsers.every(u => selectedUserIds.includes(u.id))}
+                            checked={paginatedReqTableUsers.length > 0 && paginatedReqTableUsers.every(u => selectedUserIdsSet.has(u.id))}
                             onChange={e => {
                               if (e.target.checked) {
-                                const visibleIds = reqTableFilteredUsers.map(u => u.id);
-                                setSelectedUserIds(Array.from(new Set([...selectedUserIds, ...visibleIds])));
+                                const pageIds = paginatedReqTableUsers.map(u => u.id);
+                                setSelectedUserIds(Array.from(new Set([...selectedUserIds, ...pageIds])));
                               } else {
-                                const visibleIds = new Set(reqTableFilteredUsers.map(u => u.id));
-                                setSelectedUserIds(selectedUserIds.filter(id => !visibleIds.has(id)));
+                                const pageIds = new Set(paginatedReqTableUsers.map(u => u.id));
+                                setSelectedUserIds(selectedUserIds.filter(id => !pageIds.has(id)));
                               }
                             }}
-                            className="w-4 h-4 rounded text-indigo-600"
+                            className="w-4 h-4 rounded text-indigo-600 cursor-pointer"
                           />
                         </th>
                         <th className="p-3 text-start">{ar ? 'العضو' : 'Member'}</th>
@@ -1674,17 +1722,18 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900">
-                      {reqTableFilteredUsers.length === 0 ? (
+                      {paginatedReqTableUsers.length === 0 ? (
                         <tr>
                           <td colSpan={8} className="p-8 text-center text-slate-400 font-bold">
                             {ar ? 'لا يوجد أعضاء يطابقون شروط البحث الحالية.' : 'No members found matching filters.'}
                           </td>
                         </tr>
                       ) : (
-                        reqTableFilteredUsers.map(u => {
-                          const isSelected = selectedUserIds.includes(u.id);
-                          const audit = getMissingFieldsForUser(u);
-                          const isPhoneMissing = !u.phoneNumber || u.phoneNumber === '+201000000000';
+                        paginatedReqTableUsers.map(u => {
+                          const isSelected = selectedUserIdsSet.has(u.id);
+                          const audit = userAuditsMap.get(u.id) || getMissingFieldsForUser(u);
+                          const phoneRaw = String(u.phoneNumber || '').trim();
+                          const isPhoneMissing = !phoneRaw || phoneRaw === '+201000000000' || phoneRaw.replace(/\D/g, '').length < 10;
 
                           return (
                             <tr
@@ -1713,13 +1762,13 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                                       setSelectedUserIds(selectedUserIds.filter(id => id !== u.id));
                                     }
                                   }}
-                                  className="w-4 h-4 rounded text-indigo-600"
+                                  className="w-4 h-4 rounded text-indigo-600 cursor-pointer"
                                 />
                               </td>
                               <td className="p-3">
                                 <div className="flex items-center gap-2.5">
                                   <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-black text-xs shrink-0">
-                                    {(u.fullName || 'ع').charAt(0)}
+                                    {(String(u.fullName || 'ع')).charAt(0)}
                                   </div>
                                   <div className="min-w-0">
                                     <p className="font-black text-slate-900 dark:text-white truncate" title={u.fullName}>
@@ -1793,7 +1842,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    if (!selectedUserIds.includes(u.id)) {
+                                    if (!selectedUserIdsSet.has(u.id)) {
                                       setSelectedUserIds([...selectedUserIds, u.id]);
                                     }
                                     const missingKeys = audit.missing.map(m => m.field);
@@ -1814,6 +1863,61 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                     </tbody>
                   </table>
                 </div>
+
+                {/* Pagination Controls */}
+                {reqTableFilteredUsers.length > 0 && (
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-3 bg-slate-50 dark:bg-slate-800/80 border-t border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300">
+                    <div className="flex items-center gap-2">
+                      <span>{ar ? 'عرض بالصفحة:' : 'Per page:'}</span>
+                      <select
+                        value={reqTablePageSize}
+                        onChange={e => {
+                          setReqTablePageSize(Number(e.target.value));
+                          setReqTablePage(1);
+                        }}
+                        className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-xs font-bold"
+                      >
+                        <option value={25}>25</option>
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                        <option value={-1}>{ar ? 'الكل' : 'All'}</option>
+                      </select>
+                      <span className="text-slate-400">
+                        {ar
+                          ? `(إجمالي: ${reqTableFilteredUsers.length} عضو)`
+                          : `(${reqTableFilteredUsers.length} total)`}
+                      </span>
+                    </div>
+
+                    {reqTablePageSize !== -1 && reqTableTotalPages > 1 && (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          disabled={reqTablePage <= 1}
+                          onClick={() => setReqTablePage(p => Math.max(1, p - 1))}
+                          className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40 hover:bg-white dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                          title={ar ? 'الصفحة السابقة' : 'Previous'}
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+
+                        <span className="px-3 py-1 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 font-mono text-xs">
+                          {reqTablePage} / {reqTableTotalPages}
+                        </span>
+
+                        <button
+                          type="button"
+                          disabled={reqTablePage >= reqTableTotalPages}
+                          onClick={() => setReqTablePage(p => Math.min(reqTableTotalPages, p + 1))}
+                          className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 disabled:opacity-40 hover:bg-white dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                          title={ar ? 'الصفحة التالية' : 'Next'}
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1857,17 +1961,18 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
               <span>{ar ? 'سجل طلبات التحديث المرسلة ومتابعة الاستجابة' : 'Sent Update Requests & Response Tracking'}</span>
             </h3>
 
-            {db.getProfileUpdateRequests().length === 0 ? (
+            {profileUpdateRequests.length === 0 ? (
               <p className="text-xs text-slate-400 font-bold py-4 text-center">
                 {ar ? 'لم يتم إرسال أي طلبات تحديث بيانات حتى الآن.' : 'No update requests sent yet.'}
               </p>
             ) : (
               <div className="space-y-3">
-                {db.getProfileUpdateRequests().map(req => {
-                  const total = req.targetUserIds.length;
+                {profileUpdateRequests.map(req => {
+                  const total = (req.targetUserIds || []).length;
                   const completed = (req.completedUserIds || []).length;
                   const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
                   const isFinished = req.status === 'Completed' || (total > 0 && completed >= total);
+                  const fields = req.requestedFields || [];
 
                   return (
                     <div
