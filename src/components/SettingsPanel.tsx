@@ -7,7 +7,8 @@ import {
   CheckCircle, XCircle, Filter, RefreshCw, Mail, Send, Edit3,
   Database, FileText, CheckSquare, Activity, Sliders, Key, X,
   Lock, ArrowRight, Download, Sparkles, Cake, RotateCcw,
-  User, Phone, Building2, Layers, Check, Square, ArrowRightLeft
+  User, Phone, Building2, Layers, Check, Square, ArrowRightLeft,
+  Clock, AlertCircle
 } from 'lucide-react';
 import { useLanguage } from '../lib/LanguageContext';
 import { getEmailQueue, retryQueuedEmails, clearEmailQueue, QueuedEmail } from '../lib/emailService';
@@ -1316,7 +1317,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                                 onClick={() => {
                                   setReviewingCommReq(req);
                                   setCommReviewDecision('Rejected');
-                                  setCommAdminNote('');
+                                  setCommReviewNote('');
                                 }}
                                 className="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/50 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-300 font-bold text-xs border border-rose-200 dark:border-rose-800 transition-colors cursor-pointer"
                               >
@@ -1328,7 +1329,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                                 onClick={() => {
                                   setReviewingCommReq(req);
                                   setCommReviewDecision('Approved');
-                                  setCommAdminNote('تمت الموافقة ونقل العضو وتحديث السجلات الرسمية بنجاح.');
+                                  setCommReviewNote('تمت الموافقة ونقل العضو وتحديث السجلات الرسمية بنجاح.');
                                 }}
                                 className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-xs shadow-md shadow-emerald-500/20 active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
                               >
@@ -2683,8 +2684,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
               </label>
               <input
                 type="text"
-                value={commAdminNote}
-                onChange={e => setCommAdminNote(e.target.value)}
+                value={commReviewNote}
+                onChange={e => setCommReviewNote(e.target.value)}
                 placeholder={ar ? 'اكتب ملاحظة أو توجيهات للعضو...' : 'Enter note for member...'}
                 className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold focus:outline-none focus:border-indigo-500"
               />
@@ -2702,7 +2703,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
               <button
                 type="button"
                 disabled={isSubmittingCommReview}
-                onClick={() => handleExecuteCommReview(reviewingCommReq.id, commReviewDecision, commAdminNote)}
+                onClick={() => handleExecuteCommReview(reviewingCommReq.id, commReviewDecision, commReviewNote)}
                 className={`flex-1 py-2.5 rounded-xl text-white font-black text-xs shadow-md transition-all active:scale-95 disabled:opacity-50 cursor-pointer ${
                   commReviewDecision === 'Approved'
                     ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/20'

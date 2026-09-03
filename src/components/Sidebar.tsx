@@ -53,8 +53,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
       const isLead = ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader', 'HRM'].includes(currentUser.role) ||
         currentUser.department === 'HRM' || currentUser.committee === 'HR';
       if (isLead) {
-        const excuses = db.getExcuses().filter(e => e.status === 'Pending').length;
-        const freezes = db.getFreezes().filter(f => f.status === 'Pending').length;
+        const excuses = db.getExcuseRequests().filter(e => e.status === 'Pending').length;
+        const freezes = db.getFreezeRequests().filter(f => f.status === 'Pending').length;
         const commChanges = db.getCommitteeChangeRequests().filter(c => c.status === 'Pending').length;
         return excuses + freezes + commChanges;
       }

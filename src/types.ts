@@ -960,6 +960,7 @@ export interface CommitteeChangeRequest {
   targetCommittee: string;
   currentDepartment?: string;
   targetDepartment?: string;
+  subCommittee?: string;
   reason: string;
   status: RequestStatus;
   adminResponse?: string;

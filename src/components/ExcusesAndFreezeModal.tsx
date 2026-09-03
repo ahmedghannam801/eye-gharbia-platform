@@ -166,7 +166,7 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
       setIsCustomTarget(false);
       const t = tasks.find(item => item.id === taskId);
       if (t) {
-        setExcuseTarget(t.title || (t as any).name || '');
+        setExcuseTarget((t as any).title || t.name || '');
         if (t.deadline) {
           setExcuseDate(t.deadline.slice(0, 10));
         }
@@ -548,7 +548,7 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
                       >
                         <option value="">{isAr ? '-- اختر الاجتماع من القائمة --' : '-- Select a Meeting --'}</option>
                         {userRelevantMeetings.map(m => {
-                          const isOnline = m.type === 'online' || (m.location || '').toLowerCase().includes('online') || (m.location || '').includes('زووم');
+                          const isOnline = (m.type as string) === 'online' || (m.location || '').toLowerCase().includes('online') || (m.location || '').includes('زووم');
                           const dateStr = m.scheduledAt ? m.scheduledAt.slice(0, 10) : '';
                           return (
                             <option key={m.id} value={m.id}>
@@ -601,7 +601,7 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
                           const deadlineStr = t.deadline ? t.deadline.slice(0, 10) : '';
                           return (
                             <option key={t.id} value={t.id}>
-                              🎯 {t.title || (t as any).name} {deadlineStr ? `(تاريخ التسليم: ${deadlineStr})` : ''}
+                              🎯 {(t as any).title || t.name} {deadlineStr ? `(تاريخ التسليم: ${deadlineStr})` : ''}
                             </option>
                           );
                         })}

@@ -11,9 +11,11 @@ import {
 import {
   formatDate,
   formatTime,
+  formatDateTime,
   dateToLocalInputValue,
   localInputToIso,
 } from '../lib/dateUtils';
+import { matchesSearch } from '../lib/searchUtils';
 import {
   CalendarDays, Users, Plus, CheckCircle2, XCircle, Clock, Lock, Unlock,
   MapPin, Trash2, ChevronDown, ChevronUp, QrCode, UserCheck, AlertCircle,
