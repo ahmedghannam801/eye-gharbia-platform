@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { EyeLogo, MinistryLogo } from './EyeLogo';
 
 import { UserProfile, getUserRoleTitle } from '../types';
