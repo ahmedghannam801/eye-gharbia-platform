@@ -97,7 +97,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {
           groupLabel: language === 'ar' ? 'التنافسية والمجتمع' : 'Ranking & Community',
           items: [
-            { id: 'leaderboard',   label: language === 'ar' ? 'لوحة الصدارة والرتب' : 'Leaderboard', icon: Trophy,   roles: ALL_ROLES },
             { id: 'trivia',        label: language === 'ar' ? 'المسابقات والكويزات 🎯' : 'Weekly Trivia 🎯', icon: HelpCircle, roles: ALL_ROLES },
             { id: 'rewards',       label: language === 'ar' ? 'متجر المكافآت' : 'Rewards Shop',    icon: Gift,       roles: ALL_ROLES },
             { id: 'ideabank',      label: language === 'ar' ? 'بنك الأفكار والاستطلاعات 💡' : 'Ideas & Polls', icon: Lightbulb, roles: ALL_ROLES },
@@ -130,7 +129,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {
           groupLabel: language === 'ar' ? 'التنافسية والمجتمع' : 'Ranking & Community',
           items: [
-            { id: 'leaderboard',   label: language === 'ar' ? 'لوحة الصدارة والترتيب' : 'Leaderboard', icon: Trophy, roles: ALL_ROLES },
             { id: 'trivia',        label: language === 'ar' ? 'المسابقات والكويزات 🎯' : 'Weekly Trivia 🎯', icon: HelpCircle, roles: ALL_ROLES },
             { id: 'certificates',  label: language === 'ar' ? 'منظومة الشهادات' : 'Certificates', icon: Star, roles: ALL_ROLES },
             { id: 'rewards',       label: language === 'ar' ? 'متجر المكافآت' : 'Rewards Shop', icon: Gift, roles: ALL_ROLES },

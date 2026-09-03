@@ -1013,14 +1013,14 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
               </button>
 
               <button
-                onClick={() => onNavigateToView('leaderboard')}
+                onClick={() => onNavigateToView('feedback')}
                 className="flex items-center gap-3 p-3 bg-white dark:bg-slate-900 border-2 border-amber-200 dark:border-amber-900/60 rounded-2xl shadow-sm hover:border-amber-500 hover:shadow-md transition-all text-start cursor-pointer group"
               >
                 <div className="w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
                   <Trophy className="w-4 h-4" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-xs font-black text-slate-900 dark:text-white truncate">{language === 'ar' ? 'لوحة الصدارة والرتب' : 'Leaderboard'}</p>
+                  <p className="text-xs font-black text-slate-900 dark:text-white truncate">{language === 'ar' ? 'تقييم الأعضاء والتميز' : 'Evaluation & Ranks'}</p>
                   <p className="text-[10px] text-amber-700 dark:text-amber-400 font-bold">{(currentUser as any).points || (currentUser as any).bonusPoints || 0} {language === 'ar' ? 'نقطة تميز' : 'pts'}</p>
                 </div>
               </button>
