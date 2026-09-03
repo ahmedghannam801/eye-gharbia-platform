@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { UserProfile, getActiveGovernorate, formatGovernorateWelcomeAr, COMMITTEE_STRUCTURE } from '../types';
 import { db } from '../db/localDb';
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
-import { User, Phone, Briefcase, Building2, CheckCircle2, AlertTriangle, Loader2, Sparkles, ShieldCheck } from 'lucide-react';
+import { User, Phone, Briefcase, Building2, CheckCircle2, AlertTriangle, Loader2, Sparkles, ShieldCheck, X } from 'lucide-react';
 
 interface Props {
   currentUser: UserProfile | null;
@@ -87,6 +87,9 @@ export const ProfileCompletionModal: React.FC<Props> = ({ currentUser, onComplet
       const key = `${STORAGE_KEY}_${currentUser.id}`;
       const alreadyDone = localStorage.getItem(key);
       if (alreadyDone) return;
+
+      const sessionDismissed = sessionStorage.getItem(`eye_profile_dismissed_session_${currentUser.id}`);
+      if (sessionDismissed) return;
 
       const defaultComm = COMMITTEES.includes(currentUser.committee) ? currentUser.committee : 'HR';
       const availableDepts = DEPARTMENTS[defaultComm] || [];
@@ -194,19 +197,35 @@ export const ProfileCompletionModal: React.FC<Props> = ({ currentUser, onComplet
 
   return (
     <div 
-      className="fixed inset-0 z-[9999] flex items-center justify-center p-4" 
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 overflow-y-auto" 
       style={{ backdropFilter: 'blur(12px)', backgroundColor: 'rgba(5, 11, 26, 0.85)' }}
     >
       <div 
-        className="relative w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl border border-slate-800 animate-fade-in" 
+        className="relative w-full max-w-lg max-h-[90vh] flex flex-col rounded-3xl overflow-hidden shadow-2xl border border-slate-800 animate-fade-in my-auto" 
         style={{ backgroundColor: '#0f172a', color: '#ffffff' }}
         dir="rtl"
       >
+        {/* Close / Dismiss Button */}
+        <button
+          type="button"
+          onClick={() => {
+            setVisible(false);
+            if (currentUser) {
+              sessionStorage.setItem(`eye_profile_dismissed_session_${currentUser.id}`, '1');
+            }
+          }}
+          className="absolute top-4 left-4 z-20 p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+          title="تذكيري لاحقاً"
+          aria-label="إغلاق وتذكيري لاحقاً"
+        >
+          <X size={20} />
+        </button>
+
         {/* Glowing top header gradient */}
-        <div className="h-2 bg-gradient-to-r from-blue-600 via-indigo-500 to-amber-400" />
+        <div className="h-2 bg-gradient-to-r from-blue-600 via-indigo-500 to-amber-400 shrink-0" />
 
         {/* Modal Header */}
-        <div className="px-6 pt-6 pb-3 text-center">
+        <div className="px-6 pt-6 pb-3 text-center shrink-0">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl mb-3 bg-gradient-to-br from-blue-600 to-indigo-700 text-white shadow-lg shadow-blue-600/40">
             <Sparkles size={28} />
           </div>
@@ -232,7 +251,7 @@ export const ProfileCompletionModal: React.FC<Props> = ({ currentUser, onComplet
             </p>
           </div>
         ) : (
-          <div className="px-6 pb-6 flex flex-col gap-4">
+          <div className="px-6 pb-6 flex flex-col gap-4 overflow-y-auto max-h-[calc(90vh-140px)]">
             {/* 1. Full Name */}
             <div>
               <label className="block text-xs font-black text-slate-200 mb-1.5 flex items-center gap-1.5" style={{ color: '#e2e8f0' }}>
@@ -339,15 +358,31 @@ export const ProfileCompletionModal: React.FC<Props> = ({ currentUser, onComplet
               </div>
             )}
 
-            {/* Submit Button */}
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="w-full py-3.5 mt-2 rounded-xl font-black text-white text-sm flex items-center justify-center gap-2 transition-all bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-500 hover:to-indigo-500 shadow-lg shadow-blue-600/30 cursor-pointer disabled:opacity-50 active:scale-98"
-            >
-              {saving ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
-              <span>{saving ? 'جاري حفظ وتحديث البيانات...' : 'حفظ وتأكيد البيانات 🚀'}</span>
-            </button>
+            {/* Action Buttons */}
+            <div className="space-y-2 mt-2">
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving}
+                className="w-full py-3.5 rounded-xl font-black text-white text-sm flex items-center justify-center gap-2 transition-all bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-500 hover:to-indigo-500 shadow-lg shadow-blue-600/30 cursor-pointer disabled:opacity-50 active:scale-98"
+              >
+                {saving ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
+                <span>{saving ? 'جاري حفظ وتحديث البيانات...' : 'حفظ وتأكيد البيانات 🚀'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setVisible(false);
+                  if (currentUser) {
+                    sessionStorage.setItem(`eye_profile_dismissed_session_${currentUser.id}`, '1');
+                  }
+                }}
+                className="w-full py-2.5 rounded-xl font-bold text-slate-400 hover:text-white text-xs flex items-center justify-center transition-colors bg-slate-800/60 hover:bg-slate-800 cursor-pointer"
+              >
+                تذكيري لاحقاً وتخطي الآن
+              </button>
+            </div>
 
             <div className="flex items-center justify-center gap-1.5 text-center text-[11px] text-slate-400 pt-1" style={{ color: '#94a3b8' }}>
               <ShieldCheck size={14} className="text-emerald-400" />

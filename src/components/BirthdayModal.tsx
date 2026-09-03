@@ -38,8 +38,8 @@ export const BirthdayModal: React.FC<BirthdayModalProps> = ({ currentUser }) => 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-md animate-fade-in">
-      <div className="bg-gradient-to-b from-slate-900 via-amber-950 to-slate-900 border border-amber-500/30 text-white rounded-3xl max-w-lg w-full p-8 shadow-2xl relative overflow-hidden text-center animate-scale-up">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/70 backdrop-blur-md animate-fade-in overflow-y-auto">
+      <div className="bg-gradient-to-b from-slate-900 via-amber-950 to-slate-900 border border-amber-500/30 text-white rounded-3xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 sm:p-8 shadow-2xl relative text-center animate-scale-up my-auto">
         {/* Close Button */}
         <button
           onClick={() => setIsOpen(false)}

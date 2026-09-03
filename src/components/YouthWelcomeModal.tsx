@@ -116,8 +116,8 @@ export const YouthWelcomeModal: React.FC<YouthWelcomeModalProps> = ({ currentUse
   const userGovWelcomeAr = formatGovernorateWelcomeAr(activeGov);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in">
-      <div className="bg-gradient-to-b from-[#0b1b3d] via-[#0f285c] to-[#0b1b3d] border-2 border-amber-400/40 text-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-2xl relative overflow-hidden text-center animate-scale-up">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in overflow-y-auto">
+      <div className="bg-gradient-to-b from-[#0b1b3d] via-[#0f285c] to-[#0b1b3d] border-2 border-amber-400/40 text-white rounded-3xl max-w-md w-full max-h-[90vh] overflow-y-auto p-5 sm:p-8 shadow-2xl relative text-center animate-scale-up my-auto">
         
         {/* Background Ambient Glows & Floating Emojis */}
         <div className="absolute -top-16 -left-16 w-44 h-44 bg-amber-500/20 rounded-full blur-3xl pointer-events-none" />

@@ -62,7 +62,7 @@ export const savePushSubscriptionToSupabase = async () => {
   }
 };
 
-export const requestPushPermission = async (): Promise<NotificationPermission> => {
+export const requestPushPermission = async (fromUserAction: boolean = false): Promise<NotificationPermission> => {
   if (!isPushSupported()) {
     console.warn('[EYE Push] Browser or device does not support Web Push notifications.');
     return 'denied';
@@ -75,16 +75,23 @@ export const requestPushPermission = async (): Promise<NotificationPermission> =
   }
   if (Notification.permission === 'denied') return 'denied';
 
-  try {
-    const permission = await Notification.requestPermission();
-    if (permission === 'granted') {
-      await registerServiceWorker();
-      await savePushSubscriptionToSupabase();
+  // Only trigger prompt if user explicitly clicked/interacted (prevents iOS Safari & Android mobile gesture exceptions)
+  if (fromUserAction) {
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission === 'granted') {
+        await registerServiceWorker();
+        await savePushSubscriptionToSupabase();
+      }
+      return permission;
+    } catch {
+      return 'denied';
     }
-    return permission;
-  } catch {
-    return 'denied';
   }
+
+  // In background initialization, register service worker silently without popping modal prompt
+  await registerServiceWorker();
+  return Notification.permission;
 };
 
 // ── OneSignal Push SDK Initializer ─────────────────────────────────────────
@@ -195,7 +202,7 @@ export const triggerNewFeaturePush = (featureTitle: string, featureSummary: stri
 };
 
 export const sendTestPushNotification = async (): Promise<boolean> => {
-  const perm = await requestPushPermission();
+  const perm = await requestPushPermission(true);
   if (perm === 'granted') {
     return sendMobilePushNotification(
       '📱 تجربة إشعارات الموبايل الفورية — EYE Hub',

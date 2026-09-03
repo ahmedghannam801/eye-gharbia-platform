@@ -161,9 +161,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
         className={`fixed inset-y-0 z-50 flex flex-col bg-white dark:bg-slate-900 py-6 transition-all duration-300 lg:static lg:translate-x-0 start-0 border-e border-slate-150 dark:border-slate-800 ${
           isCollapsed ? 'w-20 px-3' : 'w-72 px-4'
         } ${
-          isOpen ? 'translate-x-0' : (isRtl ? 'max-lg:translate-x-full' : 'max-lg:-translate-x-full')
+          isOpen
+            ? 'translate-x-0 max-lg:pointer-events-auto'
+            : (isRtl ? 'max-lg:translate-x-full max-lg:pointer-events-none' : 'max-lg:-translate-x-full max-lg:pointer-events-none')
         }`}
         id="app-sidebar"
+        aria-hidden={!isOpen}
       >
         {/* Brand Header */}
         <div className="flex items-center justify-between mb-5 px-1">

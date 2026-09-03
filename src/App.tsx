@@ -97,9 +97,26 @@ const ViewSkeletonLoader = () => (
 
 export default function App() {
   const { theme } = useTheme();
-  // Navigation Route State
-  const [currentView, setCurrentView] = useState<string>('login');
-  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  // Synchronous session initialization to prevent mobile login flicker and stall
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
+    try {
+      return db.getCurrentUser();
+    } catch {
+      return null;
+    }
+  });
+
+  const [currentView, setCurrentView] = useState<string>(() => {
+    try {
+      const href = typeof window !== 'undefined' ? window.location.href : '';
+      if (href.includes('type=recovery') || href.includes('type%3Drecovery')) {
+        return 'reset-password';
+      }
+      return db.getCurrentUser() ? 'dashboard' : 'login';
+    } catch {
+      return 'login';
+    }
+  });
   
   // Mobile Sidebar Toggler
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -206,11 +223,10 @@ export default function App() {
           const saved = db.getCurrentUser();
           if (saved) {
             setCurrentUser(saved);
-            setCurrentView('dashboard');
+            setCurrentView(prev => (prev === 'login' || prev === 'register' ? 'dashboard' : prev));
             db.checkDeadlineNotifications();
-            // Auto-prompt push notifications for existing logged-in members
             setTimeout(async () => {
-              await requestPushPermission();
+              await requestPushPermission(false);
               await registerServiceWorker();
               await registerPeriodicSync();
               recordUserVisit(saved.id);
@@ -264,9 +280,9 @@ export default function App() {
   const handleAuthSuccess = (user: UserProfile) => {
     setCurrentUser(user);
     setCurrentView('dashboard');
-    // Auto-prompt push notification permission for new registrants / log-ins
+    // Register push subscription and SW silently without intrusive prompt
     setTimeout(async () => {
-      await requestPushPermission();
+      await requestPushPermission(false);
       await registerServiceWorker();
       await registerPeriodicSync();
       recordUserVisit(user.id);

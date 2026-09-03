@@ -108,14 +108,32 @@ const AllMembersEvaluationsView: React.FC<{
   const [evalSuccessMsg, setEvalSuccessMsg] = useState(false);
 
   const isEvaluator = ['Super Admin', 'Head', 'Coordinator', 'Deputy Coordinator', 'Leader', 'Vice'].includes(currentUser.role);
-  // Fetch EVERY single user in the entity without permission stripping
-  const allUsers = db.getUsers().filter(u => u.status === 'Active');
-  const allEvaluations = db.getMemberEvaluations();
+  // Fetch users and evaluations with reactive listener instead of re-instantiating every render
+  const [allUsers, setAllUsers] = useState<UserProfile[]>(() => db.getUsers().filter(u => u.status === 'Active'));
+  const [allEvaluations, setAllEvaluations] = useState<MemberEvaluation[]>(() => db.getMemberEvaluations());
 
-  // Compute evaluation stats per member
+  React.useEffect(() => {
+    const unsub = db.onChange(() => {
+      setAllUsers(db.getUsers().filter(u => u.status === 'Active'));
+      setAllEvaluations(db.getMemberEvaluations());
+    });
+    return () => unsub();
+  }, []);
+
+  // Compute evaluation stats per member with O(N+M) Map index
   const memberEvaluationsData = useMemo(() => {
+    const evalsByMember = new Map<string, MemberEvaluation[]>();
+    for (const e of allEvaluations) {
+      const list = evalsByMember.get(e.memberId);
+      if (list) {
+        list.push(e);
+      } else {
+        evalsByMember.set(e.memberId, [e]);
+      }
+    }
+
     return allUsers.map(user => {
-      const evals = db.getMemberEvaluations(user.id);
+      const evals = evalsByMember.get(user.id) || [];
       const evalsCount = evals.length;
 
       let avgCommitment = 0;
@@ -184,7 +202,7 @@ const AllMembersEvaluationsView: React.FC<{
         matchesRole = item.user.role === 'Member';
       }
 
-      return matchesSearch && matchesCommittee && matchesDept && matchesRole;
+      return matchesSearchQuery && matchesCommittee && matchesDept && matchesRole;
     }).sort((a, b) => {
       if (sortOrder === 'rating_desc') return b.overallAvg - a.overallAvg;
       if (sortOrder === 'rating_asc') return a.overallAvg - b.overallAvg;

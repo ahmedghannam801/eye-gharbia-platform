@@ -56,20 +56,22 @@ export const MemberOfTheMonth: React.FC<MemberOfTheMonthProps> = ({ currentUser,
 
   const isApproved = !!approvalData?.approved;
 
-  // Compute candidates and top performers
+  // Compute candidates and top performers ONLY when Super Admin is reviewing approval
   const userGov = currentUser.governorate || 'الغربية';
   const govUsers = useMemo(() => {
+    if (!isSuperAdmin) return [];
     return db.getUsers().filter(u => u.status === 'Active' && u.role === 'Member' && (u.governorate === userGov || !u.governorate));
-  }, [userGov, refreshTrigger]);
-
-  const meetings = db.getMeetings();
-  const attendance = db.getAllAttendance();
-  const tasks = db.getTasks();
-  const submissions = db.getSubmissions();
-  const excuses = db.getExcuseRequests();
-  const evaluations = db.getMemberEvaluations();
+  }, [userGov, refreshTrigger, isSuperAdmin]);
 
   const rankedMembers = useMemo(() => {
+    if (!isSuperAdmin || govUsers.length === 0) return [];
+    const meetings = db.getMeetings();
+    const attendance = db.getAllAttendance();
+    const tasks = db.getTasks();
+    const submissions = db.getSubmissions();
+    const excuses = db.getExcuseRequests();
+    const evaluations = db.getMemberEvaluations();
+
     return govUsers.map(m => {
       const avgBreakdown = calculateMemberAVG(
         m.id,
@@ -88,7 +90,7 @@ export const MemberOfTheMonth: React.FC<MemberOfTheMonthProps> = ({ currentUser,
         completedTasks: avgBreakdown.completedTasksCount,
       };
     }).sort((a, b) => b.avg - a.avg || b.bonus - a.bonus);
-  }, [govUsers, meetings, attendance, tasks, submissions, excuses, evaluations]);
+  }, [isSuperAdmin, govUsers]);
 
   const topCandidate = rankedMembers[0] || null;
 
@@ -106,11 +108,18 @@ export const MemberOfTheMonth: React.FC<MemberOfTheMonthProps> = ({ currentUser,
     return rankedMembers.find(r => r.member.id === selectedCandidateId) || topCandidate;
   }, [rankedMembers, selectedCandidateId, topCandidate]);
 
-  // Approved Member record
+  // Approved Member record - calculated ONLY for the single approved member
   const displayApprovedMemberData = useMemo(() => {
     if (!isApproved || !approvalData?.memberId) return null;
     const targetUser = db.getUsers().find(u => u.id === approvalData.memberId);
     if (!targetUser) return null;
+
+    const meetings = db.getMeetings();
+    const attendance = db.getAllAttendance();
+    const tasks = db.getTasks();
+    const submissions = db.getSubmissions();
+    const excuses = db.getExcuseRequests();
+    const evaluations = db.getMemberEvaluations();
 
     const avgBreakdown = calculateMemberAVG(
       targetUser.id,
@@ -131,7 +140,7 @@ export const MemberOfTheMonth: React.FC<MemberOfTheMonthProps> = ({ currentUser,
       approvedBy: approvalData.approvedBy || 'أحمد الغنام',
       approvedAt: approvalData.approvedAt,
     };
-  }, [isApproved, approvalData, meetings, attendance, tasks, submissions, excuses, evaluations]);
+  }, [isApproved, approvalData, refreshTrigger]);
 
   // Approve and Publish Handler (Super Admin Only)
   const handleApproveAndPublish = () => {
