@@ -14,13 +14,19 @@ const LanguageContext = createContext<LanguageContextProps | undefined>(undefine
 
 export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [language, setLanguageState] = useState<Language>(() => {
-    const saved = localStorage.getItem('eye_language');
-    return (saved === 'en' || saved === 'ar') ? saved : 'ar'; // default to Arabic
+    try {
+      const saved = localStorage.getItem('eye_language');
+      return (saved === 'en' || saved === 'ar') ? saved : 'ar'; // default to Arabic
+    } catch {
+      return 'ar';
+    }
   });
 
   const setLanguage = (lang: Language) => {
     setLanguageState(lang);
-    localStorage.setItem('eye_language', lang);
+    try {
+      localStorage.setItem('eye_language', lang);
+    } catch {}
   };
 
   useEffect(() => {

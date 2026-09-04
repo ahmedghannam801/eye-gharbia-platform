@@ -39,10 +39,14 @@ export class ErrorBoundary extends Component<Props, State> {
       error?.name === 'ChunkLoadError';
 
     if (isChunkFailure) {
-      const reloadKey = 'eye_chunk_reload_attempt';
-      const lastReload = sessionStorage.getItem(reloadKey);
-      if (!lastReload || Date.now() - Number(lastReload) > 10000) {
-        sessionStorage.setItem(reloadKey, String(Date.now()));
+      try {
+        const reloadKey = 'eye_chunk_reload_attempt';
+        const lastReload = sessionStorage.getItem(reloadKey);
+        if (!lastReload || Date.now() - Number(lastReload) > 10000) {
+          sessionStorage.setItem(reloadKey, String(Date.now()));
+          window.location.reload();
+        }
+      } catch {
         window.location.reload();
       }
     }

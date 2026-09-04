@@ -2,17 +2,38 @@
 <html lang="ar" dir="rtl" translate="no" class="notranslate dark">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#080d1a" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="EYE Hub" />
     <meta name="google" content="notranslate" />
     <meta name="referrer" content="strict-origin-when-cross-origin" />
     <meta http-equiv="X-Content-Type-Options" content="nosniff" />
 
-    <!-- Immediate theme initializer to avoid light flicker -->
+    <!-- Safe storage probe & immediate theme initializer to avoid light flicker -->
     <script>
       (function() {
+        // Safe storage probe for iOS Private Browsing / restricted WebViews
+        try {
+          var probe = '__eye_probe__';
+          window.localStorage.setItem(probe, '1');
+          window.localStorage.removeItem(probe);
+        } catch (e) {
+          try {
+            var mem = {};
+            window.localStorage = {
+              getItem: function(k) { return mem[k] || null; },
+              setItem: function(k, v) { mem[k] = String(v); },
+              removeItem: function(k) { delete mem[k]; },
+              clear: function() { mem = {}; },
+              key: function(i) { return Object.keys(mem)[i] || null; },
+              get length() { return Object.keys(mem).length; }
+            };
+          } catch (x) {}
+        }
+
         try {
           var saved = localStorage.getItem('eye_theme_v2');
           if (saved === 'light') {
@@ -26,7 +47,6 @@
       })();
     </script>
 
-
     <link rel="icon" type="image/png" href="/eye-logo.png" />
     <link rel="apple-touch-icon" href="/eye-logo.png" />
     <link rel="manifest" href="/manifest.json" />
@@ -35,12 +55,27 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400;1,700&family=Aref+Ruqaa:wght@400;700&family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">
     <title>EYE Tasks & Workflow Hub</title>
-
-    <!-- OneSignal Web Push SDK Loader (Auto-initialized when App ID is configured) -->
-    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
   </head>
   <body>
     <div id="root"></div>
+
+    <!-- Crash Guard for iOS/Mobile: Displays graceful recovery UI if early bundle execution fails -->
+    <script>
+      window.addEventListener('error', function(e) {
+        var root = document.getElementById('root');
+        if (root && (!root.innerHTML || root.innerHTML.trim() === '')) {
+          root.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#080d1a;color:#fff;font-family:sans-serif;padding:24px;text-align:center;direction:rtl;">' +
+            '<div style="max-width:380px;background:#111a30;padding:28px;border-radius:24px;border:1px solid #243763;box-shadow:0 12px 36px rgba(0,0,0,0.5);">' +
+              '<div style="font-size:40px;margin-bottom:14px;">📱</div>' +
+              '<h3 style="margin:0 0 10px;font-size:18px;font-weight:900;color:#f1f5f9;">تحديث المنصة</h3>' +
+              '<p style="font-size:13px;color:#94a3b8;line-height:1.7;margin-bottom:22px;">تم تحديث نسخة المنصة مؤخراً. اضغط على الزر أدناه لإعادة فتح وتحديث المنصة بنجاح.</p>' +
+              '<button onclick="try{localStorage.clear();sessionStorage.clear();}catch(x){};window.location.reload(true);" style="background:#2b66ff;color:#fff;border:none;padding:14px 20px;border-radius:14px;font-weight:bold;font-size:14px;cursor:pointer;width:100%;box-shadow:0 4px 14px rgba(43,102,255,0.4);">تحديث وإعادة فتح المنصة ⚡</button>' +
+            '</div>' +
+          '</div>';
+        }
+      }, { once: true });
+    </script>
+
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -190,7 +190,8 @@ export default function App() {
       if (hasRecoveryType || isPasswordRecovery) {
         isPasswordRecovery = true;
         try {
-          await db.init();
+          const initTimeout = new Promise((resolve) => setTimeout(resolve, 6000));
+          await Promise.race([db.init(), initTimeout]);
         } catch (err) {
           console.warn('[App] DB init warning during recovery:', err);
         }
@@ -215,7 +216,8 @@ export default function App() {
       }
 
       try {
-        await db.init();
+        const initTimeout = new Promise((resolve) => setTimeout(resolve, 6000));
+        await Promise.race([db.init(), initTimeout]);
       } catch (err) {
         console.warn('[App] DB init warning:', err);
       } finally {

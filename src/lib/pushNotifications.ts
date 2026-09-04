@@ -16,7 +16,17 @@ declare global {
 // ── Browser & Platform Checks ──────────────────────────────────────────────
 
 export const isPushSupported = (): boolean => {
-  return typeof window !== 'undefined' && 'Notification' in window && 'serviceWorker' in navigator;
+  try {
+    return (
+      typeof window !== 'undefined' &&
+      typeof Notification !== 'undefined' &&
+      'Notification' in window &&
+      'serviceWorker' in navigator &&
+      'PushManager' in window
+    );
+  } catch {
+    return false;
+  }
 };
 
 export const isIOS = (): boolean => {
@@ -30,15 +40,15 @@ export const isStandalonePWA = (): boolean => {
 };
 
 export const getPushPermissionState = (): NotificationPermission => {
-  if (!isPushSupported()) return 'denied';
+  if (!isPushSupported() || typeof Notification === 'undefined') return 'denied';
   return Notification.permission;
 };
 
 export const savePushSubscriptionToSupabase = async () => {
-  if (!isPushSupported() || Notification.permission !== 'granted') return;
+  if (!isPushSupported() || typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
   try {
     const reg = await registerServiceWorker();
-    if (!reg) return;
+    if (!reg || !reg.pushManager) return;
 
     let sub = await reg.pushManager.getSubscription();
     if (sub) {
@@ -63,8 +73,7 @@ export const savePushSubscriptionToSupabase = async () => {
 };
 
 export const requestPushPermission = async (fromUserAction: boolean = false): Promise<NotificationPermission> => {
-  if (!isPushSupported()) {
-    console.warn('[EYE Push] Browser or device does not support Web Push notifications.');
+  if (!isPushSupported() || typeof Notification === 'undefined') {
     return 'denied';
   }
 
@@ -97,24 +106,41 @@ export const requestPushPermission = async (fromUserAction: boolean = false): Pr
 // ── OneSignal Push SDK Initializer ─────────────────────────────────────────
 
 export const initOneSignalPush = (appId?: string) => {
-  const targetAppId = appId || localStorage.getItem('eye_onesignal_app_id') || '00000000-0000-0000-0000-000000000000';
-  if (!targetAppId || targetAppId.startsWith('00000000')) {
-    console.log('[EYE Push] OneSignal App ID not set. Using Native Web Push / ServiceWorker fallback.');
+  let targetAppId = '';
+  try {
+    targetAppId = appId || localStorage.getItem('eye_onesignal_app_id') || '00000000-0000-0000-0000-000000000000';
+  } catch {
     return;
+  }
+  if (!targetAppId || targetAppId.startsWith('00000000')) {
+    return;
+  }
+
+  // Dynamically inject OneSignal script only when valid App ID is configured
+  if (typeof document !== 'undefined' && !document.getElementById('onesignal-sdk-script')) {
+    const script = document.createElement('script');
+    script.id = 'onesignal-sdk-script';
+    script.src = 'https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js';
+    script.defer = true;
+    document.head.appendChild(script);
   }
 
   window.OneSignalDeferred = window.OneSignalDeferred || [];
   window.OneSignalDeferred.push(async function (OneSignal: any) {
-    await OneSignal.init({
-      appId: targetAppId,
-      allowLocalhostAsSecureOrigin: true,
-      serviceWorkerParam: { scope: '/' },
-      serviceWorkerPath: 'sw.js',
-      notifyButton: {
-        enable: false,
-      },
-    });
-    console.log('[EYE Push] OneSignal Push initialized successfully.');
+    try {
+      await OneSignal.init({
+        appId: targetAppId,
+        allowLocalhostAsSecureOrigin: true,
+        serviceWorkerParam: { scope: '/' },
+        serviceWorkerPath: 'sw.js',
+        notifyButton: {
+          enable: false,
+        },
+      });
+      console.log('[EYE Push] OneSignal Push initialized successfully.');
+    } catch (e) {
+      console.warn('[EYE Push] OneSignal initialization failed:', e);
+    }
   });
 };
 
@@ -249,20 +275,22 @@ export interface ReengagementContext {
 
 export const checkAndSendReengagementNotif = async (ctx: ReengagementContext): Promise<void> => {
   if (!('serviceWorker' in navigator)) return;
-  if (Notification.permission !== 'granted') return;
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
   const sw = navigator.serviceWorker.controller;
   if (!sw) return;
-  sw.postMessage({
-    type: 'CHECK_REENGAGEMENT',
-    user: ctx.userId,
-    pendingTasks: ctx.pendingTasks,
-    upcomingMeetings: ctx.upcomingMeetings,
-    upcomingSessions: ctx.upcomingSessions,
-  });
+  try {
+    sw.postMessage({
+      type: 'CHECK_REENGAGEMENT',
+      user: ctx.userId,
+      pendingTasks: ctx.pendingTasks,
+      upcomingMeetings: ctx.upcomingMeetings,
+      upcomingSessions: ctx.upcomingSessions,
+    });
+  } catch {}
 };
 
 export const registerPeriodicSync = async (): Promise<void> => {
-  if (!_swRegistration) return;
+  if (!_swRegistration || !('periodicSync' in _swRegistration)) return;
   try {
     // @ts-ignore
     const status = await navigator.permissions.query({ name: 'periodic-background-sync' });
