@@ -1251,12 +1251,53 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
       try {
         db.addNotification(
           currentUser.id,
-          'تم تسليم حلك بنجاح ✅',
+          'تم تسليم التكليف بنجاح ✅',
           `تم استلام حلك لمهمة "${selectedTask.name}" بنجاح (${uploadFiles.length} مرفقات) وجاري مراجعته وتقييمه من قِبل المشرفين.`,
-          'success'
+          'success',
+          selectedTask.id
         );
       } catch (selfNotifErr) {
         // ignore
+      }
+
+      // ── Step 5: Update local cache, flags and clean invalid notifications ──
+      try {
+        const subsList = db.getSubmissions();
+        const existingIdx = subsList.findIndex(s => s.taskId === selectedTask.id && s.memberId === currentUser.id);
+        const subRecord: Submission = {
+          id: existingRows?.id || `sub-${Date.now()}`,
+          taskId: selectedTask.id,
+          taskName: selectedTask.name,
+          memberId: currentUser.id,
+          memberName: currentUser.fullName,
+          memberEmail: currentUser.email,
+          committee: userComm,
+          department: userDept,
+          submittedAt: now,
+          status: 'Pending',
+          fileUrl: primaryUrl,
+          fileName: submittedFileName,
+          fileSize: submittedFileSize,
+          attachments: uploadedAttachments,
+          submissionIdCode: existingRows ? existingRows.submission_id_code : `TASK-${String(Date.now()).slice(-6)}`,
+          completedSubtasks: localCompletedSubtasks,
+          history: submissionRow.history,
+        };
+
+        if (existingIdx !== -1) {
+          subsList[existingIdx] = subRecord;
+        } else {
+          subsList.unshift(subRecord);
+        }
+        (db as any)._lsSave('eye_submissions', subsList);
+        (db as any).notify();
+
+        localStorage.setItem(`eye_notif_missed_${selectedTask.id}_${currentUser.id}`, 'submitted');
+        localStorage.setItem(`eye_notif_24h_${selectedTask.id}_${currentUser.id}`, 'submitted');
+        localStorage.setItem(`eye_notif_5h_${selectedTask.id}_${currentUser.id}`, 'submitted');
+        db.cleanInvalidMissedDeadlineNotifications(currentUser.id);
+      } catch (cacheErr) {
+        console.warn('[TaskBoard] Local cache sync warning:', cacheErr);
       }
 
       setUploadProgress(100);

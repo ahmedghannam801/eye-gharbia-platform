@@ -993,7 +993,8 @@ class SupabaseDatabase {
 
     if (submissions.data) {
       const remoteSubmissions = submissions.data.map(submissionFromRow);
-      this.cache.submissions = remoteSubmissions.filter(s => !deletedSubIds.includes(s.id));
+      const localSubmissions = this._ls<Submission>('eye_submissions');
+      this.cache.submissions = mergeById(remoteSubmissions, localSubmissions, deletedSubIds);
       this._lsSave('eye_submissions', this.cache.submissions);
     } else {
       const localSubmissions = this._ls<Submission>('eye_submissions');
@@ -1022,6 +1023,11 @@ class SupabaseDatabase {
       this.cache.notifications = localNotifs.filter(n => !deletedNotifIds.includes(n.id));
       this._lsSave('eye_notifications', this.cache.notifications);
     }
+
+    // Auto-clean any invalid missed deadline notifications if user has submitted
+    try {
+      this.cleanInvalidMissedDeadlineNotifications();
+    } catch {}
 
     if (logs.data) this.cache.logs = logs.data.map(logFromRow);
 
@@ -3284,6 +3290,23 @@ class SupabaseDatabase {
         task.id  // ◀── task id (so leader can open the task and see the new submission)
       );
     });
+
+    // Notify the member that their submission was received successfully
+    this.addNotification(
+      member.id,
+      'تم تسليم التكليف بنجاح ✅',
+      `تم استلام حلك لتكليف "${task.name}" بنجاح وجاري مراجعته وتقييمه من قِبل إدارة اللجنة.`,
+      'success',
+      task.id
+    );
+
+    // Prevent any future missed deadline notification and clean up any erroneous ones
+    try {
+      localStorage.setItem(`eye_notif_missed_${task.id}_${member.id}`, 'submitted');
+      localStorage.setItem(`eye_notif_24h_${task.id}_${member.id}`, 'submitted');
+      localStorage.setItem(`eye_notif_5h_${task.id}_${member.id}`, 'submitted');
+    } catch {}
+    this.cleanInvalidMissedDeadlineNotifications(member.id);
 
     // Dispatch Email Alerts to all active leaders of the assigned committee
     const leaderEmails = leaders.map(l => l.email).filter(Boolean);
@@ -8456,32 +8479,125 @@ class SupabaseDatabase {
     return list.filter(d => d.templateId === templateId && d.recipientId === recipientId).length;
   }
 
-  checkDeadlineNotifications(): void {
-    const tasks = this.getTasks().filter(t => t.status === 'Published');
-    const users = this.getUsers().filter(u => u.status === 'Active');
+  /**
+   * Cleans up erroneous "missed deadline" notifications for any user who has actually submitted the task
+   */
+  cleanInvalidMissedDeadlineNotifications(memberId?: string): void {
     const submissions = this.getSubmissions();
+    const notifications = this.cache.notifications;
+    const targetUserId = memberId || this.cache.currentUser?.id;
+
+    const invalidNotifIds: string[] = [];
+    notifications.forEach(n => {
+      if (targetUserId && String(n.userId).trim() !== String(targetUserId).trim()) return;
+
+      const isMissedNotif = n.title?.includes('فاتك') || 
+        (n.type === 'error' && (n.message?.includes('انتهى الموعد النهائي') || n.message?.includes('تسليم')));
+
+      if (isMissedNotif && n.relatedId) {
+        const hasSubmitted = submissions.some(s => 
+          String(s.taskId).trim() === String(n.relatedId).trim() && 
+          String(s.memberId).trim() === String(n.userId).trim()
+        );
+        if (hasSubmitted) {
+          invalidNotifIds.push(n.id);
+        }
+      }
+    });
+
+    if (invalidNotifIds.length > 0) {
+      this.cache.notifications = this.cache.notifications.filter(n => !invalidNotifIds.includes(n.id));
+      this._lsSave('eye_notifications', this.cache.notifications);
+      this.notify();
+
+      if (isSupabaseConfigured && supabase) {
+        supabase
+          .from('notifications')
+          .delete()
+          .in('id', invalidNotifIds)
+          .then(({ error }) => {
+            if (error) console.warn('[Supabase Prune Missed Notifications Error]:', error.message || error);
+          })
+          .catch(() => {});
+      }
+    }
+  }
+
+  checkDeadlineNotifications(): void {
+    const activeUser = this.cache.currentUser;
+    const tasks = this.getTasks().filter(t => t.status === 'Published');
+    const submissions = this.getSubmissions();
+    const excuses = this.getExcuses();
+    const notifications = this.cache.notifications;
+
+    // Prioritize checking for the current logged-in user in this browser session.
+    // If no active user is set, check all active users.
+    const usersToCheck = activeUser ? [activeUser] : this.getUsers().filter(u => u.status === 'Active');
 
     tasks.forEach(task => {
       if (!task.deadline) return;
       const deadlineTime = new Date(task.deadline).getTime();
+      if (isNaN(deadlineTime)) return;
       const now = Date.now();
       const hoursLeft = (deadlineTime - now) / (1000 * 60 * 60);
 
-      // Target members for this task (matching committee and department or All)
-      const targetUsers = users.filter(u => {
-        const matchComm = task.committee === 'All' || u.committee === task.committee;
-        const matchDept = !task.department || task.department === 'All' || task.department === 'General' || task.department === 'None' || u.department === task.department;
-        return matchComm && matchDept;
-      });
+      usersToCheck.forEach(member => {
+        if (member.status !== 'Active') return;
 
-      targetUsers.forEach(member => {
-        const hasSubmitted = submissions.some(s => s.taskId === task.id && s.memberId === member.id && (s.status === 'Accepted' || s.status === 'Pending'));
-        if (hasSubmitted) return;
+        // 1. Check if user is targeted by this task
+        const isSpecificallyAssigned = Array.isArray(task.assignedMemberIds) && task.assignedMemberIds.length > 0;
+        if (isSpecificallyAssigned) {
+          const isAssigned = task.assignedMemberIds.some(id => String(id).trim() === String(member.id).trim());
+          if (!isAssigned) return;
+        } else {
+          // If task is general, only Members are expected to submit solutions
+          if (member.role !== 'Member') return;
 
-        // 24-hour reminder
+          // Check governorate match if set
+          if (task.governorate && member.governorate && task.governorate !== 'All' && task.governorate !== member.governorate) {
+            return;
+          }
+
+          const isHrmTask = task.committee === 'HR' || task.committee === 'HRM';
+          const isHrmUser = member.committee === 'HR' || member.committee === 'HRM' || member.department === 'HRM';
+          const matchComm = task.committee === 'All' || (isHrmTask ? isHrmUser : member.committee === task.committee);
+          const matchDept = !task.department || task.department === 'All' || task.department === 'General' || task.department === 'None' || member.department === task.department;
+          if (!matchComm || !matchDept) return;
+        }
+
+        // 2. Check if member has already submitted this task (ANY submission status counts)
+        const hasSubmitted = submissions.some(s => 
+          String(s.taskId).trim() === String(task.id).trim() && 
+          String(s.memberId).trim() === String(member.id).trim()
+        );
+
+        // If member already submitted, mark localStorage and NEVER send missed or reminder notifications!
+        if (hasSubmitted) {
+          const keyMissed = `eye_notif_missed_${task.id}_${member.id}`;
+          try {
+            localStorage.setItem(keyMissed, 'submitted');
+          } catch {}
+          return;
+        }
+
+        // 3. Check if member has an approved excuse for this task
+        const hasApprovedExcuse = excuses.some(e =>
+          (e.status === 'Accepted' || e.status === 'مقبول' || e.status === 'Approved') &&
+          String(e.memberId || e.userId).trim() === String(member.id).trim() &&
+          ((e.targetId && String(e.targetId).trim() === String(task.id).trim()) ||
+           (e.targetTitle && task.name && e.targetTitle.trim().toLowerCase() === task.name.trim().toLowerCase()))
+        );
+        if (hasApprovedExcuse) return;
+
+        // 4. 24-hour reminder
         if (hoursLeft > 5 && hoursLeft <= 24) {
           const key24h = `eye_notif_24h_${task.id}_${member.id}_${new Date().toISOString().split('T')[0]}`;
-          if (!localStorage.getItem(key24h)) {
+          const alreadyNotified = localStorage.getItem(key24h) || notifications.some(n => 
+            String(n.userId).trim() === String(member.id).trim() && 
+            String(n.relatedId).trim() === String(task.id).trim() && 
+            n.title?.includes('24 ساعة')
+          );
+          if (!alreadyNotified) {
             try {
               localStorage.setItem(key24h, 'true');
               this.addNotification(
@@ -8495,10 +8611,15 @@ class SupabaseDatabase {
           }
         }
 
-        // 5-hour reminder
+        // 5. 5-hour reminder
         if (hoursLeft > 0 && hoursLeft <= 5) {
           const key5h = `eye_notif_5h_${task.id}_${member.id}`;
-          if (!localStorage.getItem(key5h)) {
+          const alreadyNotified = localStorage.getItem(key5h) || notifications.some(n => 
+            String(n.userId).trim() === String(member.id).trim() && 
+            String(n.relatedId).trim() === String(task.id).trim() && 
+            n.title?.includes('5 ساعات')
+          );
+          if (!alreadyNotified) {
             try {
               localStorage.setItem(key5h, 'true');
               this.addNotification(
@@ -8512,10 +8633,15 @@ class SupabaseDatabase {
           }
         }
 
-        // Missed deadline notification (within 24h after deadline)
-        if (hoursLeft <= 0 && hoursLeft >= -24) {
+        // 6. Missed deadline notification (deadline has passed AND member has NOT submitted)
+        if (hoursLeft <= 0) {
           const keyMissed = `eye_notif_missed_${task.id}_${member.id}`;
-          if (!localStorage.getItem(keyMissed)) {
+          const alreadyNotified = localStorage.getItem(keyMissed) || notifications.some(n =>
+            String(n.userId).trim() === String(member.id).trim() &&
+            String(n.relatedId).trim() === String(task.id).trim() &&
+            (n.title?.includes('فاتك') || n.title?.includes('انتهى الموعد'))
+          );
+          if (!alreadyNotified) {
             try {
               localStorage.setItem(keyMissed, 'true');
               this.addNotification(

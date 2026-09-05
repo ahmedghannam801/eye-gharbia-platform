@@ -337,28 +337,50 @@ export default function App() {
         const tasks = db.getTasks().filter(t => t.status === 'Published');
         const subs = db.getSubmissions();
         tasks.forEach(task => {
+          if (!task.deadline) return;
           const deadline = new Date(task.deadline);
+          if (isNaN(deadline.getTime())) return;
+
           if (deadline > now && deadline <= in24h) {
-            const alreadySubmitted = subs.some(s => s.taskId === task.id && s.memberId === currentUser.id);
+            // Ensure task is targeted to current user
+            const isAssigned = Array.isArray(task.assignedMemberIds) && task.assignedMemberIds.length > 0;
+            if (isAssigned) {
+              if (!task.assignedMemberIds.some(id => String(id).trim() === String(currentUser.id).trim())) return;
+            } else {
+              const isHrmTask = task.committee === 'HR' || task.committee === 'HRM';
+              const isHrmUser = currentUser.committee === 'HR' || currentUser.committee === 'HRM' || currentUser.department === 'HRM';
+              const matchComm = task.committee === 'All' || (isHrmTask ? isHrmUser : currentUser.committee === task.committee);
+              const matchDept = !task.department || task.department === 'All' || task.department === 'General' || task.department === 'None' || currentUser.department === task.department;
+              if (!matchComm || !matchDept) return;
+            }
+
+            const alreadySubmitted = subs.some(s => 
+              String(s.taskId).trim() === String(task.id).trim() && 
+              String(s.memberId).trim() === String(currentUser.id).trim()
+            );
             if (!alreadySubmitted) {
-              // Fire push notification
-              // Send reminder email (push is already triggered once inside addNotificationsBulk)
-              const deadlineStr = deadline.toLocaleString('ar-EG');
-              const html = `
-                <div dir="rtl" style="font-family:'Cairo',Tahoma,Arial,sans-serif;text-align:right;padding:20px;border:1px solid #e2e8f0;border-radius:12px;max-width:600px;margin:0 auto;background:#fff;color:#1e293b;">
-                  <div style="text-align:center;margin-bottom:20px;border-bottom:2px solid #f59e0b;padding-bottom:15px;">
-                    <h2 style="color:#f59e0b;margin:0;">EYE Tasks ⏰ تذكير بالموعد النهائي</h2>
-                  </div>
-                  <h3>مرحباً ${currentUser.fullName}،</h3>
-                  <p style="font-size:14px;line-height:1.6;">تذكير بأن مهمة <strong>${task.name}</strong> ستنتهي خلال أقل من 24 ساعة ولم تقم بالتسليم بعد.</p>
-                  <div style="background:#fffbeb;padding:15px;border-radius:8px;border-right:4px solid #f59e0b;">
-                    <p style="font-size:13px;color:#dc2626;"><strong>الموعد النهائي:</strong> ${deadlineStr}</p>
-                  </div>
-                  <div style="text-align:center;margin:25px 0 10px 0;">
-                    <a href="https://eye-workflow-hub.vercel.app" style="background:#f59e0b;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;font-weight:bold;display:inline-block;font-size:13px;">سارع وسلّم الآن</a>
-                  </div>
-                </div>`;
-              sendEmailAlert([currentUser.email], `[EYE Tasks] تذكير: موعد ${task.name} ينتهي خلال 24 ساعة`, html);
+              const emailKey = `eye_email_24h_${task.id}_${currentUser.id}_${now.toISOString().split('T')[0]}`;
+              if (!localStorage.getItem(emailKey)) {
+                try {
+                  localStorage.setItem(emailKey, 'true');
+                  const deadlineStr = deadline.toLocaleString('ar-EG');
+                  const html = `
+                    <div dir="rtl" style="font-family:'Cairo',Tahoma,Arial,sans-serif;text-align:right;padding:20px;border:1px solid #e2e8f0;border-radius:12px;max-width:600px;margin:0 auto;background:#fff;color:#1e293b;">
+                      <div style="text-align:center;margin-bottom:20px;border-bottom:2px solid #f59e0b;padding-bottom:15px;">
+                        <h2 style="color:#f59e0b;margin:0;">EYE Tasks ⏰ تذكير بالموعد النهائي</h2>
+                      </div>
+                      <h3>مرحباً ${currentUser.fullName}،</h3>
+                      <p style="font-size:14px;line-height:1.6;">تذكير بأن مهمة <strong>${task.name}</strong> ستنتهي خلال أقل من 24 ساعة ولم تقم بالتسليم بعد.</p>
+                      <div style="background:#fffbeb;padding:15px;border-radius:8px;border-right:4px solid #f59e0b;">
+                        <p style="font-size:13px;color:#dc2626;"><strong>الموعد النهائي:</strong> ${deadlineStr}</p>
+                      </div>
+                      <div style="text-align:center;margin:25px 0 10px 0;">
+                        <a href="https://eye-workflow-hub.vercel.app" style="background:#f59e0b;color:#fff;padding:12px 24px;text-decoration:none;border-radius:8px;font-weight:bold;display:inline-block;font-size:13px;">سارع وسلّم الآن</a>
+                      </div>
+                    </div>`;
+                  sendEmailAlert([currentUser.email], `[EYE Tasks] تذكير: موعد ${task.name} ينتهي خلال 24 ساعة`, html);
+                } catch {}
+              }
             }
           }
         });
