@@ -1644,8 +1644,22 @@ class SupabaseDatabase {
     emailInput: string,
     pass: string
   ): Promise<{ success: boolean; error?: string; user?: UserProfile }> {
-    const cleanInput = emailInput.trim().toLowerCase();
-    const cleanPass = pass.trim();
+    const rawTrimmed = (emailInput || '').replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
+    // Normalize Arabic-Indic digits (٠-٩) to English digits (0-9)
+    const normalizedDigits = rawTrimmed.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString());
+    const cleanInput = normalizedDigits.toLowerCase();
+
+    // Egyptian phone normalization helper
+    const normalizeEgyptianPhone = (p: string) => {
+      let digits = p.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString()).replace(/[^\d+]/g, '');
+      if (digits.startsWith('+20')) digits = '0' + digits.slice(3);
+      else if (digits.startsWith('0020')) digits = '0' + digits.slice(4);
+      else if (digits.startsWith('20') && digits.length === 12) digits = '0' + digits.slice(2);
+      else if (digits.length === 10 && digits.startsWith('1')) digits = '0' + digits;
+      return digits;
+    };
+    const cleanPhone = normalizeEgyptianPhone(rawTrimmed);
+    const cleanPass = (pass || '').trim();
 
     if (!cleanInput || !cleanPass) {
       return {
@@ -1659,16 +1673,38 @@ class SupabaseDatabase {
     let targetEmail: string = cleanInput;
 
     try {
-      const { data: dbProfile } = await supabase
-        .from('profiles')
-        .select('*')
-        .or(`email.ilike.${cleanInput},membership_code.ilike.${cleanInput},phone_number.eq.${cleanInput}`)
-        .maybeSingle();
+      const candidates = new Set<string>();
+      if (cleanInput) candidates.add(cleanInput);
+      if (rawTrimmed.toLowerCase() !== cleanInput) candidates.add(rawTrimmed.toLowerCase());
+      if (cleanPhone && cleanPhone.length >= 8) {
+        candidates.add(cleanPhone);
+        candidates.add('+20' + cleanPhone.replace(/^0/, ''));
+        candidates.add('20' + cleanPhone.replace(/^0/, ''));
+      }
 
-      if (dbProfile) {
-        targetProfile = userFromRow(dbProfile);
-        if (targetProfile.email) {
-          targetEmail = targetProfile.email.trim().toLowerCase();
+      const orClauses: string[] = [];
+      candidates.forEach(cand => {
+        const safeCand = cand.replace(/[,()]/g, '');
+        if (safeCand) {
+          orClauses.push(`email.ilike.${safeCand}`);
+          orClauses.push(`membership_code.ilike.${safeCand}`);
+          orClauses.push(`phone_number.eq.${safeCand}`);
+          orClauses.push(`full_name.ilike.${safeCand}`);
+        }
+      });
+
+      if (orClauses.length > 0) {
+        const { data: dbProfiles } = await supabase
+          .from('profiles')
+          .select('*')
+          .or(orClauses.join(','))
+          .limit(1);
+
+        if (dbProfiles && dbProfiles.length > 0) {
+          targetProfile = userFromRow(dbProfiles[0]);
+          if (targetProfile.email) {
+            targetEmail = targetProfile.email.trim().toLowerCase();
+          }
         }
       }
     } catch (err) {
@@ -1677,11 +1713,21 @@ class SupabaseDatabase {
 
     if (!targetProfile) {
       const allUsers = this.cache.users.length > 0 ? this.cache.users : this._ls<UserProfile>('eye_users');
-      const matchedUser = allUsers.find(
-        u => (u.email && u.email.trim().toLowerCase() === cleanInput) ||
-             (u.membershipCode && u.membershipCode.trim().toLowerCase() === cleanInput) ||
-             (u.phoneNumber && u.phoneNumber.trim() === cleanInput)
-      );
+      const matchedUser = allUsers.find(u => {
+        const uEmail = u.email?.trim().toLowerCase();
+        const uCode = u.membershipCode?.trim().toLowerCase();
+        const uPhone = u.phoneNumber ? normalizeEgyptianPhone(u.phoneNumber) : '';
+        const uRawPhone = u.phoneNumber?.trim();
+        const uName = u.fullName?.trim().toLowerCase();
+
+        return (
+          (uEmail && (uEmail === cleanInput || uEmail === rawTrimmed.toLowerCase())) ||
+          (uCode && (uCode === cleanInput || uCode === rawTrimmed.toLowerCase())) ||
+          (cleanPhone && uPhone && uPhone === cleanPhone) ||
+          (uRawPhone && (uRawPhone === cleanInput || uRawPhone === rawTrimmed)) ||
+          (uName && (uName === cleanInput || uName === rawTrimmed.toLowerCase()))
+        );
+      });
       if (matchedUser) {
         targetProfile = matchedUser;
         if (matchedUser.email) {

@@ -145,7 +145,11 @@ export const Auth: React.FC<AuthProps> = ({
     setErrorMsg('');
     setSuccessMsg('');
 
-    const cleanEmail = loginEmail.trim();
+    // Normalize input: strip zero-width spaces and convert Arabic digits (٠-٩) to 0-9
+    const cleanEmail = loginEmail
+      .replace(/[\u200B-\u200D\uFEFF]/g, '')
+      .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString())
+      .trim();
     const cleanPassword = loginPassword.trim();
     const cleanGovernorate = 'الغربية';
 
@@ -521,6 +525,10 @@ export const Auth: React.FC<AuthProps> = ({
                       value={loginEmail}
                       onChange={(e) => setLoginEmail(e.target.value)}
                       placeholder={language === 'ar' ? 'البريد الإلكتروني أو رقم الهاتف أو كود العضوية...' : 'Email, Phone, or Membership Code...'}
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      autoComplete="username"
                       className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl ps-10 pe-4 py-3 text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-eye-brand focus:ring-1 focus:ring-eye-brand font-semibold"
                     />
                   </div>
@@ -545,6 +553,10 @@ export const Auth: React.FC<AuthProps> = ({
                       onChange={(e) => setLoginPassword(e.target.value.replace(/\s+/g, ''))}
                       onKeyDown={(e) => { if (e.key === ' ') e.preventDefault(); }}
                       placeholder="••••••••"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      autoComplete="current-password"
                       className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl ps-10 pe-10 py-3 text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-eye-brand focus:ring-1 focus:ring-eye-brand font-semibold"
                     />
                     <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute end-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
