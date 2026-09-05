@@ -1,13 +1,13 @@
 import React, { useState, useEffect, Component, ErrorInfo, ReactNode } from 'react';
 import { db } from '../db/localDb';
 import { supabase, isSupabaseConfigured, getPermanentStorageUrl } from '../lib/supabaseClient';
-import { Task, Submission, UserProfile, COMMITTEE_STRUCTURE, TaskPriority, TaskStatus, SubmissionStatus } from '../types';
+import { Task, Submission, SubmissionAttachment, UserProfile, COMMITTEE_STRUCTURE, TaskPriority, TaskStatus, SubmissionStatus } from '../types';
 import {
   FolderKanban, CheckSquare, Plus, FileText, Calendar, ShieldAlert, ArrowUpRight,
   UploadCloud, CheckCircle2, XCircle, RefreshCw, Send, Paperclip, MessageSquare,
-  AlertTriangle, File, HelpCircle, ChevronRight, CornerDownRight, Download, Trash2, Search,
+  AlertTriangle, File, HelpCircle, ChevronRight, ChevronLeft, CornerDownRight, Download, Trash2, Search,
   Star, Award, Users, Video, Target, UserCheck, Check, Clock, Eye, Layers, Filter, X,
-  FileSpreadsheet, Loader2, Edit3, ExternalLink, Copy, Play
+  FileSpreadsheet, Loader2, Edit3, ExternalLink, Copy, Play, Image
 } from 'lucide-react';
 import { useLanguage } from '../lib/LanguageContext';
 import { downloadCertificate } from '../lib/certificateGenerator';
@@ -406,21 +406,168 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
     return deptMap[d] || d;
   };
 
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [submissions, setSubmissions] = useState<Submission[]>([]);
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const isImageFile = (nameOrUrl: string) => {
+    if (!nameOrUrl) return false;
+    const lower = nameOrUrl.toLowerCase();
+    return (
+      lower.endsWith('.png') ||
+      lower.endsWith('.jpg') ||
+      lower.endsWith('.jpeg') ||
+      lower.endsWith('.webp') ||
+      lower.endsWith('.gif') ||
+      lower.endsWith('.svg') ||
+      lower.endsWith('.bmp') ||
+      lower.startsWith('data:image') ||
+      lower.includes('image/')
+    );
+  };
+
+  const getSubmissionAttachments = (sub?: Submission | null): SubmissionAttachment[] => {
+    if (!sub) return [];
+    if (sub.attachments && Array.isArray(sub.attachments) && sub.attachments.length > 0) {
+      return sub.attachments;
+    }
+    if (typeof sub.fileUrl === 'string' && sub.fileUrl.trim().startsWith('[')) {
+      try {
+        const parsed = JSON.parse(sub.fileUrl);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((a: any) => ({
+            name: a.name || 'ملف مرفق',
+            url: a.url || a.fileUrl || '',
+            size: a.size || a.fileSize || '',
+          }));
+        }
+      } catch {}
+    }
+    if (sub.fileUrl) {
+      return [{
+        name: sub.fileName || 'ملف الحل',
+        url: sub.fileUrl,
+        size: sub.fileSize || '',
+      }];
+    }
+    return [];
+  };
+
+  const parseSubmissionAttachments = (r: any): SubmissionAttachment[] => {
+    if (r.attachments && Array.isArray(r.attachments) && r.attachments.length > 0) {
+      return r.attachments.map((a: any) => ({
+        name: a.name || 'ملف مرفق',
+        url: getPermanentStorageUrl(a.url || a.fileUrl || ''),
+        size: a.size || a.fileSize || '',
+      }));
+    }
+    if (typeof r.file_url === 'string' && r.file_url.trim().startsWith('[')) {
+      try {
+        const parsed = JSON.parse(r.file_url);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((a: any) => ({
+            name: a.name || 'ملف مرفق',
+            url: getPermanentStorageUrl(a.url || a.fileUrl || ''),
+            size: a.size || a.fileSize || '',
+          }));
+        }
+      } catch {}
+    }
+    if (r.file_url) {
+      return [{
+        name: r.file_name || 'ملف الحل',
+        url: getPermanentStorageUrl(r.file_url),
+        size: r.file_size || '',
+      }];
+    }
+    return [];
+  };
+
+  // Helper to filter tasks strictly for a member
+  const filterTasksForUser = (allTasks: Task[], user?: UserProfile) => {
+    if (!user || user.role !== 'Member') return allTasks;
+    return allTasks.filter(t => {
+      if (!t || t.status !== 'Published') return false;
+      if (!t.committee || t.committee === 'All' || t.committee === 'None' || t.committee === 'General') {
+        return true;
+      }
+      if (t.targetAudience === 'specific_members') {
+        return Array.isArray(t.assignedMemberIds) && t.assignedMemberIds.includes(user.id);
+      }
+      const userComm = user.committee || 'All';
+      const matchComm = userComm === 'All' || userComm === t.committee;
+      if (!matchComm) return false;
+      if (
+        t.targetAudience === 'all_committee' ||
+        !t.department ||
+        t.department === 'All' ||
+        t.department === 'General' ||
+        t.department === 'None'
+      ) {
+        return true;
+      }
+      const userDept = (user.department || '').trim().toLowerCase();
+      const taskDept = (t.department || '').trim().toLowerCase();
+      if (!userDept || userDept === 'general' || userDept === 'none' || userDept === 'all') return true;
+      return taskDept === userDept;
+    });
+  };
+
+  const [tasks, setTasks] = useState<Task[]>(() => {
+    try {
+      const deletedTaskIds: string[] = JSON.parse(localStorage.getItem('eye_deleted_task_ids') || '[]');
+      const cached = db.getTasks(currentUser).filter(t => !deletedTaskIds.includes(t.id));
+      return filterTasksForUser(cached, currentUser);
+    } catch {
+      return [];
+    }
+  });
+
+  const [submissions, setSubmissions] = useState<Submission[]>(() => {
+    try {
+      const cached = db.getSubmissions();
+      if (currentUser?.role === 'Member') {
+        return cached.filter(s => s && s.memberId === currentUser.id);
+      }
+      return cached;
+    } catch {
+      return [];
+    }
+  });
+
+  const [selectedTask, setSelectedTask] = useState<Task | null>(() => {
+    try {
+      const deletedTaskIds: string[] = JSON.parse(localStorage.getItem('eye_deleted_task_ids') || '[]');
+      const cached = db.getTasks(currentUser).filter(t => !deletedTaskIds.includes(t.id));
+      const userTasks = filterTasksForUser(cached, currentUser);
+      if (selectedTaskIdFromNotification) {
+        const match = userTasks.find(t => t.id === selectedTaskIdFromNotification);
+        if (match) return match;
+      }
+      if (userTasks.length > 0) {
+        const userSubs = db.getSubmissions().filter(s => s && s.memberId === currentUser?.id);
+        const pending = userTasks.find(t => !userSubs.some(s => s.taskId === t.id && s.status === 'Accepted'));
+        return pending || userTasks[0];
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  });
+
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
 
   // Filter States
-  const [filterCommittee, setFilterCommittee] = useState('All');
-  const [filterDepartment, setFilterDepartment] = useState('All');
+  const [filterCommittee, setFilterCommittee] = useState(currentUser?.role === 'Member' ? (currentUser.committee || 'All') : 'All');
+  const [filterDepartment, setFilterDepartment] = useState(currentUser?.role === 'Member' ? (currentUser.department || 'All') : 'All');
   const [filterPriority, setFilterPriority] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Modals
   const [showCreateTaskModal, setShowCreateTaskModal] = useState(false);
   const [showReviewModal, setShowReviewModal] = useState(false);
-  const [previewAttachment, setPreviewAttachment] = useState<{ name: string; url: string } | null>(null);
+  const [previewAttachment, setPreviewAttachment] = useState<{
+    name: string;
+    url: string;
+    allAttachments?: { name: string; url: string; size?: string }[];
+    currentIndex?: number;
+  } | null>(null);
   const [showExtendDeadlineModal, setShowExtendDeadlineModal] = useState(false);
   const [extendDeadlineValue, setExtendDeadlineValue] = useState('');
   const [isExtendingDeadline, setIsExtendingDeadline] = useState(false);
@@ -463,9 +610,9 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
   const [memberSearchQuery, setMemberSearchQuery] = useState('');
 
-  // Member Upload States
+  // Member Upload States (Supports multiple files and photos)
   const [dragActive, setDragActive] = useState(false);
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
   const [customFileName, setCustomFileName] = useState('');
@@ -611,6 +758,9 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
 
       const allSubs: Submission[] = (rawSubs || []).map((r: any): Submission => {
         const memberProfile = usersList.find(u => u.id === r.member_id);
+        const atts = parseSubmissionAttachments(r);
+        const primaryUrl = atts.length > 0 ? atts[0].url : getPermanentStorageUrl(r.file_url);
+        const primaryName = atts.length > 0 ? atts[0].name : (r.file_name || 'ملف الحل');
         return {
           id: r.id,
           taskId: r.task_id,
@@ -622,9 +772,10 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
           department: r.department || memberProfile?.department || 'General',
           submittedAt: r.submitted_at,
           status: r.status,
-          fileUrl: r.file_url,
-          fileName: r.file_name,
+          fileUrl: primaryUrl,
+          fileName: r.file_name || primaryName,
           fileSize: r.file_size,
+          attachments: atts,
           comment: r.comment,
           rejectionReason: r.rejection_reason,
           submissionIdCode: r.submission_id_code,
@@ -689,8 +840,9 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
       if (selectedTask) {
         const refreshed = allTasks.find(t => t && t.id === selectedTask.id);
         if (refreshed) setSelectedTask(refreshed);
-      } else if (filteredTasks.length > 0 && !selectedTask) {
-        setSelectedTask(filteredTasks[0]);
+      } else if (filteredTasks.length > 0) {
+        const pending = filteredTasks.find(t => !filteredSubs.some(s => s.taskId === t.id && s.status === 'Accepted'));
+        setSelectedTask(pending || filteredTasks[0]);
       }
     } catch (err) {
       console.error('Error loading taskboard data:', err);
@@ -859,12 +1011,19 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setUploadFile(file);
-      setCustomFileName(file.name);
-      setCustomFileSize(`${(file.size / (1024 * 1024)).toFixed(2)} MB`);
+    if (e.target.files && e.target.files.length > 0) {
+      const selected = Array.from(e.target.files);
+      setUploadFiles(prev => {
+        const combined = [...prev];
+        selected.forEach(file => {
+          if (!combined.some(f => f.name === file.name && f.size === file.size)) {
+            combined.push(file);
+          }
+        });
+        return combined;
+      });
       setUploadError('');
+      e.target.value = '';
     }
   };
 
@@ -882,91 +1041,101 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      const file = e.dataTransfer.files[0];
-      setUploadFile(file);
-      setCustomFileName(file.name);
-      setCustomFileSize(`${(file.size / (1024 * 1024)).toFixed(2)} MB`);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const dropped = Array.from(e.dataTransfer.files);
+      setUploadFiles(prev => {
+        const combined = [...prev];
+        dropped.forEach(file => {
+          if (!combined.some(f => f.name === file.name && f.size === file.size)) {
+            combined.push(file);
+          }
+        });
+        return combined;
+      });
       setUploadError('');
     }
   };
 
+  const removeUploadFile = (index: number) => {
+    setUploadFiles(prev => prev.filter((_, idx) => idx !== index));
+  };
+
   const handleFileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedTask || !uploadFile) {
-      setUploadError(language === 'ar' ? 'يرجى اختيار ملف التسليم أولاً' : 'Please select a file to upload');
+    if (!selectedTask || uploadFiles.length === 0) {
+      setUploadError(language === 'ar' ? 'يرجى اختيار صورة أو ملف التسليم أولاً' : 'Please select an image or file to upload');
       return;
     }
 
-    const maxSize = selectedTask.maxUploadSizeMb || 25;
-    const sizeMb = uploadFile.size / (1024 * 1024);
-    if (sizeMb > maxSize) {
-      setUploadError(language === 'ar' ? `حجم الملف يتجاوز الحد الأقصى (${maxSize} MB)` : `File exceeds max size (${maxSize} MB)`);
+    const totalSizeMb = uploadFiles.reduce((acc, f) => acc + f.size, 0) / (1024 * 1024);
+    const maxPerFile = selectedTask.maxUploadSizeMb || 25;
+    const maxTotalAllowed = Math.max(maxPerFile * 3, 50);
+    if (totalSizeMb > maxTotalAllowed) {
+      setUploadError(language === 'ar' ? `إجمالي حجم الملفات يتجاوز الحد المسموح (${maxTotalAllowed} MB)` : `Total size exceeds max limit (${maxTotalAllowed} MB)`);
       return;
     }
 
-    // Strict extension validation & sanitization (prevent path traversal / executable uploads)
-    const rawExt = uploadFile.name.split('.').pop()?.toLowerCase() || '';
-    const cleanExt = rawExt.replace(/[^a-z0-9]/g, '');
     const forbiddenExts = ['exe', 'bat', 'cmd', 'sh', 'php', 'phtml', 'html', 'htm', 'js', 'vbs', 'scr', 'ps1', 'cgi', 'pl', 'jar', 'apk', 'com'];
-    if (!cleanExt || forbiddenExts.includes(cleanExt)) {
-      setUploadError(language === 'ar' ? 'صيغة الملف غير مسموح بها لأسباب أمنية.' : 'File type is blocked for security reasons.');
-      return;
-    }
-
-    // Allow all standard formats including images, documents, archives, spreadsheets, audio and video
-    const taskAllowedTypes = selectedTask.allowedFileTypes || [];
-    const isImageExt = ['png', 'jpg', 'jpeg', 'webp', 'heic', 'gif', 'svg', 'bmp', 'tiff'].includes(cleanExt);
-    
-    // If specific task file restrictions are set, always allow images as well or match type
-    if (taskAllowedTypes.length > 0 && !taskAllowedTypes.includes('all') && !taskAllowedTypes.includes('*')) {
-      const isAllowed = isImageExt || taskAllowedTypes.some(t => {
-        const cleanT = t.toLowerCase().replace(/^\./, '');
-        return cleanT === cleanExt || (cleanT === 'images' && isImageExt) || (cleanT === 'image' && isImageExt);
-      });
-      if (!isAllowed) {
-        setUploadError(language === 'ar' ? `يرجى رفع ملف بصيغة مدعومة أو صورة: ${taskAllowedTypes.join(', ')}` : `Please upload an allowed file format or image: ${taskAllowedTypes.join(', ')}`);
+    for (const f of uploadFiles) {
+      const rawExt = f.name.split('.').pop()?.toLowerCase() || '';
+      const cleanExt = rawExt.replace(/[^a-z0-9]/g, '');
+      if (!cleanExt || forbiddenExts.includes(cleanExt)) {
+        setUploadError(language === 'ar' ? `صيغة الملف (${f.name}) غير مسموح بها لأسباب أمنية.` : `File type (${f.name}) is blocked for security reasons.`);
         return;
       }
     }
 
     setIsUploading(true);
-    setUploadProgress(20);
+    setUploadProgress(15);
 
     try {
-      // ── Step 1: Upload file to Supabase Storage ──────────────────────────
-      let fileUrl = '';
-      const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${cleanExt}`;
-      const filePath = `submissions/${currentUser.id}/${fileName}`;
+      // ── Step 1: Upload each file to Supabase Storage ──────────────────────
+      const uploadedAttachments: SubmissionAttachment[] = [];
+      const totalCount = uploadFiles.length;
 
-      setUploadProgress(40);
-      const { error: uploadErr } = await supabase.storage
-        .from('task-submissions')
-        .upload(filePath, uploadFile);
+      for (let i = 0; i < totalCount; i++) {
+        const file = uploadFiles[i];
+        const rawExt = file.name.split('.').pop()?.toLowerCase() || '';
+        const cleanExt = rawExt.replace(/[^a-z0-9]/g, '');
+        const fileName = `${Date.now()}_${i}_${Math.random().toString(36).substring(2, 7)}.${cleanExt}`;
+        const filePath = `submissions/${currentUser.id}/${fileName}`;
 
+        const { error: uploadErr } = await supabase.storage
+          .from('task-submissions')
+          .upload(filePath, file);
 
-      if (uploadErr) {
-        console.error('[TaskBoard] Storage upload error:', uploadErr.message);
-        throw new Error(
-          language === 'ar'
-            ? `فشل رفع الملف: ${uploadErr.message}`
-            : `File upload failed: ${uploadErr.message}`
-        );
+        if (uploadErr) {
+          console.error('[TaskBoard] Storage upload error:', uploadErr.message);
+          throw new Error(
+            language === 'ar'
+              ? `فشل رفع الملف (${file.name}): ${uploadErr.message}`
+              : `File upload failed for (${file.name}): ${uploadErr.message}`
+          );
+        }
+
+        const { data: urlData } = supabase.storage
+          .from('task-submissions')
+          .getPublicUrl(filePath);
+
+        const permanentUrl = getPermanentStorageUrl(urlData?.publicUrl || '');
+        uploadedAttachments.push({
+          name: file.name,
+          url: permanentUrl,
+          size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
+        });
+
+        setUploadProgress(15 + Math.round(((i + 1) / totalCount) * 55));
       }
 
-      const { data: urlData } = supabase.storage
-        .from('task-submissions')
-        .getPublicUrl(filePath);
-      fileUrl = urlData?.publicUrl || '';
-
-      setUploadProgress(65);
-
-      // ── Step 2: Insert submission row directly into Supabase ─────────────
-      // We bypass db.submitTask() which reads from the in-memory cache and
-      // throws 'Task not found' when a member opens the app on a fresh device
-      // (cache is empty). selectedTask is already loaded from Supabase above.
-      const submittedFileName = customFileName || uploadFile.name;
-      const submittedFileSize = customFileSize || `${(uploadFile.size / (1024 * 1024)).toFixed(2)} MB`;
+      // ── Step 2: Insert/Update submission row directly in Supabase ─────────
+      const submittedFileName = uploadFiles.length === 1
+        ? (customFileName || uploadFiles[0].name)
+        : (customFileName || `${uploadFiles.length} صور / ملفات`);
+      const submittedFileSize = `${totalSizeMb.toFixed(2)} MB`;
+      const primaryUrl = uploadedAttachments.length > 0 ? uploadedAttachments[0].url : '';
+      const storedFileUrl = uploadedAttachments.length > 1
+        ? JSON.stringify(uploadedAttachments)
+        : primaryUrl;
       const now = new Date().toISOString();
 
       // Check for an existing submission (for resubmission flow)
@@ -989,10 +1158,9 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
         status: 'Pending',
         changedAt: now,
         changedBy: currentUser.id,
-        comment: existingRows ? 'Resubmitted solution file.' : 'Initial solution submitted.',
+        comment: existingRows ? 'Resubmitted solution files.' : 'Initial solution submitted.',
       };
 
-      // Automatically pull committee and department directly from the member's registered profile
       const userComm = currentUser.committee && currentUser.committee !== 'All' && currentUser.committee !== 'None'
         ? currentUser.committee
         : (selectedTask.committee !== 'All' ? selectedTask.committee : 'General');
@@ -1010,7 +1178,7 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
         committee: userComm,
         department: userDept,
         status: 'Pending',
-        file_url: fileUrl,
+        file_url: storedFileUrl,
         file_name: submittedFileName,
         file_size: submittedFileSize,
         submitted_at: now,
@@ -1068,7 +1236,7 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
             recipientIds.map((uid: string) => ({
               user_id: uid,
               title: 'تسليم مهمة جديد 📥',
-              message: `قام ${currentUser.fullName} بتسليم المهمة: "${selectedTask.name}"`,
+              message: `قام ${currentUser.fullName} بتسليم المهمة: "${selectedTask.name}" (${uploadFiles.length} مرفقات)`,
               type: 'info',
               is_read: false,
               related_id: selectedTask.id,
@@ -1076,7 +1244,6 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
           );
         }
       } catch (notifErr) {
-        // Notification failure must NOT block the submission success
         console.error('[TaskBoard] Notification send failed:', notifErr);
       }
 
@@ -1085,7 +1252,7 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
         db.addNotification(
           currentUser.id,
           'تم تسليم حلك بنجاح ✅',
-          `تم استلام حلك لمهمة "${selectedTask.name}" بنجاح وجاري مراجعته وتقييمه من قِبل المشرفين.`,
+          `تم استلام حلك لمهمة "${selectedTask.name}" بنجاح (${uploadFiles.length} مرفقات) وجاري مراجعته وتقييمه من قِبل المشرفين.`,
           'success'
         );
       } catch (selfNotifErr) {
@@ -1094,7 +1261,7 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
 
       setUploadProgress(100);
       setIsUploading(false);
-      setUploadFile(null);
+      setUploadFiles([]);
       setCustomFileName('');
       setCustomFileSize('');
       await loadData();
@@ -1422,19 +1589,64 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
                   <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
                   <div>
                     <p className="text-xs font-bold text-slate-800 dark:text-slate-100">{userSubmission.fileName || 'ملف الحل'}</p>
-                    <p className="text-[10px] text-slate-400 font-mono">تم التسليم: {userSubmission.submittedAt ? new Date(userSubmission.submittedAt).toLocaleString('ar-EG') : ''}</p>
+                    <p className="text-[10px] text-slate-400 font-mono">
+                      تم التسليم: {userSubmission.submittedAt ? new Date(userSubmission.submittedAt).toLocaleString('ar-EG') : ''}
+                    </p>
                   </div>
                 </div>
-                {userSubmission.fileUrl && (
-                  <button
-                    onClick={() => setPreviewAttachment({ name: userSubmission.fileName || 'الملف', url: userSubmission.fileUrl })}
-                    className="px-2.5 py-1 bg-white dark:bg-slate-900 hover:bg-amber-50 text-amber-600 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
-                  >
-                    <FileText className="w-3.5 h-3.5" />
-                    <span>معاينة الملف</span>
-                  </button>
-                )}
               </div>
+
+              {/* Multi-attachment or single attachment view */}
+              {(() => {
+                const atts = getSubmissionAttachments(userSubmission);
+                if (atts.length === 0) return null;
+                return (
+                  <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                    <p className="text-[11px] font-bold text-slate-500 flex items-center gap-1.5">
+                      <Paperclip className="w-3.5 h-3.5 text-amber-500" />
+                      <span>{atts.length > 1 ? `المرفقات المسلمة (${atts.length}):` : 'الملف المسلم:'}</span>
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                      {atts.map((att, idx) => {
+                        const isImg = isImageFile(att.name) || isImageFile(att.url);
+                        return (
+                          <div
+                            key={idx}
+                            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-750 rounded-xl p-2.5 flex items-center justify-between gap-2 group hover:border-amber-400 transition-all shadow-sm"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              {isImg ? (
+                                <img
+                                  src={att.url}
+                                  alt={att.name}
+                                  className="w-9 h-9 object-cover rounded-lg shrink-0 border border-slate-200 dark:border-slate-700"
+                                />
+                              ) : (
+                                <div className="w-9 h-9 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 flex items-center justify-center shrink-0">
+                                  <FileText className="w-5 h-5" />
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <p className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">{att.name}</p>
+                                {att.size && <p className="text-[10px] text-slate-400 font-mono">{att.size}</p>}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setPreviewAttachment({ name: att.name, url: att.url, allAttachments: atts, currentIndex: idx })}
+                              className="px-2 py-1 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 rounded-lg text-[10px] font-bold shrink-0 cursor-pointer flex items-center gap-1"
+                            >
+                              <Eye className="w-3 h-3" />
+                              <span>معاينة</span>
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+
               {userSubmission.comment && (
                 <p className="text-xs bg-white dark:bg-slate-900 p-3 rounded-xl text-slate-600 dark:text-slate-300 border border-slate-150 dark:border-slate-800">
                   <strong>ملاحظات المراجعة:</strong> {userSubmission.comment}
@@ -1444,58 +1656,160 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
           ) : (
             <form onSubmit={handleFileSubmit} className="space-y-4">
               {uploadError && <p className="p-3 text-xs font-semibold text-red-600 bg-red-50 rounded-xl border border-red-100">{uploadError}</p>}
+              
               <div
                 onDragEnter={handleDrag}
                 onDragOver={handleDrag}
                 onDragLeave={handleDrag}
                 onDrop={handleDrop}
-                className={`relative border-2 border-dashed rounded-2xl p-8 text-center flex flex-col items-center justify-center gap-3 transition-colors ${dragActive ? 'border-amber-500 bg-amber-50/20' : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950'
-                  }`}
+                className={`relative border-2 border-dashed rounded-2xl p-6 text-center flex flex-col items-center justify-center gap-3 transition-colors ${
+                  dragActive ? 'border-amber-500 bg-amber-50/20' : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950'
+                }`}
               >
                 <input 
                   type="file" 
                   id="member-file-upload" 
+                  multiple
                   accept="image/*, .pdf, .docx, .doc, .zip, .rar, .7z, .xlsx, .pptx, .txt, .mp4, .mov, *" 
                   onChange={handleFileChange} 
                   className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10" 
                 />
-                <UploadCloud className="w-10 h-10 text-slate-400" />
-                {uploadFile ? (
-                  <div className="space-y-2 flex flex-col items-center">
-                    {uploadFile.type.startsWith('image/') ? (
-                      <img
-                        src={URL.createObjectURL(uploadFile)}
-                        alt="Preview"
-                        className="w-24 h-24 object-cover rounded-xl border-2 border-amber-500 shadow-md"
-                      />
-                    ) : null}
-                    <div className="space-y-0.5 text-center">
-                      <p className="text-xs font-bold text-slate-800 dark:text-slate-100">{customFileName}</p>
-                      <p className="text-[10px] text-slate-400 font-mono">{customFileSize}</p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-1">
-                    <p className="text-xs font-bold text-slate-600 dark:text-slate-400">
-                      {language === 'ar' ? 'اسحب وأفلت صورة أو ملف الحل هنا أو ' : 'Drag and drop your solution image/file or '}
-                      <span className="text-amber-600 underline">{language === 'ar' ? 'تصفح جهازك' : 'browse'}</span>
-                    </p>
-                    <p className="text-[10px] text-slate-400">
-                      {language === 'ar' 
-                        ? 'متاح رفع جميع الصيغ: صور (PNG, JPG, WebP), مستندات (PDF, Word), ملفات مضغوطة وفيديو'
-                        : 'All formats supported: Images (PNG, JPG, WebP), PDF, Word, Excel, Archives & Video'}
-                    </p>
-                  </div>
-                )}
+                <UploadCloud className="w-10 h-10 text-amber-500" />
+                <div className="space-y-1">
+                  <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    {language === 'ar' ? 'اسحب وأفلت صور أو ملفات الحل هنا أو ' : 'Drag and drop solution images/files here or '}
+                    <span className="text-amber-600 underline font-extrabold">{language === 'ar' ? 'تصفح جهازك' : 'browse'}</span>
+                  </p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                    {language === 'ar' 
+                      ? '✨ يمكنك اختيار عدة صور معاً مباشرة بضغطة واحدة دون الحاجة لإنشاء مجلدات أو ضغطها (PNG, JPG, WebP, PDF...)'
+                      : 'You can select multiple images/files together directly without creating folders.'}
+                  </p>
+                </div>
               </div>
+
+              {/* Selected Files Gallery Preview with delete button per item */}
+              {uploadFiles.length > 0 && (
+                <div className="space-y-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+                  <div className="flex items-center justify-between text-xs font-black text-slate-700 dark:text-slate-200 pb-2 border-b border-slate-100 dark:border-slate-800">
+                    <span className="flex items-center gap-1.5">
+                      <span>📸 الصور والملفات المختارة:</span>
+                      <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 font-mono text-[10px]">
+                        {uploadFiles.length}
+                      </span>
+                    </span>
+                    <span className="font-mono text-[10px] text-slate-400">
+                      إجمالي الحجم: {(uploadFiles.reduce((acc, f) => acc + f.size, 0) / (1024 * 1024)).toFixed(2)} MB
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                    {uploadFiles.map((file, idx) => {
+                      const isImg = file.type.startsWith('image/');
+                      return (
+                        <div
+                          key={idx}
+                          className="relative group bg-slate-50 dark:bg-slate-850 rounded-xl p-2 border border-slate-200 dark:border-slate-750 flex flex-col items-center text-center space-y-1"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => removeUploadFile(idx)}
+                            className="absolute -top-2 -end-2 w-6 h-6 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center text-xs font-bold shadow-md cursor-pointer transition-transform hover:scale-110 z-20"
+                            title="حذف هذه الصورة"
+                          >
+                            ✕
+                          </button>
+                          {isImg ? (
+                            <img
+                              src={URL.createObjectURL(file)}
+                              alt={file.name}
+                              className="w-full h-20 object-cover rounded-lg border border-slate-200 dark:border-slate-700"
+                            />
+                          ) : (
+                            <div className="w-full h-20 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600 flex flex-col items-center justify-center">
+                              <FileText className="w-7 h-7" />
+                            </div>
+                          )}
+                          <p className="text-[10px] font-bold text-slate-800 dark:text-slate-100 truncate w-full" title={file.name}>
+                            {file.name}
+                          </p>
+                          <p className="text-[9px] text-slate-400 font-mono">
+                            {(file.size / (1024 * 1024)).toFixed(2)} MB
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Add more files button & Clear all */}
+                  <div className="pt-2 flex items-center justify-between border-t border-slate-100 dark:border-slate-800">
+                    <label className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors">
+                      <Plus className="w-3.5 h-3.5 text-amber-500" />
+                      <span>{language === 'ar' ? '+ إضافة صور / ملفات أخرى' : '+ Add more files'}</span>
+                      <input
+                        type="file"
+                        multiple
+                        accept="image/*, .pdf, .docx, .doc, .zip, .rar, .7z, .xlsx, .pptx, .txt, .mp4, .mov, *"
+                        onChange={handleFileChange}
+                        className="hidden"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setUploadFiles([])}
+                      className="text-[11px] text-red-500 hover:underline font-bold cursor-pointer"
+                    >
+                      {language === 'ar' ? 'مسح الكل' : 'Clear all'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Optional custom submission title */}
+              {uploadFiles.length === 1 && (
+                <div className="space-y-1 text-start">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                    {language === 'ar' ? 'تسمية الملف (اختياري)' : 'Custom File Name (Optional)'}
+                  </label>
+                  <input
+                    type="text"
+                    value={customFileName}
+                    onChange={(e) => setCustomFileName(e.target.value)}
+                    placeholder={uploadFiles[0]?.name || 'اسم الملف...'}
+                    className="w-full bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 dark:text-slate-100"
+                  />
+                </div>
+              )}
+
+              {/* Progress bar during upload */}
+              {isUploading && (
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-xs font-bold text-slate-600 dark:text-slate-300">
+                    <span>جاري رفع الملفات سحابياً...</span>
+                    <span className="font-mono">{uploadProgress}%</span>
+                  </div>
+                  <div className="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-amber-500 transition-all duration-300 rounded-full"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
 
               <button
                 type="submit"
-                disabled={!uploadFile || isUploading}
+                disabled={uploadFiles.length === 0 || isUploading}
                 className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer shadow-sm"
               >
                 {isUploading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                <span>{isUploading ? 'جاري رفع الحل...' : 'إرسال التسليم'}</span>
+                <span>
+                  {isUploading 
+                    ? 'جاري رفع الحل سحابياً...' 
+                    : uploadFiles.length > 1 
+                      ? `إرسال التسليم (${uploadFiles.length} ملفات / صور 🚀)` 
+                      : 'إرسال التسليم 🚀'}
+                </span>
               </button>
             </form>
           )}
@@ -1898,18 +2212,29 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
                                               </div>
                                             </td>
                                             <td className="py-2.5">
-                                              {sub.fileUrl ? (
-                                                <button
-                                                  type="button"
-                                                  onClick={() => setPreviewAttachment({ name: sub.fileName || 'الملف', url: sub.fileUrl })}
-                                                  className="text-amber-400 hover:text-amber-300 hover:underline flex items-center gap-1 font-semibold text-[11px]"
-                                                >
-                                                  <FileText className="w-3.5 h-3.5 text-amber-400" />
-                                                  <span className="truncate max-w-[130px]">{sub.fileName || 'ملف الحل'}</span>
-                                                </button>
-                                              ) : (
-                                                <span className="text-slate-500 text-[10px]">لا يوجد ملف</span>
-                                              )}
+                                              {(() => {
+                                                const atts = getSubmissionAttachments(sub);
+                                                if (atts.length === 0) {
+                                                  return <span className="text-slate-500 text-[10px]">لا يوجد ملف</span>;
+                                                }
+                                                const isMultiple = atts.length > 1;
+                                                const firstIsImg = isImageFile(atts[0].name) || isImageFile(atts[0].url);
+                                                return (
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => setPreviewAttachment({ name: atts[0].name, url: atts[0].url, allAttachments: atts, currentIndex: 0 })}
+                                                    className="text-amber-400 hover:text-amber-300 hover:underline flex items-center gap-1.5 font-semibold text-[11px]"
+                                                  >
+                                                    {firstIsImg ? <Image className="w-3.5 h-3.5 text-amber-400 shrink-0" /> : <FileText className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
+                                                    <span className="truncate max-w-[120px]">{sub.fileName || atts[0].name}</span>
+                                                    {isMultiple && (
+                                                      <span className="px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300 text-[9px] font-mono font-bold shrink-0">
+                                                        +{atts.length}
+                                                      </span>
+                                                    )}
+                                                  </button>
+                                                );
+                                              })()}
                                             </td>
                                             <td className="py-2.5 text-slate-400 font-mono text-[10px]">
                                               {sub.submittedAt ? new Date(sub.submittedAt).toLocaleDateString('ar-EG') : ''}
@@ -2039,18 +2364,29 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
                             </span>
                           </td>
                           <td className="py-3">
-                            {sub.fileUrl ? (
-                              <button
-                                type="button"
-                                onClick={() => setPreviewAttachment({ name: sub.fileName || 'الملف', url: sub.fileUrl })}
-                                className="text-amber-400 hover:text-amber-300 hover:underline flex items-center gap-1 font-semibold"
-                              >
-                                <FileText className="w-3.5 h-3.5 text-amber-400" />
-                                <span className="truncate max-w-[130px]">{sub.fileName || 'ملف الحل'}</span>
-                              </button>
-                            ) : (
-                              <span className="text-slate-500 text-[10px]">لا يوجد ملف</span>
-                            )}
+                            {(() => {
+                              const atts = getSubmissionAttachments(sub);
+                              if (atts.length === 0) {
+                                return <span className="text-slate-500 text-[10px]">لا يوجد ملف</span>;
+                              }
+                              const isMultiple = atts.length > 1;
+                              const firstIsImg = isImageFile(atts[0].name) || isImageFile(atts[0].url);
+                              return (
+                                <button
+                                  type="button"
+                                  onClick={() => setPreviewAttachment({ name: atts[0].name, url: atts[0].url, allAttachments: atts, currentIndex: 0 })}
+                                  className="text-amber-400 hover:text-amber-300 hover:underline flex items-center gap-1.5 font-semibold"
+                                >
+                                  {firstIsImg ? <Image className="w-3.5 h-3.5 text-amber-400 shrink-0" /> : <FileText className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
+                                  <span className="truncate max-w-[120px]">{sub.fileName || atts[0].name}</span>
+                                  {isMultiple && (
+                                    <span className="px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300 text-[9px] font-mono font-bold shrink-0">
+                                      +{atts.length}
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })()}
                           </td>
                           <td className="py-3 text-slate-400 font-mono text-[10px]">{sub.submittedAt ? new Date(sub.submittedAt).toLocaleDateString('ar-EG') : ''}</td>
                           <td className="py-3">
@@ -2195,9 +2531,10 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
           />
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <select
-            value={filterCommittee}
+        {currentUser?.role !== 'Member' ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={filterCommittee}
             onChange={(e) => {
               setFilterCommittee(e.target.value);
               setFilterDepartment('All');
@@ -2231,7 +2568,17 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
             <option value="High">عالية</option>
             <option value="Urgent">عاجلة</option>
           </select>
-        </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <span className="px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-xs font-bold flex items-center gap-1.5 shadow-sm">
+              <span>🎯 مهام لجنة {translateCommittee(currentUser.committee)}</span>
+              {currentUser.department && currentUser.department !== 'General' && currentUser.department !== 'None' && (
+                <span>({translateDepartment(currentUser.department)})</span>
+              )}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Main Board Layout */}
@@ -2292,8 +2639,20 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
       ) : (
         /* LIST + DETAILS VIEW */
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Focused Task Details View - On mobile for members, appears at the top */}
+          <div className={`lg:col-span-7 ${currentUser?.role === 'Member' ? 'order-1 lg:order-2' : 'order-2'}`}>
+            {selectedTask ? (
+              renderTaskDetails()
+            ) : (
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-12 text-center text-slate-400 flex flex-col items-center justify-center min-h-[400px] space-y-3">
+                <FolderKanban className="w-12 h-12 text-slate-300 dark:text-slate-700" />
+                <p className="text-xs font-bold">{language === 'ar' ? 'اختر مهمة من القائمة لعرض تفاصيلها وتسليم الحل' : 'Select a task from the list to view details and submit'}</p>
+              </div>
+            )}
+          </div>
+
           {/* Sidebar Task List */}
-          <div className="lg:col-span-5 space-y-3">
+          <div className={`lg:col-span-5 space-y-3 ${currentUser?.role === 'Member' ? 'order-2 lg:order-1' : 'order-1'}`}>
             <div className="flex items-center justify-between px-1">
               <span className="text-xs font-black text-slate-500 uppercase tracking-wider">
                 {language === 'ar' ? `قائمة المهام (${filteredTasksList.length})` : `Tasks (${filteredTasksList.length})`}
@@ -2384,17 +2743,7 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
             </div>
           </div>
 
-          {/* Focused Task Details View */}
-          <div className="lg:col-span-7">
-            {selectedTask ? (
-              renderTaskDetails()
-            ) : (
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-12 text-center text-slate-400 flex flex-col items-center justify-center min-h-[400px] space-y-3">
-                <FolderKanban className="w-12 h-12 text-slate-300 dark:text-slate-700" />
-                <p className="text-xs font-bold">{language === 'ar' ? 'اختر مهمة من القائمة لعرض تفاصيلها وتسليم الحل' : 'Select a task from the list to view details and submit'}</p>
-              </div>
-            )}
-          </div>
+
         </div>
       )}
 
@@ -3060,6 +3409,39 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
               </button>
             </div>
 
+            {/* View Member Attachments */}
+            {(() => {
+              const atts = getSubmissionAttachments(selectedReviewSub);
+              if (atts.length === 0) return null;
+              return (
+                <div className="bg-slate-50 dark:bg-slate-850 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-200">
+                    <span className="flex items-center gap-1.5">
+                      <Paperclip className="w-3.5 h-3.5 text-amber-500" />
+                      <span>الملفات والصور المسلمة ({atts.length}):</span>
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      {selectedReviewSub.fileSize || ''}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                    {atts.map((att, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setPreviewAttachment({ name: att.name, url: att.url, allAttachments: atts, currentIndex: idx })}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-750 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-100 hover:border-amber-400 shrink-0 cursor-pointer shadow-sm hover:bg-amber-50 dark:hover:bg-slate-800 transition-colors"
+                      >
+                        {isImageFile(att.name) || isImageFile(att.url) ? '🖼️' : '📄'}
+                        <span className="truncate max-w-[130px]">{att.name}</span>
+                        <Eye className="w-3 h-3 text-amber-500" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
             <form onSubmit={handleReviewSubmission} className="space-y-4">
               <div className="space-y-1">
                 <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">قرار التقييم</label>
@@ -3158,56 +3540,154 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
         </div>
       )}
 
-      {/* ATTACHMENT PREVIEW MODAL */}
-      {previewAttachment && (
-        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-2xl w-full p-6 shadow-2xl space-y-4 text-start">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-              <div className="flex items-center gap-2">
-                <FileText className="w-5 h-5 text-amber-500" />
-                <h3 className="font-bold text-sm text-slate-900 dark:text-white truncate max-w-sm">{previewAttachment.name}</h3>
-              </div>
-              <button onClick={() => setPreviewAttachment(null)} className="p-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-slate-600 cursor-pointer">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+      {/* ATTACHMENT PREVIEW MODAL / LIGHTBOX */}
+      {previewAttachment && (() => {
+        const hasGallery = previewAttachment.allAttachments && previewAttachment.allAttachments.length > 1;
+        const currentIdx = previewAttachment.currentIndex ?? 0;
+        const allAtts = previewAttachment.allAttachments || [];
+        const isCurrentImg = isImageFile(previewAttachment.name) || isImageFile(previewAttachment.url);
 
-            <div className="bg-slate-950 rounded-2xl p-4 min-h-[260px] flex flex-col items-center justify-center text-slate-300 space-y-3">
-              {previewAttachment.name.endsWith('.png') || previewAttachment.name.endsWith('.jpg') || previewAttachment.url.startsWith('data:image') ? (
-                <img src={previewAttachment.url} alt="Preview" className="max-h-72 object-contain rounded-xl" />
-              ) : (
-                <div className="text-center space-y-2">
-                  <FileText className="w-12 h-12 text-slate-500 mx-auto" />
-                  <p className="text-xs font-bold text-slate-200">{previewAttachment.name}</p>
-                  <p className="text-[10px] text-slate-400">{language === 'ar' ? 'معاينة ملف آمنة وسحابية' : 'Secured Document Preview'}</p>
+        const goToPrev = () => {
+          if (!hasGallery) return;
+          const newIdx = (currentIdx - 1 + allAtts.length) % allAtts.length;
+          const target = allAtts[newIdx];
+          setPreviewAttachment({
+            name: target.name,
+            url: target.url,
+            allAttachments: allAtts,
+            currentIndex: newIdx,
+          });
+        };
+
+        const goToNext = () => {
+          if (!hasGallery) return;
+          const newIdx = (currentIdx + 1) % allAtts.length;
+          const target = allAtts[newIdx];
+          setPreviewAttachment({
+            name: target.name,
+            url: target.url,
+            allAttachments: allAtts,
+            currentIndex: newIdx,
+          });
+        };
+
+        return (
+          <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-2xl w-full p-6 shadow-2xl space-y-4 text-start">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  {isCurrentImg ? (
+                    <Image className="w-5 h-5 text-amber-500 shrink-0" />
+                  ) : (
+                    <FileText className="w-5 h-5 text-amber-500 shrink-0" />
+                  )}
+                  <h3 className="font-bold text-sm text-slate-900 dark:text-white truncate max-w-sm">
+                    {previewAttachment.name}
+                  </h3>
+                  {hasGallery && (
+                    <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 font-mono text-[10px] font-bold shrink-0">
+                      {currentIdx + 1} / {allAtts.length}
+                    </span>
+                  )}
                 </div>
-              )}
-            </div>
-
-            <div className="flex justify-between items-center pt-2">
-              <span className="text-[10px] text-slate-400 font-mono">EYE Cloud Storage</span>
-              <div className="flex gap-2">
-                {(previewAttachment.url.startsWith('http') || previewAttachment.url.startsWith('data:')) && (
-                  <a
-                    href={previewAttachment.url}
-                    download={previewAttachment.name}
-                    className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    <span>تحميل الملف</span>
-                  </a>
-                )}
                 <button
                   onClick={() => setPreviewAttachment(null)}
-                  className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold cursor-pointer"
+                  className="p-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-slate-600 cursor-pointer"
                 >
-                  إغلاق
+                  <X className="w-4 h-4" />
                 </button>
+              </div>
+
+              <div className="relative bg-slate-950 rounded-2xl p-4 min-h-[300px] flex flex-col items-center justify-center text-slate-300 space-y-3 overflow-hidden">
+                {hasGallery && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={goToPrev}
+                      className="absolute start-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-slate-900/80 hover:bg-amber-500 text-white flex items-center justify-center shadow-lg transition-all cursor-pointer z-10"
+                      title="السابق"
+                    >
+                      <ChevronRight className="w-5 h-5 rtl:rotate-0 ltr:rotate-180" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={goToNext}
+                      className="absolute end-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-slate-900/80 hover:bg-amber-500 text-white flex items-center justify-center shadow-lg transition-all cursor-pointer z-10"
+                      title="التالي"
+                    >
+                      <ChevronLeft className="w-5 h-5 rtl:rotate-0 ltr:rotate-180" />
+                    </button>
+                  </>
+                )}
+
+                {isCurrentImg ? (
+                  <img
+                    src={previewAttachment.url}
+                    alt={previewAttachment.name}
+                    className="max-h-80 w-auto object-contain rounded-xl shadow-lg transition-all"
+                  />
+                ) : (
+                  <div className="text-center space-y-2 py-8">
+                    <FileText className="w-14 h-14 text-amber-500 mx-auto" />
+                    <p className="text-xs font-bold text-slate-200">{previewAttachment.name}</p>
+                    <p className="text-[10px] text-slate-400">
+                      {language === 'ar' ? 'معاينة ملف آمنة وسحابية' : 'Secured Document Preview'}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Thumbnails strip if multiple */}
+              {hasGallery && (
+                <div className="flex items-center gap-2 overflow-x-auto pb-1 max-w-full">
+                  {allAtts.map((att, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setPreviewAttachment({ name: att.name, url: att.url, allAttachments: allAtts, currentIndex: idx })}
+                      className={`relative w-12 h-12 rounded-xl overflow-hidden shrink-0 border-2 transition-all cursor-pointer ${
+                        idx === currentIdx ? 'border-amber-500 scale-105 shadow' : 'border-transparent opacity-60 hover:opacity-100'
+                      }`}
+                    >
+                      {isImageFile(att.name) || isImageFile(att.url) ? (
+                        <img src={att.url} alt={att.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full bg-slate-800 text-amber-400 flex items-center justify-center text-xs">
+                          <FileText className="w-5 h-5" />
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex justify-between items-center pt-2">
+                <span className="text-[10px] text-slate-400 font-mono">EYE Cloud Storage</span>
+                <div className="flex gap-2">
+                  {(previewAttachment.url.startsWith('http') || previewAttachment.url.startsWith('data:')) && (
+                    <a
+                      href={previewAttachment.url}
+                      download={previewAttachment.name}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>تحميل</span>
+                    </a>
+                  )}
+                  <button
+                    onClick={() => setPreviewAttachment(null)}
+                    className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold cursor-pointer"
+                  >
+                    إغلاق
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 };

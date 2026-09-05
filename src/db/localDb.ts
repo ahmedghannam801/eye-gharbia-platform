@@ -7,6 +7,7 @@ import {
   UserProfile,
   Task,
   Submission,
+  SubmissionAttachment,
   Announcement,
   AnnouncementCategory,
   OccasionGreeting,
@@ -165,30 +166,66 @@ const taskFromRow = (r: any): Task => ({
   targetAudience: r.target_audience || r.targetAudience || undefined,
 });
 
-const submissionFromRow = (r: any): Submission => ({
-  id: r.id,
-  taskId: r.task_id,
-  taskName: r.task_name,
-  memberId: r.member_id,
-  memberName: r.member_name,
-  memberEmail: r.member_email,
-  committee: r.committee,
-  department: r.department,
-  submittedAt: r.submitted_at,
-  status: r.status,
-  fileUrl: getPermanentStorageUrl(r.file_url),
-  fileName: r.file_name,
-  fileSize: r.file_size,
-  comment: r.comment,
-  rejectionReason: r.rejection_reason,
-  submissionIdCode: r.submission_id_code,
-  grade: r.grade,
-  gradingCriteria: r.grading_criteria || undefined,
-  reviewedBy: r.reviewed_by || undefined,
-  reviewedAt: r.reviewed_at || undefined,
-  completedSubtasks: r.completed_subtasks || [],
-  history: r.history || [],
-});
+const parseSubmissionAttachments = (r: any): SubmissionAttachment[] => {
+  if (r.attachments && Array.isArray(r.attachments) && r.attachments.length > 0) {
+    return r.attachments.map((a: any) => ({
+      name: a.name || 'ملف مرفق',
+      url: getPermanentStorageUrl(a.url || a.fileUrl || ''),
+      size: a.size || a.fileSize || '',
+    }));
+  }
+  if (typeof r.file_url === 'string' && r.file_url.trim().startsWith('[')) {
+    try {
+      const parsed = JSON.parse(r.file_url);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.map((a: any) => ({
+          name: a.name || 'ملف مرفق',
+          url: getPermanentStorageUrl(a.url || a.fileUrl || ''),
+          size: a.size || a.fileSize || '',
+        }));
+      }
+    } catch {}
+  }
+  if (r.file_url) {
+    return [{
+      name: r.file_name || 'ملف الحل',
+      url: getPermanentStorageUrl(r.file_url),
+      size: r.file_size || '',
+    }];
+  }
+  return [];
+};
+
+const submissionFromRow = (r: any): Submission => {
+  const attachments = parseSubmissionAttachments(r);
+  const primaryUrl = attachments.length > 0 ? attachments[0].url : getPermanentStorageUrl(r.file_url);
+  const primaryName = attachments.length > 0 ? attachments[0].name : r.file_name;
+  return {
+    id: r.id,
+    taskId: r.task_id,
+    taskName: r.task_name,
+    memberId: r.member_id,
+    memberName: r.member_name,
+    memberEmail: r.member_email,
+    committee: r.committee,
+    department: r.department,
+    submittedAt: r.submitted_at,
+    status: r.status,
+    fileUrl: primaryUrl,
+    fileName: r.file_name || primaryName,
+    fileSize: r.file_size,
+    attachments: attachments,
+    comment: r.comment,
+    rejectionReason: r.rejection_reason,
+    submissionIdCode: r.submission_id_code,
+    grade: r.grade,
+    gradingCriteria: r.grading_criteria || undefined,
+    reviewedBy: r.reviewed_by || undefined,
+    reviewedAt: r.reviewed_at || undefined,
+    completedSubtasks: r.completed_subtasks || [],
+    history: r.history || [],
+  };
+};
 
 const announcementFromRow = (r: any): Announcement => ({
   id: r.id,
@@ -3067,7 +3104,7 @@ class SupabaseDatabase {
 
   submitTask(
     taskId: string,
-    fileData: { name: string; size: string; fileUrl?: string; contentBase64?: string },
+    fileData: { name: string; size: string; fileUrl?: string; contentBase64?: string; attachments?: SubmissionAttachment[] },
     member: UserProfile,
     completedSubtasks?: string[]
   ): Submission {
@@ -3085,6 +3122,11 @@ class SupabaseDatabase {
     const submissionIdCode = `TASK-${String(nextIdNum).padStart(6, '0')}`;
     const rawPath = fileData.fileUrl || `supabase://storage/eye-bucket/${task.committee}/${task.department}/${task.id}/${member.id}/${fileData.name}`;
     const simulatedPath = getPermanentStorageUrl(rawPath);
+    const attachments: SubmissionAttachment[] = fileData.attachments && fileData.attachments.length > 0
+      ? fileData.attachments
+      : fileData.fileUrl
+        ? [{ name: fileData.name, url: simulatedPath, size: fileData.size }]
+        : [];
 
     const tempId = existingIndex !== -1 ? this.cache.submissions[existingIndex].id : 'tmp-' + Math.random().toString(36).slice(2);
     const newSubmission: Submission = {
@@ -3098,9 +3140,10 @@ class SupabaseDatabase {
       department: task.department,
       submittedAt: new Date().toISOString(),
       status: 'Pending',
-      fileUrl: simulatedPath,
+      fileUrl: attachments.length > 0 ? attachments[0].url : simulatedPath,
       fileName: fileData.name,
       fileSize: fileData.size,
+      attachments: attachments,
       submissionIdCode: existingIndex !== -1 ? this.cache.submissions[existingIndex].submissionIdCode : submissionIdCode,
       completedSubtasks: completedSubtasks || [],
       history: [
@@ -3122,6 +3165,10 @@ class SupabaseDatabase {
     this._lsSave('eye_submissions', this.cache.submissions);
     this.notify();
 
+    const storedFileUrl = attachments.length > 1
+      ? JSON.stringify(attachments)
+      : (attachments.length === 1 ? attachments[0].url : simulatedPath);
+
     const row = {
       task_id: taskId,
       task_name: task.name,
@@ -3131,7 +3178,7 @@ class SupabaseDatabase {
       committee: task.committee,
       department: task.department,
       status: 'Pending',
-      file_url: simulatedPath,
+      file_url: storedFileUrl,
       file_name: fileData.name,
       file_size: fileData.size,
       submission_id_code: newSubmission.submissionIdCode,

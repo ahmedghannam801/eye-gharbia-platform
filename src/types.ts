@@ -158,6 +158,12 @@ export interface GradingCriteria {
   completeness: number; // 0-25
 }
 
+export interface SubmissionAttachment {
+  name: string;
+  url: string;
+  size?: string;
+}
+
 export interface Submission {
   id: string; // TASK-000001-USR123 etc
   taskId: string;
@@ -172,6 +178,7 @@ export interface Submission {
   fileUrl: string;
   fileName: string;
   fileSize: string;
+  attachments?: SubmissionAttachment[];
   comment?: string;
   rejectionReason?: string;
   submissionIdCode: string; // e.g. SUB-000001
