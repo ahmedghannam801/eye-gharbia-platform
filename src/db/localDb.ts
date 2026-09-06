@@ -1207,9 +1207,9 @@ class SupabaseDatabase {
         questions: Array.isArray(r.questions) ? r.questions : undefined,
         createdAt: r.created_at || new Date().toISOString(),
         createdBy: r.created_by,
-        createdByName: r.created_by_name,
-        creatorRole: r.creator_role,
-        creatorAvatar: r.creator_avatar,
+        createdByName: r.created_by_name || 'إدارة المنصة',
+        createdByRole: r.created_by_role || 'Leader',
+        createdByAvatar: r.created_by_avatar || '',
       }));
       const localQuizzes = this._ls<WeeklyQuiz>('eye_weekly_quizzes');
       const mergedQuizzes = mergeById(remoteQuizzes, localQuizzes, deletedQuizIds);
@@ -6656,9 +6656,9 @@ class SupabaseDatabase {
       committee: 'All',
       status: 'Active',
       createdAt: '2026-08-29T12:00:00.000Z',
-      createdBy: 'admin-eye-gharbia',
-      createdByName: 'إدارة كيان عيون الغربية',
-      creatorRole: 'Super Admin',
+      createdByName: 'إدارة المنصة',
+      createdByRole: 'Super Admin',
+      createdByAvatar: '',
       questions: [
         {
           id: 'q-1',
@@ -6773,9 +6773,9 @@ class SupabaseDatabase {
         status: 'Active',
         createdAt: new Date().toISOString(),
         createdBy: actor?.id,
-        createdByName: actor?.fullName || (actor?.role ? `${actor.role}` : 'قائد في الكيان'),
-        creatorRole: actor?.role || 'Leader',
-        creatorAvatar: actor?.avatar,
+        createdByName: actor?.fullName || (actor?.role ? `قائد (${actor.role})` : 'إدارة المنصة'),
+        createdByRole: actor?.role || 'Leader',
+        createdByAvatar: actor?.avatar || '',
       };
     } else {
       const question = param1;
@@ -6802,9 +6802,9 @@ class SupabaseDatabase {
         status: 'Active',
         createdAt: new Date().toISOString(),
         createdBy: actor?.id,
-        createdByName: actor?.fullName || (actor?.role ? `${actor.role}` : 'قائد في الكيان'),
-        creatorRole: actor?.role || 'Leader',
-        creatorAvatar: actor?.avatar,
+        createdByName: actor?.fullName || (actor?.role ? `قائد (${actor.role})` : 'إدارة المنصة'),
+        createdByRole: actor?.role || 'Leader',
+        createdByAvatar: actor?.avatar || '',
       };
     }
 
@@ -6828,8 +6828,8 @@ class SupabaseDatabase {
         governorate: actor?.governorate || 'الغربية',
         created_by: newQuiz.createdBy,
         created_by_name: newQuiz.createdByName,
-        creator_role: newQuiz.creatorRole,
-        creator_avatar: newQuiz.creatorAvatar,
+        created_by_role: newQuiz.createdByRole,
+        created_by_avatar: newQuiz.createdByAvatar,
       }).then();
     }
 

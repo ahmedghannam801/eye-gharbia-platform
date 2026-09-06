@@ -512,7 +512,9 @@ export interface WeeklyQuiz {
   questions?: QuizQuestionItem[];
   createdBy?: string;
   createdByName?: string;
+  createdByRole?: string;
   creatorRole?: string;
+  createdByAvatar?: string;
   creatorAvatar?: string;
 }
 

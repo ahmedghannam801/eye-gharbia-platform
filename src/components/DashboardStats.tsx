@@ -1155,6 +1155,12 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
                         ? (language === 'ar' ? '✓ تم حل المسابقة بنجاح وكسب النقاط!' : '✓ Quiz answered and points claimed!')
                         : (language === 'ar' ? 'أجب عن أسئلة الكيان الأسبوعية واكسب نقاط ترقية إضافية!' : 'Answer questions and boost your rank!')}
                     </p>
+                    {activeQuiz?.createdByName && (
+                      <div className="flex items-center gap-1.5 mt-2 text-[11px] font-bold text-purple-700 dark:text-purple-300">
+                        <span className="text-slate-400 font-medium">{language === 'ar' ? 'بإشراف القائد:' : 'By Leader:'}</span>
+                        <span>{activeQuiz.createdByName}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
