@@ -144,7 +144,7 @@ export const WeeklyChallenges: React.FC<WeeklyChallengesProps> = ({ currentUser 
                       +{chall.pointsReward} {isAr ? 'نقطة' : 'pts'}
                     </span>
 
-                    {isAdminOrLeader && (
+                    {isAdminOrLeader && (currentUser.role === 'Super Admin' || ['Head', 'Vice'].includes(currentUser.role) || chall.createdBy === currentUser.id) && (
                       <button
                         onClick={() => handleDeleteChallenge(chall.id)}
                         className="p-1 text-slate-400 hover:text-rose-600 transition-colors"
@@ -163,6 +163,37 @@ export const WeeklyChallenges: React.FC<WeeklyChallengesProps> = ({ currentUser 
                 <p className="text-xs text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
                   {chall.description}
                 </p>
+
+                {/* Creator Attribution */}
+                <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                  {chall.creatorAvatar ? (
+                    <img
+                      src={chall.creatorAvatar}
+                      alt={chall.createdByName || 'Creator'}
+                      className="w-5 h-5 rounded-full object-cover border border-amber-300 shrink-0"
+                    />
+                  ) : (
+                    <div className="w-5 h-5 rounded-full bg-gradient-to-tr from-amber-500 to-orange-600 text-white font-black text-[9px] flex items-center justify-center shrink-0">
+                      {chall.createdByName?.charAt(0) || '👤'}
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1 flex items-center gap-1.5">
+                    <span className="text-[10px] text-slate-400 font-medium shrink-0">
+                      {isAr ? 'إعداد:' : 'By:'}
+                    </span>
+                    <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 truncate">
+                      {chall.createdByName || (isAr ? 'إدارة الكيان' : 'Admin')}
+                    </span>
+                    {chall.creatorRole && (
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 shrink-0 border border-amber-200/60 dark:border-amber-900/40">
+                        {chall.creatorRole}
+                      </span>
+                    )}
+                  </div>
+                  {chall.createdBy === currentUser.id && (
+                    <span className="text-amber-500 text-xs shrink-0" title={isAr ? 'أنت أنشأت هذا التحدي' : 'Created by you'}>⭐</span>
+                  )}
+                </div>
               </div>
 
               <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
@@ -197,6 +228,24 @@ export const WeeklyChallenges: React.FC<WeeklyChallengesProps> = ({ currentUser 
             </div>
 
             <form onSubmit={handleCreateChallenge} className="space-y-4">
+              {/* Creator Attribution Preview */}
+              <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800/60 rounded-2xl flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-amber-600 text-white font-black text-xs flex items-center justify-center shrink-0 shadow-xs">
+                  {currentUser.fullName?.charAt(0) || '👤'}
+                </div>
+                <div className="text-xs space-y-0.5">
+                  <p className="font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
+                    <span>{isAr ? 'سيتم نشر التحدي باسمك:' : 'Challenge will be published under:'}</span>
+                    <span className="text-[10px] font-black px-1.5 py-0.2 rounded bg-amber-200 dark:bg-amber-900 text-amber-800 dark:text-amber-200">
+                      {currentUser.role}
+                    </span>
+                  </p>
+                  <p className="text-[11px] text-amber-700 dark:text-amber-300">
+                    {currentUser.fullName}
+                  </p>
+                </div>
+              </div>
+
               <div>
                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">{isAr ? 'عنوان التحدي *' : 'Title *'}</label>
                 <input

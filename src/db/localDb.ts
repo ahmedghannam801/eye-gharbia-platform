@@ -1206,6 +1206,10 @@ class SupabaseDatabase {
         status: r.status || 'Active',
         questions: Array.isArray(r.questions) ? r.questions : undefined,
         createdAt: r.created_at || new Date().toISOString(),
+        createdBy: r.created_by,
+        createdByName: r.created_by_name,
+        creatorRole: r.creator_role,
+        creatorAvatar: r.creator_avatar,
       }));
       const localQuizzes = this._ls<WeeklyQuiz>('eye_weekly_quizzes');
       const mergedQuizzes = mergeById(remoteQuizzes, localQuizzes, deletedQuizIds);
@@ -1222,6 +1226,11 @@ class SupabaseDatabase {
         pointsReward: r.points || r.points_reward || 50,
         badgeReward: r.badge_reward,
         claimedUserIds: Array.isArray(r.claimed_user_ids) ? r.claimed_user_ids : [],
+        createdAt: r.created_at,
+        createdBy: r.created_by,
+        createdByName: r.created_by_name,
+        creatorRole: r.creator_role,
+        creatorAvatar: r.creator_avatar,
       }));
       const localChallenges = this._ls<WeeklyChallenge>('eye_weekly_challenges');
       const mergedChallenges = mergeById(remoteChallenges, localChallenges, deletedWeeklyChallengeIds);
@@ -6453,6 +6462,11 @@ class SupabaseDatabase {
       pointsReward,
       badgeReward,
       claimedUserIds: [],
+      createdAt: new Date().toISOString(),
+      createdBy: actor?.id,
+      createdByName: actor?.fullName || 'إدارة الكيان',
+      creatorRole: actor?.role || 'Leader',
+      creatorAvatar: actor?.avatar,
     };
     const list = this.getWeeklyChallenges();
     const updated = [newChall, ...list];
@@ -6468,8 +6482,12 @@ class SupabaseDatabase {
         points: newChall.pointsReward,
         badge_reward: newChall.badgeReward || null,
         claimed_user_ids: newChall.claimedUserIds,
-        created_at: new Date().toISOString(),
+        created_at: newChall.createdAt,
         governorate: actor?.governorate || 'الغربية',
+        created_by: newChall.createdBy,
+        created_by_name: newChall.createdByName,
+        creator_role: newChall.creatorRole,
+        creator_avatar: newChall.creatorAvatar,
       }).then();
     }
 
@@ -6638,6 +6656,9 @@ class SupabaseDatabase {
       committee: 'All',
       status: 'Active',
       createdAt: '2026-08-29T12:00:00.000Z',
+      createdBy: 'admin-eye-gharbia',
+      createdByName: 'إدارة كيان عيون الغربية',
+      creatorRole: 'Super Admin',
       questions: [
         {
           id: 'q-1',
@@ -6751,6 +6772,10 @@ class SupabaseDatabase {
         questions: questionsList,
         status: 'Active',
         createdAt: new Date().toISOString(),
+        createdBy: actor?.id,
+        createdByName: actor?.fullName || (actor?.role ? `${actor.role}` : 'قائد في الكيان'),
+        creatorRole: actor?.role || 'Leader',
+        creatorAvatar: actor?.avatar,
       };
     } else {
       const question = param1;
@@ -6776,6 +6801,10 @@ class SupabaseDatabase {
         }],
         status: 'Active',
         createdAt: new Date().toISOString(),
+        createdBy: actor?.id,
+        createdByName: actor?.fullName || (actor?.role ? `${actor.role}` : 'قائد في الكيان'),
+        creatorRole: actor?.role || 'Leader',
+        creatorAvatar: actor?.avatar,
       };
     }
 
@@ -6797,6 +6826,10 @@ class SupabaseDatabase {
         questions: newQuiz.questions,
         created_at: newQuiz.createdAt,
         governorate: actor?.governorate || 'الغربية',
+        created_by: newQuiz.createdBy,
+        created_by_name: newQuiz.createdByName,
+        creator_role: newQuiz.creatorRole,
+        creator_avatar: newQuiz.creatorAvatar,
       }).then();
     }
 

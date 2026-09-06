@@ -3,12 +3,22 @@
 -- Weekly Quizzes & Submissions Schema Update
 -- ============================================================
 
--- 1. إضافة الأعمدة الجديدة لجدول المسابقات الأسبوعية
+-- 1. إضافة الأعمدة الجديدة لجدول المسابقات الأسبوعية والتحديات
 ALTER TABLE IF EXISTS public.weekly_quizzes
   ADD COLUMN IF NOT EXISTS title text DEFAULT 'المسابقة الأسبوعية',
   ADD COLUMN IF NOT EXISTS questions jsonb DEFAULT '[]'::jsonb,
   ADD COLUMN IF NOT EXISTS committee text DEFAULT 'All',
-  ADD COLUMN IF NOT EXISTS governorate text DEFAULT 'الغربية';
+  ADD COLUMN IF NOT EXISTS governorate text DEFAULT 'الغربية',
+  ADD COLUMN IF NOT EXISTS created_by text DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS created_by_name text DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS creator_role text DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS creator_avatar text DEFAULT NULL;
+
+ALTER TABLE IF EXISTS public.weekly_challenges
+  ADD COLUMN IF NOT EXISTS created_by text DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS created_by_name text DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS creator_role text DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS creator_avatar text DEFAULT NULL;
 
 -- 2. إنشاء جدول تسجيل إجابات ومشاركات الأعضاء في المسابقات (Quiz Submissions)
 CREATE TABLE IF NOT EXISTS public.quiz_submissions (

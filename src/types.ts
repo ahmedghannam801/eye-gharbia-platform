@@ -510,6 +510,10 @@ export interface WeeklyQuiz {
   status: 'Active' | 'Closed';
   createdAt: string;
   questions?: QuizQuestionItem[];
+  createdBy?: string;
+  createdByName?: string;
+  creatorRole?: string;
+  creatorAvatar?: string;
 }
 
 export interface QuizSubmission {
@@ -898,6 +902,11 @@ export interface WeeklyChallenge {
   pointsReward: number;
   badgeReward?: string;
   claimedUserIds: string[];
+  createdAt?: string;
+  createdBy?: string;
+  createdByName?: string;
+  creatorRole?: string;
+  creatorAvatar?: string;
 }
 
 export interface UserStreak {
