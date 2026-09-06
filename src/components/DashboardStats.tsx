@@ -807,127 +807,206 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
       {/* ========================================== */}
       {/* 2. LEADER PORTAL (DEPARTMENTAL OVERVIEW) */}
       {/* ========================================== */}
-      {currentUser.role === 'Leader' && (
-        <div className="space-y-8 animate-fade-in">
-          {/* departmental metrics */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 flex items-center justify-between gap-4 shadow-sm">
-              <div className="space-y-1">
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{language === 'ar' ? 'أعضاء القسم' : 'Department Members'}</span>
-                <p className="text-2xl font-black text-slate-800 font-mono">{leaderDeptMembers.length}</p>
-              </div>
-              <div className="p-3 bg-blue-50 text-eye-brand rounded-xl">
-                <Users className="w-6 h-6" />
-              </div>
-            </div>
+      {currentUser.role === 'Leader' && (() => {
+        const allMeetings = db.getMeetings();
+        const leaderVisibleMeetings = allMeetings.filter(m => {
+          if (m.status === 'Closed') return false;
+          if (!m.committee || m.committee === 'All' || m.committee === 'General' || m.committee === 'None') return true;
+          if (!currentUser.committee || currentUser.committee === 'None' || currentUser.committee === 'All') return true;
+          const isHrm = currentUser.committee === 'HR' || currentUser.committee === 'HRM';
+          const isMtgHrm = m.committee === 'HR' || m.committee === 'HRM';
+          return m.committee === currentUser.committee || (isHrm && isMtgHrm);
+        });
+        const nextLeaderMeeting = [...leaderVisibleMeetings].sort((a, b) => {
+          const timeA = a.scheduledAt ? new Date(a.scheduledAt).getTime() : 0;
+          const timeB = b.scheduledAt ? new Date(b.scheduledAt).getTime() : 0;
+          return timeA - timeB;
+        })[0] || null;
+        const hasCheckedInLeaderMeeting = nextLeaderMeeting
+          ? db.getAttendance(nextLeaderMeeting.id).some(a => a.memberId === currentUser.id)
+          : false;
 
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 flex items-center justify-between gap-4 shadow-sm">
-              <div className="space-y-1">
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{language === 'ar' ? 'إجمالي المهام' : 'Total Tasks'}</span>
-                <p className="text-2xl font-black text-slate-800 font-mono">{leaderDeptTasks.length}</p>
-              </div>
-              <div className="p-3 bg-amber-50 text-amber-500 rounded-xl">
-                <CheckSquare className="w-6 h-6" />
-              </div>
-            </div>
-
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 flex items-center justify-between gap-4 shadow-sm">
-              <div className="space-y-1">
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{language === 'ar' ? 'تسليمات بانتظار المراجعة' : 'Pending Submissions'}</span>
-                <p className="text-2xl font-black text-amber-500 font-mono">
-                  {leaderDeptSubs.filter(s => s.status === 'Pending').length}
-                </p>
-              </div>
-              <div className="p-3 bg-red-50 text-red-500 rounded-xl">
-                <FileCheck className="w-6 h-6" />
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            {/* Department Members Table */}
-            <div className="lg:col-span-7 bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-sm">
-              <h2 className="text-base font-extrabold text-slate-800 flex items-center gap-2">
-                <Users className="w-5 h-5 text-amber-500" />
-                <span>{language === 'ar' ? `الأعضاء التابعون لقسمك المباشر (${leaderDeptMembers.length})` : `Department Members under your scope (${leaderDeptMembers.length})`}</span>
-              </h2>
-
-              {leaderDeptMembers.length === 0 ? (
-                <div className="text-center py-12 text-slate-400 text-xs font-bold">
-                  {language === 'ar' ? 'لا يوجد أعضاء نشطون مسجلون في قسمك حالياً.' : 'No members are registered under your specific department yet.'}
+        return (
+          <div className="space-y-8 animate-fade-in">
+            {/* Active / Open Meeting Alert Banner for Leaders */}
+            {nextLeaderMeeting && (
+              <div className={`p-4 sm:p-5 rounded-3xl border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm transition-all ${
+                nextLeaderMeeting.status === 'Open' && !hasCheckedInLeaderMeeting
+                  ? 'bg-gradient-to-r from-emerald-500/15 via-teal-500/10 to-emerald-500/15 border-emerald-500/40 dark:from-emerald-950/40 dark:via-teal-950/30 dark:to-emerald-950/40 dark:border-emerald-600/50'
+                  : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'
+              }`}>
+                <div className="flex items-center gap-3.5">
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${
+                    nextLeaderMeeting.status === 'Open' && !hasCheckedInLeaderMeeting
+                      ? 'bg-emerald-600 text-white animate-pulse'
+                      : 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-400'
+                  }`}>
+                    <CalendarDays className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                        nextLeaderMeeting.status === 'Open'
+                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300'
+                          : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                      }`}>
+                        {nextLeaderMeeting.status === 'Open' ? (language === 'ar' ? '🟢 مفتوح لتسجيل الحضور' : '🟢 Open for Attendance') : (language === 'ar' ? '📅 موعد قادم' : '📅 Scheduled')}
+                      </span>
+                      {hasCheckedInLeaderMeeting && (
+                        <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/60 dark:text-blue-300">
+                          ✓ {language === 'ar' ? 'سجلت حضورك' : 'Checked in'}
+                        </span>
+                      )}
+                    </div>
+                    <h4 className="text-sm font-black text-slate-900 dark:text-white mt-1">
+                      {nextLeaderMeeting.title}
+                    </h4>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+                      {nextLeaderMeeting.scheduledAt ? new Date(nextLeaderMeeting.scheduledAt).toLocaleString(language === 'ar' ? 'ar-EG' : 'en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : '—'}
+                      {nextLeaderMeeting.location ? ` • ${nextLeaderMeeting.location}` : ''}
+                    </p>
+                  </div>
                 </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-start text-xs">
-                    <thead>
-                      <tr className="border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider">
-                        <th className="pb-3 text-start">{language === 'ar' ? 'الاسم' : 'Name'}</th>
-                        <th className="pb-3 text-start">{language === 'ar' ? 'البريد الإلكتروني' : 'Email'}</th>
-                        <th className="pb-3 text-start">{language === 'ar' ? 'الحالة' : 'Status'}</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {leaderDeptMembers.map(u => (
-                        <tr 
-                          key={u.id} 
-                          onClick={() => onNavigateToView('profile', u.id)}
-                          className="hover:bg-blue-50/60 dark:hover:bg-slate-800/60 cursor-pointer transition-colors group"
-                          title={language === 'ar' ? 'عرض الملف الشخصي' : 'View Profile'}
-                        >
-                          <td className="py-3 font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2 group-hover:text-blue-600">
-                            <img src={u.avatarUrl || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(u.fullName)}`} className="w-7 h-7 rounded-lg object-cover group-hover:scale-105 transition-transform" alt="" />
-                            <span className="group-hover:underline">{u.fullName}</span>
-                          </td>
-                          <td className="py-3 text-slate-500 font-mono text-[11px] text-start">{u.email}</td>
-                          <td className="py-3">
-                            <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 font-bold text-[10px] uppercase border border-emerald-200/50 font-mono">
-                              {u.status === 'Active' ? (language === 'ar' ? 'نشط' : 'Active') : u.status}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+
+                <button
+                  type="button"
+                  onClick={() => onNavigateToView('meetings')}
+                  className={`w-full sm:w-auto px-5 py-2.5 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 shadow-sm cursor-pointer active:scale-95 shrink-0 ${
+                    nextLeaderMeeting.status === 'Open' && !hasCheckedInLeaderMeeting
+                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/30'
+                      : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200'
+                  }`}
+                >
+                  <QrCode className="w-4 h-4" />
+                  <span>
+                    {nextLeaderMeeting.status === 'Open' && !hasCheckedInLeaderMeeting
+                      ? (language === 'ar' ? 'سجّل حضورك كقائد بالكود 📝' : 'Check-in with Code 📝')
+                      : (language === 'ar' ? 'صفحة الاجتماعات والحضور' : 'View Meetings')}
+                  </span>
+                </button>
+              </div>
+            )}
+
+            {/* departmental metrics */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 flex items-center justify-between gap-4 shadow-sm">
+                <div className="space-y-1">
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{language === 'ar' ? 'أعضاء القسم' : 'Department Members'}</span>
+                  <p className="text-2xl font-black text-slate-800 font-mono">{leaderDeptMembers.length}</p>
                 </div>
-              )}
+                <div className="p-3 bg-blue-50 text-eye-brand rounded-xl">
+                  <Users className="w-6 h-6" />
+                </div>
+              </div>
+
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 flex items-center justify-between gap-4 shadow-sm">
+                <div className="space-y-1">
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{language === 'ar' ? 'إجمالي المهام' : 'Total Tasks'}</span>
+                  <p className="text-2xl font-black text-slate-800 font-mono">{leaderDeptTasks.length}</p>
+                </div>
+                <div className="p-3 bg-amber-50 text-amber-500 rounded-xl">
+                  <CheckSquare className="w-6 h-6" />
+                </div>
+              </div>
+
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 flex items-center justify-between gap-4 shadow-sm">
+                <div className="space-y-1">
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{language === 'ar' ? 'تسليمات بانتظار المراجعة' : 'Pending Submissions'}</span>
+                  <p className="text-2xl font-black text-amber-500 font-mono">
+                    {leaderDeptSubs.filter(s => s.status === 'Pending').length}
+                  </p>
+                </div>
+                <div className="p-3 bg-red-50 text-red-500 rounded-xl">
+                  <FileCheck className="w-6 h-6" />
+                </div>
+              </div>
             </div>
 
-            {/* Department Pending Reviews Alerts */}
-            <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-sm">
-              <h3 className="text-base font-extrabold text-slate-800 flex items-center gap-2">
-                <Clock className="w-5 h-5 text-amber-500" />
-                <span>{language === 'ar' ? `تسليمات تحتاج لمراجعتك وتقييمك (${leaderDeptSubs.filter(s => s.status === 'Pending').length})` : `Pending Solutions Review (${leaderDeptSubs.filter(s => s.status === 'Pending').length})`}</span>
-              </h3>
-              <div className="space-y-3">
-                {leaderDeptSubs.filter(s => s.status === 'Pending').length === 0 ? (
-                  <div className="text-center py-10 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-500 font-bold">
-                    {language === 'ar' ? 'رائع! لا توجد تسليمات معلقة تحتاج للمراجعة حالياً.' : 'All submissions reviewed. Good job!'}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+              {/* Department Members Table */}
+              <div className="lg:col-span-7 bg-white rounded-2xl border border-slate-200 p-6 space-y-6 shadow-sm">
+                <h2 className="text-base font-extrabold text-slate-800 flex items-center gap-2">
+                  <Users className="w-5 h-5 text-amber-500" />
+                  <span>{language === 'ar' ? `الأعضاء التابعون لقسمك المباشر (${leaderDeptMembers.length})` : `Department Members under your scope (${leaderDeptMembers.length})`}</span>
+                </h2>
+
+                {leaderDeptMembers.length === 0 ? (
+                  <div className="text-center py-12 text-slate-400 text-xs font-bold">
+                    {language === 'ar' ? 'لا يوجد أعضاء نشطون مسجلون في قسمك حالياً.' : 'No members are registered under your specific department yet.'}
                   </div>
                 ) : (
-                  leaderDeptSubs.filter(s => s.status === 'Pending').map(sub => (
-                    <div
-                      key={sub.id}
-                      onClick={() => onNavigateToView('tasks', sub.taskId)}
-                      className="p-3 bg-slate-50 border border-slate-200/60 rounded-xl hover:border-eye-brand cursor-pointer flex justify-between items-start transition-all hover:bg-slate-100"
-                    >
-                      <div>
-                        <p className="text-xs font-bold text-slate-800">{sub.fileName}</p>
-                        <p className="text-[10px] text-slate-500 block mt-1">{language === 'ar' ? 'بواسطة' : 'By'} {sub.memberName} • {sub.taskName}</p>
-                      </div>
-                      <span className="text-[10px] font-mono text-eye-brand bg-amber-50 px-1.5 py-0.5 rounded uppercase font-bold shrink-0 border border-amber-200/40">
-                        {language === 'ar' ? 'مراجعة وتقييم' : 'Review File'}
-                      </span>
-                    </div>
-                  ))
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-start text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider">
+                          <th className="pb-3 text-start">{language === 'ar' ? 'الاسم' : 'Name'}</th>
+                          <th className="pb-3 text-start">{language === 'ar' ? 'البريد الإلكتروني' : 'Email'}</th>
+                          <th className="pb-3 text-start">{language === 'ar' ? 'الحالة' : 'Status'}</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {leaderDeptMembers.map(u => (
+                          <tr 
+                            key={u.id} 
+                            onClick={() => onNavigateToView('profile', u.id)}
+                            className="hover:bg-blue-50/60 dark:hover:bg-slate-800/60 cursor-pointer transition-colors group"
+                            title={language === 'ar' ? 'عرض الملف الشخصي' : 'View Profile'}
+                          >
+                            <td className="py-3 font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2 group-hover:text-blue-600">
+                              <img src={u.avatarUrl || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(u.fullName)}`} className="w-7 h-7 rounded-lg object-cover group-hover:scale-105 transition-transform" alt="" />
+                              <span className="group-hover:underline">{u.fullName}</span>
+                            </td>
+                            <td className="py-3 text-slate-500 font-mono text-[11px] text-start">{u.email}</td>
+                            <td className="py-3">
+                              <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 font-bold text-[10px] uppercase border border-emerald-200/50 font-mono">
+                                {u.status === 'Active' ? (language === 'ar' ? 'نشط' : 'Active') : u.status}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </div>
-            </div>
 
-            {/* Active Members List Widget */}
-            {renderActiveMembersWidget()}
+              {/* Department Pending Reviews Alerts */}
+              <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-sm">
+                <h3 className="text-base font-extrabold text-slate-800 flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-amber-500" />
+                  <span>{language === 'ar' ? `تسليمات تحتاج لمراجعتك وتقييمك (${leaderDeptSubs.filter(s => s.status === 'Pending').length})` : `Pending Solutions Review (${leaderDeptSubs.filter(s => s.status === 'Pending').length})`}</span>
+                </h3>
+                <div className="space-y-3">
+                  {leaderDeptSubs.filter(s => s.status === 'Pending').length === 0 ? (
+                    <div className="text-center py-10 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-500 font-bold">
+                      {language === 'ar' ? 'رائع! لا توجد تسليمات معلقة تحتاج للمراجعة حالياً.' : 'All submissions reviewed. Good job!'}
+                    </div>
+                  ) : (
+                    leaderDeptSubs.filter(s => s.status === 'Pending').map(sub => (
+                      <div
+                        key={sub.id}
+                        onClick={() => onNavigateToView('tasks', sub.taskId)}
+                        className="p-3 bg-slate-50 border border-slate-200/60 rounded-xl hover:border-eye-brand cursor-pointer flex justify-between items-start transition-all hover:bg-slate-100"
+                      >
+                        <div>
+                          <p className="text-xs font-bold text-slate-800">{sub.fileName}</p>
+                          <p className="text-[10px] text-slate-500 block mt-1">{language === 'ar' ? 'بواسطة' : 'By'} {sub.memberName} • {sub.taskName}</p>
+                        </div>
+                        <span className="text-[10px] font-mono text-eye-brand bg-amber-50 px-1.5 py-0.5 rounded uppercase font-bold shrink-0 border border-amber-200/40">
+                          {language === 'ar' ? 'مراجعة وتقييم' : 'Review File'}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Active Members List Widget */}
+              {renderActiveMembersWidget()}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ========================================== */}
       {/* 3. MEMBER PORTAL (SMART FOCUS ACTION HUB) */}

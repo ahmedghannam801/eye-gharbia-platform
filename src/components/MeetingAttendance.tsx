@@ -457,7 +457,7 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
                           ✓ {isAr ? 'حضرت' : 'Attended'}
                         </span>
                       )}
-                      {!iCheckedIn && currentUser.role === 'Member' && mtg.status === 'Open' && (
+                      {!iCheckedIn && mtg.status === 'Open' && (
                         <button
                           onClick={(e) => { e.stopPropagation(); setMobileCheckInMtg(mtg); setCheckInCode(''); setCheckInResult(null); setCheckingMtgId(null); }}
                           className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-xl font-black animate-pulse flex items-center gap-1.5 shrink-0 shadow-md shadow-blue-500/20 cursor-pointer active:scale-95"
@@ -537,8 +537,8 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
                       </div>
                     )}
 
-                    {/* Check-in section (Members only, meeting is Open) */}
-                    {!iCheckedIn && currentUser.role === 'Member' && mtg.status === 'Open' && (
+                    {/* Check-in section (Open to all attendees including Leaders) */}
+                    {!iCheckedIn && mtg.status === 'Open' && (
                       <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 rounded-2xl p-5 border border-blue-200/60 dark:border-blue-800/60 shadow-sm space-y-4">
                         <p className="text-sm font-bold text-blue-700 dark:text-blue-400 flex items-center gap-2">
                           <QrCode className="w-4 h-4" />
@@ -601,7 +601,7 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
                             />
                             <p className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold flex items-center gap-1 mt-0.5">
                               <Shield className="w-3 h-3 shrink-0" />
-                              <span>{isAr ? '🔒 خصوصية تامة: ملاحظاتك واقتراحاتك تظهر حصرياً لقادة ومسؤولي السيشن.' : '🔒 Privacy: Your feedback is exclusively visible to session leaders/hosts.'}</span>
+                              <span>{isAr ? '🔒 خصوصية تامة: ملاحظاتك واقتراحاتك تظهر حصرياً لمنسقي الاجتماع وإدارة الكيان.' : '🔒 Privacy: Your feedback is visible only to meeting hosts & leadership.'}</span>
                             </p>
                           </div>
 
@@ -636,13 +636,36 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
                     {canManage && (
                       <div className="space-y-4 bg-slate-100/70 dark:bg-slate-800/40 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-700/80">
                         {/* Attendance Code Display */}
-                        <div className="flex items-center gap-3 bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                        <div className="flex items-center gap-3 bg-white dark:bg-slate-800 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex-wrap sm:flex-nowrap">
                           <QrCode className="w-5 h-5 text-eye-brand shrink-0" />
                           <div>
                             <p className="text-[10px] text-slate-500 font-bold">{isAr ? 'كود الحضور السري (خاص بمنشئ الاجتماع / الإدارة)' : 'Secret Attendance Code (Host / Admin Only)'}</p>
                             <p className="text-xl font-black font-mono tracking-widest text-eye-brand">{mtg.attendanceCode}</p>
                           </div>
-                          <p className="text-[10px] text-slate-400 ms-auto">{isAr ? 'أعطه للأعضاء أثناء الاجتماع' : 'Share with members only'}</p>
+                          <div className="ms-auto flex items-center gap-2">
+                            {!iCheckedIn && mtg.status === 'Open' && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setCheckInCode(mtg.attendanceCode);
+                                  setCheckingMtgId(mtg.id);
+                                  const result = db.checkIn(mtg.id, mtg.attendanceCode, currentUser, checkInFeedback, checkInRating);
+                                  setCheckInResult(result);
+                                  if (result === 'ok') {
+                                    setCheckInCode('');
+                                    setCheckInFeedback('');
+                                    setCheckInRating(5);
+                                    setTimeout(() => setCheckInResult(null), 3000);
+                                  }
+                                }}
+                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl text-xs font-black transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>{isAr ? 'تسجيل حضوري كمنظم' : 'Check-in as Host'}</span>
+                              </button>
+                            )}
+                            <p className="text-[10px] text-slate-400 hidden sm:block">{isAr ? 'أعطه للحاضرين لتسجيل الحضور' : 'Share with attendees'}</p>
+                          </div>
                         </div>
 
                         {/* Status controls */}
@@ -950,7 +973,13 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
                                               <div className="flex items-center gap-1.5 text-[9px] text-slate-400 font-mono mt-0.5">
                                                 <span>{u?.membershipCode || '—'}</span>
                                                 <span>•</span>
-                                                <span className="text-slate-500 font-sans">{u?.role || 'Member'}</span>
+                                                {u?.role && u.role !== 'Member' ? (
+                                                  <span className="font-sans px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 font-bold border border-amber-300 dark:border-amber-700 text-[9px]">
+                                                    👑 {u.role}
+                                                  </span>
+                                                ) : (
+                                                  <span className="text-slate-500 font-sans">{isAr ? 'عضو' : 'Member'}</span>
+                                                )}
                                               </div>
                                             </div>
                                           </div>
@@ -1007,6 +1036,11 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
                                       {u?.membershipCode && (
                                         <span className="text-[9px] font-mono bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-1.5 py-0.2 rounded">
                                           {u.membershipCode}
+                                        </span>
+                                      )}
+                                      {u?.role && u.role !== 'Member' && (
+                                        <span className="text-[9px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 px-1.5 py-0.2 rounded-full border border-amber-300 dark:border-amber-700">
+                                          👑 {u.role}
                                         </span>
                                       )}
                                     </div>
@@ -1312,7 +1346,7 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
             {/* Code input */}
             <div className="w-full max-w-sm space-y-3">
               <p className="text-white/70 text-xs font-bold text-center">
-                {isAr ? 'أدخل الكود السري الذي شاركه معك المسؤول' : 'Enter the secret code shared by your leader'}
+                {isAr ? 'أدخل الكود السري الخاص بالاجتماع لتسجيل الحضور' : 'Enter the secret meeting code to check in'}
               </p>
               <input
                 value={checkInCode}
@@ -1358,7 +1392,7 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
               <div className="space-y-1">
                 <label className="text-xs font-bold text-white/90 flex items-center gap-1.5">
                   <MessageSquare className="w-3.5 h-3.5 text-blue-300" />
-                  <span>{isAr ? '💬 رأيك ومقترحاتك (اختياري - سري للقادة فقط):' : '💬 Feedback & Suggestions (Leaders only):'}</span>
+                  <span>{isAr ? '💬 رأيك ومقترحاتك حول الاجتماع (اختياري):' : '💬 Meeting Feedback & Suggestions (Optional):'}</span>
                 </label>
                 <textarea
                   rows={2}
