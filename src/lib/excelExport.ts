@@ -27,89 +27,87 @@ export const classifyAttendeeSubGroup = (
   const rawComm = (user?.committee || record.committee || 'عام').trim();
   const rawDept = (user?.department || record.department || '').trim();
   const rawSub = (user?.subCommittee || '').trim();
-  const combined = `${rawDept} ${rawSub}`.toUpperCase();
+  const commUpper = rawComm.toUpperCase();
+  const combined = `${rawComm} ${rawDept} ${rawSub}`.toUpperCase();
 
-  let committee = rawComm;
-  let subGroup = rawDept || 'عام';
-  let committeeLabelAr = rawComm;
-  let subGroupLabelAr = rawDept || 'عام';
+  // Normalize committee
+  const isHR = commUpper === 'HR' || commUpper.includes('موارد') || commUpper.includes('HUMAN') || combined.includes('HRM') || combined.includes('HRD') || combined.includes('HRS') || combined.includes('HRIS');
+  const isPR = commUpper === 'PR' || commUpper.includes('علاقات') || commUpper.includes('PUBLIC') || combined.includes('EPR') || combined.includes('IPR');
+  const isSM = commUpper === 'SM' || commUpper.includes('سوشيال') || commUpper.includes('SOCIAL') || commUpper.includes('MEDIA') || combined.includes('GRAPHIC') || combined.includes('CONTENT') || combined.includes('PHOTO') || combined.includes('VIDEO');
+  const isOR = commUpper === 'OR' || commUpper.includes('تنظيم') || commUpper.includes('ORGAN') || combined.includes('VIP') || combined.includes('LOGIST') || combined.includes('PLANNING') || combined.includes('COORD');
 
-  // Committee names in Arabic
+  if (isHR) {
+    const committee = 'HR';
+    const committeeLabelAr = 'الموارد البشرية (HR)';
+    if (combined.includes('HRD') || rawDept.toUpperCase() === 'HRD' || rawDept.includes('تدريب') || rawDept.includes('تطوير')) {
+      return { committee, subGroup: 'HRD', committeeLabelAr, subGroupLabelAr: 'HRD — التطوير والتدريب' };
+    }
+    if (combined.includes('HRS') || rawDept.toUpperCase() === 'HRS' || rawDept.includes('مساندة') || rawDept.includes('دعم')) {
+      return { committee, subGroup: 'HRS', committeeLabelAr, subGroupLabelAr: 'HRS — الدعم والمساندة' };
+    }
+    if (combined.includes('HRIS') || rawDept.toUpperCase() === 'HRIS' || rawDept.includes('معلومات') || rawDept.includes('نظم')) {
+      return { committee, subGroup: 'HRIS', committeeLabelAr, subGroupLabelAr: 'HRIS — نظم المعلومات' };
+    }
+    return { committee, subGroup: 'HRM', committeeLabelAr, subGroupLabelAr: 'HRM — إدارة الموارد البشرية' };
+  }
+
+  if (isPR) {
+    const committee = 'PR';
+    const committeeLabelAr = 'العلاقات العامة (PR)';
+    if (combined.includes('IPR') || rawDept.includes('داخلي') || rawDept.toUpperCase() === 'IPR') {
+      return { committee, subGroup: 'IPR', committeeLabelAr, subGroupLabelAr: 'العلاقات الداخلية (IPR)' };
+    }
+    return { committee, subGroup: 'EPR', committeeLabelAr, subGroupLabelAr: 'العلاقات الخارجية (EPR)' };
+  }
+
+  if (isSM) {
+    const committee = 'SM';
+    const committeeLabelAr = 'السوشيال ميديا (SM)';
+    if (combined.includes('GRAPHIC') || rawDept.includes('جرافيك') || rawDept.includes('تصميم')) {
+      return { committee, subGroup: 'Graphic Design', committeeLabelAr, subGroupLabelAr: 'التصميم الجرافيكي (Graphic Design)' };
+    }
+    if (combined.includes('CONTENT') || rawDept.includes('محتوى')) {
+      return { committee, subGroup: 'Content', committeeLabelAr, subGroupLabelAr: 'كتابة المحتوى (Content)' };
+    }
+    if (combined.includes('PHOTO') || rawDept.includes('تصوير')) {
+      return { committee, subGroup: 'Photography', committeeLabelAr, subGroupLabelAr: 'التصوير الفوتوغرافي (Photography)' };
+    }
+    if (combined.includes('VIDEO') || rawDept.includes('فيديو') || rawDept.includes('مونتاج')) {
+      return { committee, subGroup: 'Video Editing', committeeLabelAr, subGroupLabelAr: 'المونتاج وصناعة الفيديو (Video Editing)' };
+    }
+    return { committee, subGroup: 'Content', committeeLabelAr, subGroupLabelAr: 'فريق السوشيال ميديا' };
+  }
+
+  if (isOR) {
+    const committee = 'OR';
+    const committeeLabelAr = 'التنظيم (OR)';
+    if (combined.includes('VIP') || rawDept.includes('زوار') || rawDept.includes('VIP')) {
+      return { committee, subGroup: 'VIP', committeeLabelAr, subGroupLabelAr: 'استقبال كبار الزوار (VIP)' };
+    }
+    if (combined.includes('PLANNING') || rawDept.includes('تخطيط')) {
+      return { committee, subGroup: 'Planning', committeeLabelAr, subGroupLabelAr: 'التخطيط (Planning)' };
+    }
+    if (combined.includes('COORD') || rawDept.includes('تنسيق')) {
+      return { committee, subGroup: 'Coordination', committeeLabelAr, subGroupLabelAr: 'التنسيق والمتابعة (Coordination)' };
+    }
+    if (combined.includes('LOGIST') || rawDept.includes('لوجست') || rawDept.includes('دعم فني')) {
+      return { committee, subGroup: 'Logistics', committeeLabelAr, subGroupLabelAr: 'اللوجستيات والدعم الفني (Logistics)' };
+    }
+    return { committee, subGroup: 'Logistics', committeeLabelAr, subGroupLabelAr: 'فريق التنظيم (OR)' };
+  }
+
+  const fallbackSub = rawDept || 'عام';
   const commMap: Record<string, string> = {
-    HR: 'الموارد البشرية (HR)',
-    PR: 'العلاقات العامة (PR)',
-    SM: 'السوشيال ميديا (SM)',
-    OR: 'التنظيم (OR)',
     All: 'جميع اللجان',
     None: 'عام / إدارة',
     General: 'عام',
   };
-  committeeLabelAr = commMap[rawComm] || rawComm;
-
-  // HR Division logic: 4 main sub-committees (HRM, HRD, HRS, HRIS)
-  if (rawComm.toUpperCase() === 'HR' || combined.includes('HRM') || combined.includes('HR OF') || combined.includes('HRD') || combined.includes('HRS') || combined.includes('HRIS')) {
-    committee = 'HR';
-    committeeLabelAr = 'الموارد البشرية (HR)';
-
-    if (combined.includes('HRD') || rawDept === 'HRD') {
-      subGroup = 'HRD';
-      subGroupLabelAr = 'HRD — التطوير والتدريب';
-    } else if (combined.includes('HRS') || rawDept === 'HRS') {
-      subGroup = 'HRS';
-      subGroupLabelAr = 'HRS — الدعم والمساندة';
-    } else if (combined.includes('HRIS') || rawDept === 'HRIS') {
-      subGroup = 'HRIS';
-      subGroupLabelAr = 'HRIS — نظم المعلومات';
-    } else {
-      // All other HR members belong to HRM
-      subGroup = 'HRM';
-      subGroupLabelAr = 'HRM — إدارة الموارد البشرية';
-    }
-  } else if (rawComm.toUpperCase() === 'PR') {
-    committee = 'PR';
-    committeeLabelAr = 'العلاقات العامة (PR)';
-    if (combined.includes('EPR')) {
-      subGroup = 'EPR';
-      subGroupLabelAr = 'العلاقات الخارجية (EPR)';
-    } else if (combined.includes('IPR')) {
-      subGroup = 'IPR';
-      subGroupLabelAr = 'العلاقات الداخلية (IPR)';
-    }
-  } else if (rawComm.toUpperCase() === 'SM') {
-    committee = 'SM';
-    committeeLabelAr = 'السوشيال ميديا (SM)';
-    if (combined.includes('GRAPHIC')) {
-      subGroup = 'Graphic Design';
-      subGroupLabelAr = 'التصميم الجرافيكي (Graphic Design)';
-    } else if (combined.includes('CONTENT')) {
-      subGroup = 'Content';
-      subGroupLabelAr = 'كتابة المحتوى (Content)';
-    } else if (combined.includes('PHOTO')) {
-      subGroup = 'Photography';
-      subGroupLabelAr = 'التصوير الفوتوغرافي (Photography)';
-    } else if (combined.includes('VIDEO')) {
-      subGroup = 'Video Editing';
-      subGroupLabelAr = 'المونتاج وصناعة الفيديو (Video Editing)';
-    }
-  } else if (rawComm.toUpperCase() === 'OR') {
-    committee = 'OR';
-    committeeLabelAr = 'التنظيم (OR)';
-    if (combined.includes('VIP')) {
-      subGroup = 'VIP';
-      subGroupLabelAr = 'استقبال كبار الزوار (VIP)';
-    } else if (combined.includes('PLANNING')) {
-      subGroup = 'Planning';
-      subGroupLabelAr = 'التخطيط (Planning)';
-    } else if (combined.includes('COORD')) {
-      subGroup = 'Coordination';
-      subGroupLabelAr = 'التنسيق والمتابعة (Coordination)';
-    } else if (combined.includes('LOGIST')) {
-      subGroup = 'Logistics';
-      subGroupLabelAr = 'اللوجستيات والدعم الفني (Logistics)';
-    }
-  }
-
-  return { committee, subGroup, committeeLabelAr, subGroupLabelAr };
+  return {
+    committee: rawComm,
+    subGroup: fallbackSub,
+    committeeLabelAr: commMap[rawComm] || rawComm,
+    subGroupLabelAr: fallbackSub
+  };
 };
 
 /**

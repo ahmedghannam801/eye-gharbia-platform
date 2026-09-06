@@ -30,6 +30,33 @@ interface MeetingsProps {
 
 const isLeaderOrAdmin = (u: UserProfile) => ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'Leader', 'HRM'].includes(u.role);
 
+// Short label helper for committee/subgroup pills to prevent UI clutter
+const getShortLabel = (code: string, label: string): string => {
+  const map: Record<string, string> = {
+    HRM: 'HRM',
+    HRD: 'HRD',
+    HRS: 'HRS',
+    HRIS: 'HRIS',
+    EPR: 'EPR',
+    IPR: 'IPR',
+    'Graphic Design': 'الجرافيك',
+    Content: 'المحتوى',
+    Photography: 'التصوير',
+    'Video Editing': 'المونتاج',
+    VIP: 'VIP',
+    Planning: 'التخطيط',
+    Coordination: 'التنسيق',
+    Logistics: 'اللوجستيات',
+    'Social Media': 'سوشيال',
+    OR: 'تنظيم',
+  };
+  if (map[code]) return map[code];
+  if (label.includes('—')) return label.split('—')[0].trim();
+  const parenMatch = label.match(/\(([^)]+)\)/);
+  if (parenMatch && parenMatch[1].length <= 10) return parenMatch[1];
+  return label.length > 15 ? label.slice(0, 14) + '..' : label;
+};
+
 // Only meeting creator or Super Admin can manage meeting attendance, code, and status
 const canManageMeeting = (mtg: Meeting, user: UserProfile): boolean => {
   if (!user) return false;
@@ -229,45 +256,49 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
     <div className="p-6 space-y-6 animate-fade-in" dir={isRtl ? 'rtl' : 'ltr'} id="meetings-view">
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-slate-50 to-blue-50/30 dark:from-slate-900 dark:to-blue-950/30 p-6 rounded-3xl border border-blue-200/40 dark:border-slate-800 shadow-sm">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-bold text-xs uppercase tracking-widest">
-            <CalendarDays className="w-4 h-4" />
-            <span>{isAr ? 'نظام الاجتماعات والحضور' : 'Meetings & Attendance'}</span>
-          </div>
-          <h1 className="text-2xl font-black text-slate-900 dark:text-white">
-            {isAr ? 'الاجتماعات وتسجيل الحضور 📅' : 'Meetings & Attendance 📅'}
-          </h1>
-          <p className="text-xs text-slate-500 font-semibold">
-            {isAr ? 'تابع الحضور مقسماً حسب اللجان واللجان الفرعية مع إمكانية تصدير Excel منظم' : 'Track attendance grouped by committees and sub-committees with Excel export'}
-          </p>
-        </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="bg-white dark:bg-slate-900 px-4 py-2 rounded-2xl border border-slate-200 dark:border-slate-700 text-center shadow-sm">
-            <p className="text-blue-600 font-black text-xl">{myAttendance.length}</p>
-            <p className="text-[10px] text-slate-500 font-bold">{isAr ? 'حضوري' : 'My Attended'}</p>
-          </div>
-          {isLeaderOrAdmin(currentUser) && (
-            <div className="flex items-center gap-2 flex-wrap">
-              <button
-                onClick={() => setShowImporter(true)}
-                className="flex items-center gap-2 px-4 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-2xl text-xs font-bold transition-all shadow-sm cursor-pointer active:scale-95"
-                id="import-attendance-btn"
-              >
-                <FileUp className="w-4 h-4" />
-                {isAr ? 'رفع ملف حضور' : 'Import File'}
-              </button>
-              <button
-                onClick={() => setShowCreate(true)}
-                className="flex items-center gap-2 px-4 py-2.5 bg-eye-brand hover:bg-eye-brand-dark text-white rounded-2xl text-xs font-bold transition-all shadow-sm cursor-pointer active:scale-95"
-                id="create-meeting-btn"
-              >
-                <Plus className="w-4 h-4" />
-                {isAr ? 'اجتماع جديد' : 'New Meeting'}
-              </button>
+      <div className="bg-gradient-to-r from-slate-50 via-blue-50/20 to-indigo-50/30 dark:from-slate-900 dark:via-blue-950/20 dark:to-indigo-950/30 p-5 sm:p-6 rounded-3xl border border-blue-200/50 dark:border-slate-800 shadow-sm space-y-4">
+        {/* Top Row: Title, Subtitle, and My Attendance Badge */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-bold text-xs uppercase tracking-widest">
+              <CalendarDays className="w-4 h-4" />
+              <span>{isAr ? 'نظام الاجتماعات والحضور' : 'Meetings & Attendance'}</span>
             </div>
-          )}
+            <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
+              {isAr ? 'الاجتماعات وتسجيل الحضور 📅' : 'Meetings & Attendance 📅'}
+            </h1>
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium max-w-xl">
+              {isAr ? 'تابع الحضور مقسماً حسب اللجان واللجان الفرعية مع إمكانية تصدير Excel منظم' : 'Track attendance grouped by committees and sub-committees with Excel export'}
+            </p>
+          </div>
+
+          <div className="shrink-0 bg-white dark:bg-slate-800/90 px-3.5 py-2 rounded-2xl border border-slate-200 dark:border-slate-700 text-center shadow-xs">
+            <p className="text-blue-600 dark:text-blue-400 font-black text-lg sm:text-xl leading-none">{myAttendance.length}</p>
+            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mt-0.5">{isAr ? 'حضوري' : 'My Attended'}</p>
+          </div>
         </div>
+
+        {/* Action Buttons: Full width balanced row on mobile */}
+        {isLeaderOrAdmin(currentUser) && (
+          <div className="pt-2 border-t border-slate-200/60 dark:border-slate-800/80 flex items-center gap-2.5">
+            <button
+              onClick={() => setShowImporter(true)}
+              className="flex-1 min-w-[130px] flex items-center justify-center gap-2 px-4 py-2.5 bg-violet-600 hover:bg-violet-700 active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
+              id="import-attendance-btn"
+            >
+              <FileUp className="w-4 h-4" />
+              <span>{isAr ? 'رفع ملف حضور' : 'Import File'}</span>
+            </button>
+            <button
+              onClick={() => setShowCreate(true)}
+              className="flex-1 min-w-[130px] flex items-center justify-center gap-2 px-4 py-2.5 bg-eye-brand hover:bg-eye-brand-dark active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
+              id="create-meeting-btn"
+            >
+              <Plus className="w-4 h-4" />
+              <span>{isAr ? 'اجتماع جديد' : 'New Meeting'}</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Meetings List */}
@@ -348,101 +379,127 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
               <div key={mtg.id} className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm card-pressable transition-all">
                 {/* Meeting header row */}
                 <div
-                  className="flex items-center gap-4 p-5 cursor-pointer select-none"
+                  className="p-4 sm:p-5 cursor-pointer select-none space-y-3"
                   onClick={() => setExpandedMtg(isExpanded ? null : mtg.id)}
                 >
-                  {/* Icon */}
-                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${mtg.status === 'Open' ? 'bg-emerald-100 dark:bg-emerald-950/40' : mtg.status === 'Closed' ? 'bg-slate-100 dark:bg-slate-800' : 'bg-blue-100 dark:bg-blue-950/40'}`}>
-                    <CalendarDays className={`w-6 h-6 ${mtg.status === 'Open' ? 'text-emerald-600' : mtg.status === 'Closed' ? 'text-slate-400' : 'text-blue-600'}`} />
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-base font-black text-slate-900 dark:text-white truncate">{mtg.title}</p>
-                      <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full ${statusColor(mtg.status)}`}>{statusLabel(mtg.status)}</span>
-                      <span className="text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2.5 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">{typeLabel(mtg.type)}</span>
-                      {mtg.createdByName && (
-                        <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/60 px-2.5 py-0.5 rounded-full border border-slate-200/60 dark:border-slate-700/60">
-                          👤 {isAr ? `المنظم: ${mtg.createdByName}` : `Host: ${mtg.createdByName}`}
-                        </span>
-                      )}
+                  {/* Top Row: Icon, Title & Badges & Expand indicator */}
+                  <div className="flex items-start gap-3">
+                    <div className={`w-11 h-11 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-xs ${mtg.status === 'Open' ? 'bg-emerald-100 dark:bg-emerald-950/40' : mtg.status === 'Closed' ? 'bg-slate-100 dark:bg-slate-800' : 'bg-blue-100 dark:bg-blue-950/40'}`}>
+                      <CalendarDays className={`w-5 h-5 sm:w-6 sm:h-6 ${mtg.status === 'Open' ? 'text-emerald-600' : mtg.status === 'Closed' ? 'text-slate-400' : 'text-blue-600'}`} />
                     </div>
 
-                    <div className="flex items-center gap-2 sm:gap-3 flex-wrap mt-1.5 text-xs text-slate-500 font-semibold">
+                    <div className="flex-1 min-w-0">
+                      {/* Meeting Title - Never truncated awkwardly */}
+                      <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white leading-snug break-words">
+                        {mtg.title}
+                      </h3>
+
+                      {/* Badges */}
+                      <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
+                        <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full ${statusColor(mtg.status)}`}>
+                          {statusLabel(mtg.status)}
+                        </span>
+                        <span className="text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2.5 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">
+                          {typeLabel(mtg.type)}
+                        </span>
+                        {mtg.createdByName && (
+                          <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/60 px-2 py-0.5 rounded-full border border-slate-200/60 dark:border-slate-700/60 truncate max-w-[180px]">
+                            👤 {isAr ? `المنظم: ${mtg.createdByName}` : `Host: ${mtg.createdByName}`}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="p-1 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 shrink-0">
+                      {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                    </div>
+                  </div>
+
+                  {/* Bottom Row: Date/Time/Location & Actions */}
+                  <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2.5 border-t border-slate-100 dark:border-slate-800/80 text-xs">
+                    <div className="flex items-center gap-2 sm:gap-3 flex-wrap text-slate-500 font-semibold">
                       <span className="flex items-center gap-1 font-bold text-slate-700 dark:text-slate-300">
-                        <Clock className="w-3.5 h-3.5 text-indigo-500" />
-                        {formatDate(mtg.scheduledAt, isAr ? 'ar' : 'en')}
-                        {' — '}
+                        <Clock className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                        <span>{formatDate(mtg.scheduledAt, isAr ? 'ar' : 'en')}</span>
+                        <span>—</span>
                         <span className="text-eye-brand font-black">{formatTime(mtg.scheduledAt, isAr ? 'ar' : 'en')}</span>
                       </span>
-                      {mtg.location && mtg.location.match(/^https?:\/\//i) ? (
-                        <a
-                          href={mtg.location}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={e => e.stopPropagation()}
-                          className="flex items-center gap-1 text-blue-600 dark:text-blue-400 font-bold hover:underline"
-                        >
-                          <MapPin className="w-3.5 h-3.5 text-blue-500" />
-                          <span>{isAr ? 'رابط الاجتماع 🔗' : 'Meeting Link 🔗'}</span>
-                        </a>
-                      ) : (
-                        <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5 text-slate-400" />{mtg.location}</span>
+
+                      {mtg.location && (
+                        mtg.location.match(/^https?:\/\//i) ? (
+                          <a
+                            href={mtg.location}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={e => e.stopPropagation()}
+                            className="flex items-center gap-1 text-blue-600 dark:text-blue-400 font-bold hover:underline"
+                          >
+                            <MapPin className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                            <span>{isAr ? 'رابط الاجتماع 🔗' : 'Meeting Link 🔗'}</span>
+                          </a>
+                        ) : (
+                          <span className="flex items-center gap-1">
+                            <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <span className="truncate max-w-[140px]">{mtg.location}</span>
+                          </span>
+                        )
                       )}
+
                       <span className="flex items-center gap-1 font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">
-                        <Users className="w-3.5 h-3.5 text-blue-500" />
+                        <Users className="w-3.5 h-3.5 text-blue-500 shrink-0" />
                         <span>{att.length}{mtg.expectedAttendeesCount ? ` / ${mtg.expectedAttendeesCount}` : ''} {isAr ? 'حاضر' : 'attended'}</span>
                       </span>
                     </div>
-                  </div>
 
-                  <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                    {/* Quick Excel Export button in card header for leaders/admins */}
-                    {isLeaderOrAdmin(currentUser) && (
-                      <button
-                        onClick={(e) => handleExportExcel(mtg, e)}
-                        disabled={exportingMtgId === mtg.id}
-                        className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-600 dark:hover:text-white border border-emerald-300 dark:border-emerald-700/60 rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer active:scale-95"
-                        title={isAr ? 'تصدير كشف الحضور Excel' : 'Export Attendance to Excel'}
-                      >
-                        {exportingMtgId === mtg.id ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <FileSpreadsheet className="w-3.5 h-3.5" />
-                        )}
-                        <span className="hidden sm:inline">{isAr ? 'تصدير Excel' : 'Export Excel'}</span>
-                      </button>
-                    )}
-
-                    {iCheckedIn && <span className="text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800/60 px-3 py-1 rounded-full font-black">✓ {isAr ? 'حضرت' : 'Attended'}</span>}
-                    {!iCheckedIn && currentUser.role === 'Member' && mtg.status === 'Open' && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setMobileCheckInMtg(mtg); setCheckInCode(''); setCheckInResult(null); setCheckingMtgId(null); }}
-                        className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-full font-black animate-pulse flex items-center gap-1.5 shrink-0 shadow-md shadow-blue-500/20"
-                      >
-                        <QrCode className="w-3.5 h-3.5" />
-                        {isAr ? 'سجّل حضورك' : 'Check-in'}
-                      </button>
-                    )}
-                    {canManage && (
-                      <button
-                        onClick={(e) => handleOpenEdit(mtg, e)}
-                        className="p-2 rounded-xl bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-600 dark:hover:text-white border border-blue-200/60 dark:border-blue-800 transition-colors"
-                        title={isAr ? 'تعديل موعد وبيانات الاجتماع' : 'Edit Meeting & Time'}
-                      >
-                        <Edit3 className="w-4 h-4" />
-                      </button>
-                    )}
-                    {canManage && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleDeleteMeeting(mtg.id); }}
-                        className="p-2 rounded-xl bg-red-50 hover:bg-red-500 text-red-500 hover:text-white border border-red-100 transition-colors"
-                        title={isAr ? 'حذف الاجتماع' : 'Delete Meeting'}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
-                    {isExpanded ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
+                    <div className="flex items-center gap-1.5 ms-auto" onClick={e => e.stopPropagation()}>
+                      {iCheckedIn && (
+                        <span className="text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800/60 px-2.5 py-1 rounded-full font-black">
+                          ✓ {isAr ? 'حضرت' : 'Attended'}
+                        </span>
+                      )}
+                      {!iCheckedIn && currentUser.role === 'Member' && mtg.status === 'Open' && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setMobileCheckInMtg(mtg); setCheckInCode(''); setCheckInResult(null); setCheckingMtgId(null); }}
+                          className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-xl font-black animate-pulse flex items-center gap-1.5 shrink-0 shadow-md shadow-blue-500/20 cursor-pointer active:scale-95"
+                        >
+                          <QrCode className="w-3.5 h-3.5" />
+                          <span>{isAr ? 'سجّل حضورك' : 'Check-in'}</span>
+                        </button>
+                      )}
+                      {isLeaderOrAdmin(currentUser) && (
+                        <button
+                          onClick={(e) => handleExportExcel(mtg, e)}
+                          disabled={exportingMtgId === mtg.id}
+                          className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-600 dark:hover:text-white border border-emerald-300 dark:border-emerald-700/60 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1 cursor-pointer active:scale-95"
+                          title={isAr ? 'تصدير كشف الحضور Excel' : 'Export Attendance to Excel'}
+                        >
+                          {exportingMtgId === mtg.id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <FileSpreadsheet className="w-3.5 h-3.5" />
+                          )}
+                          <span className="hidden sm:inline">{isAr ? 'Excel' : 'Excel'}</span>
+                        </button>
+                      )}
+                      {canManage && (
+                        <button
+                          onClick={(e) => handleOpenEdit(mtg, e)}
+                          className="p-1.5 rounded-xl bg-blue-50 hover:bg-blue-600 text-blue-600 hover:text-white dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-600 dark:hover:text-white border border-blue-200/60 dark:border-blue-800 transition-colors cursor-pointer"
+                          title={isAr ? 'تعديل موعد وبيانات الاجتماع' : 'Edit Meeting'}
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                      {canManage && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDeleteMeeting(mtg.id); }}
+                          className="p-1.5 rounded-xl bg-red-50 hover:bg-red-500 text-red-500 hover:text-white border border-red-100 transition-colors cursor-pointer"
+                          title={isAr ? 'حذف الاجتماع' : 'Delete Meeting'}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                 </div>
@@ -457,18 +514,23 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
                     )}
 
                     {mtg.location && mtg.location.match(/^https?:\/\//i) && (
-                      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/40 border border-blue-200 dark:border-blue-800 rounded-2xl p-4 flex items-center justify-between gap-3">
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-bold text-blue-900 dark:text-blue-200">
-                            {isAr ? '🔗 رابط الانضمام للاجتماع أونلاين (Online Meeting Link):' : '🔗 Meeting Link (Online):'}
-                          </p>
-                          <p className="text-[11px] text-blue-600 dark:text-blue-400 font-mono truncate">{mtg.location}</p>
+                      <div className="bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-blue-500/5 dark:from-blue-950/40 dark:to-indigo-950/40 border border-blue-200 dark:border-blue-800/80 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                            <p className="text-xs font-black text-blue-900 dark:text-blue-200">
+                              {isAr ? 'رابط الانضمام للاجتماع أونلاين' : 'Online Meeting Link'}
+                            </p>
+                          </div>
+                          <div dir="ltr" className="text-xs text-blue-600 dark:text-blue-400 font-mono truncate text-start bg-white/70 dark:bg-slate-900/70 px-3 py-1.5 rounded-xl border border-blue-200/60 dark:border-blue-800/60 select-all">
+                            {mtg.location}
+                          </div>
                         </div>
                         <a
                           href={mtg.location}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 shadow-sm"
+                          className="w-full sm:w-auto px-5 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-xl text-xs font-black transition-all shrink-0 flex items-center justify-center gap-2 shadow-md shadow-blue-500/20 cursor-pointer"
                         >
                           <span>{isAr ? 'انضمام الآن 🚀' : 'Join Now 🚀'}</span>
                         </a>
@@ -635,35 +697,34 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
                     ───────────────────────────────────────────────────────────── */}
                     <div className="space-y-4">
                       {/* Attendance Action Toolbar */}
-                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white dark:bg-slate-800/80 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                        
-                        {/* Title & Count */}
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
-                            <Users className="w-5 h-5" />
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <h4 className="text-sm font-black text-slate-900 dark:text-white">
-                                {isAr ? 'سجل وكشف الحضور' : 'Attendance Roster'}
-                              </h4>
-                              <span className="text-xs font-extrabold bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 px-2.5 py-0.5 rounded-full">
-                                {att.length} {isAr ? 'حاضر' : 'members'}
-                              </span>
+                      <div className="bg-white dark:bg-slate-800/90 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-3">
+                        {/* Title & View Switcher */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0 shadow-xs">
+                              <Users className="w-5 h-5" />
                             </div>
-                            <p className="text-[10px] text-slate-400 font-semibold">
-                              {isAr ? 'مقسم تلقائياً حسب اللجان واللجان الفرعية' : 'Automatically divided by committee & sub-committee'}
-                            </p>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h4 className="text-sm font-black text-slate-900 dark:text-white">
+                                  {isAr ? 'سجل وكشف الحضور' : 'Attendance Roster'}
+                                </h4>
+                                <span className="text-xs font-black bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 px-2.5 py-0.5 rounded-full border border-indigo-200/60 dark:border-indigo-800/60">
+                                  {att.length} {isAr ? 'حاضر' : 'attended'}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-400 font-medium">
+                                {isAr ? 'مقسم تلقائياً حسب اللجان واللجان الفرعية' : 'Automatically divided by committee & sub-committee'}
+                              </p>
+                            </div>
                           </div>
-                        </div>
 
-                        {/* Controls: View Mode Switcher, Excel Export, Feedback Modal */}
-                        <div className="flex items-center gap-2 flex-wrap">
                           {/* View Mode Toggle (Grouped vs List) */}
-                          <div className="flex items-center bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
+                          <div className="flex items-center bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800 self-start sm:self-auto">
                             <button
+                              type="button"
                               onClick={() => setViewModeMap(prev => ({ ...prev, [mtg.id]: 'grouped' }))}
-                              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                                 currentViewMode === 'grouped'
                                   ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm'
                                   : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
@@ -674,8 +735,9 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
                               <span>{isAr ? 'مقسم للجان' : 'Grouped'}</span>
                             </button>
                             <button
+                              type="button"
                               onClick={() => setViewModeMap(prev => ({ ...prev, [mtg.id]: 'list' }))}
-                              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                                 currentViewMode === 'list'
                                   ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm'
                                   : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
@@ -686,24 +748,26 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
                               <span>{isAr ? 'قائمة كاملة' : 'List'}</span>
                             </button>
                           </div>
+                        </div>
 
-                          {/* Excel Download Button */}
+                        {/* Actions: Excel & Feedback (Balanced full-width row on mobile) */}
+                        <div className="pt-2 border-t border-slate-100 dark:border-slate-700/80 flex items-center gap-2 flex-wrap sm:flex-nowrap">
                           <button
                             onClick={(e) => handleExportExcel(mtg, e)}
                             disabled={exportingMtgId === mtg.id || att.length === 0}
-                            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black transition-all shadow-sm cursor-pointer active:scale-95 ${
+                            className={`flex-1 min-w-[160px] flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black transition-all shadow-sm cursor-pointer active:scale-95 ${
                               exportSuccessMtgId === mtg.id
                                 ? 'bg-emerald-600 text-white'
-                                : 'bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-200 dark:disabled:bg-slate-800 text-white'
+                                : 'bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-200 dark:disabled:bg-slate-800 text-white shadow-emerald-500/20'
                             }`}
                             id={`export-excel-btn-${mtg.id}`}
                           >
                             {exportingMtgId === mtg.id ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <Loader2 className="w-4 h-4 animate-spin" />
                             ) : exportSuccessMtgId === mtg.id ? (
-                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <CheckCircle2 className="w-4 h-4" />
                             ) : (
-                              <Download className="w-3.5 h-3.5" />
+                              <Download className="w-4 h-4" />
                             )}
                             <span>
                               {exportingMtgId === mtg.id
@@ -714,43 +778,61 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
                             </span>
                           </button>
 
-                          {/* Feedback Button */}
                           {isLeaderOrAdmin(currentUser) && att.some(a => a.feedback || a.rating) && (
                             <button
                               onClick={() => setViewFeedbackMtg(mtg)}
-                              className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 hover:bg-amber-100 border border-amber-300 dark:border-amber-700/60 rounded-xl text-xs font-black transition-all shadow-sm cursor-pointer"
+                              className="flex-1 sm:flex-initial min-w-[130px] flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 hover:bg-amber-100 border border-amber-300 dark:border-amber-700/60 rounded-xl text-xs font-black transition-all shadow-sm cursor-pointer active:scale-95"
                             >
-                              <MessageSquare className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-                              <span>{isAr ? `💬 الفيدباك (${att.filter(a => a.feedback || a.rating).length})` : `Feedback (${att.filter(a => a.feedback || a.rating).length})`}</span>
+                              <MessageSquare className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                              <span>{isAr ? `الفيدباك (${att.filter(a => a.feedback || a.rating).length})` : `Feedback (${att.filter(a => a.feedback || a.rating).length})`}</span>
                             </button>
                           )}
                         </div>
-
                       </div>
 
-                      {/* Search and Sub-group Filter Chips */}
+                      {/* Search & Committee Filter Controls */}
                       {att.length > 0 && (
-                        <div className="space-y-2">
-                          <div className="flex flex-col sm:flex-row gap-2">
-                            {/* Instant Search Bar */}
+                        <div className="space-y-2.5">
+                          {/* Search Input & Select Dropdown Bar */}
+                          <div className="flex flex-col sm:flex-row items-stretch gap-2">
+                            {/* Search Input */}
                             <div className="relative flex-1">
-                              <Search className="w-3.5 h-3.5 text-slate-400 absolute top-1/2 -translate-y-1/2 start-3" />
+                              <Search className="w-4 h-4 text-slate-400 absolute top-1/2 -translate-y-1/2 start-3" />
                               <input
                                 type="text"
                                 value={searchAttendeeMap[mtg.id] || ''}
                                 onChange={e => setSearchAttendeeMap(prev => ({ ...prev, [mtg.id]: e.target.value }))}
                                 placeholder={isAr ? 'بحث بالاسم، كود العضوية، أو الفرع...' : 'Search by name, code, or department...'}
-                                className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl ps-9 pe-3 py-2 text-xs font-semibold focus:outline-none focus:border-indigo-500 shadow-sm"
+                                className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl ps-9 pe-3 py-2.5 text-xs font-semibold focus:outline-none focus:border-indigo-500 shadow-xs"
                               />
                             </div>
+
+                            {/* Dropdown Select for Instant 1-tap Jump without clutter */}
+                            {sortedSubGroups.length > 1 && (
+                              <div className="relative shrink-0 sm:w-60">
+                                <select
+                                  value={currentFilter}
+                                  onChange={e => setSubGroupFilterMap(prev => ({ ...prev, [mtg.id]: e.target.value }))}
+                                  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:border-indigo-500 shadow-xs cursor-pointer"
+                                >
+                                  <option value="all">{isAr ? `كل اللجان (${enrichedAttendees.length})` : `All Committees (${enrichedAttendees.length})`}</option>
+                                  {sortedSubGroups.map(([key, data]) => (
+                                    <option key={key} value={key}>
+                                      {data.label} ({data.count})
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            )}
                           </div>
 
-                          {/* Filter Tabs / Pills */}
+                          {/* Smooth Horizontal Scrollable Filter Pills (Never wrap into 15 lines!) */}
                           {sortedSubGroups.length > 1 && (
-                            <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-1 no-scrollbar flex-wrap">
+                            <div className="flex items-center gap-1.5 overflow-x-auto pb-1.5 pt-0.5 no-scrollbar flex-nowrap scroll-smooth">
                               <button
+                                type="button"
                                 onClick={() => setSubGroupFilterMap(prev => ({ ...prev, [mtg.id]: 'all' }))}
-                                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer ${
+                                className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer whitespace-nowrap active:scale-95 ${
                                   currentFilter === 'all'
                                     ? 'bg-indigo-600 text-white shadow-sm'
                                     : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50'
@@ -759,24 +841,29 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
                                 {isAr ? `الكل (${enrichedAttendees.length})` : `All (${enrichedAttendees.length})`}
                               </button>
 
-                              {sortedSubGroups.map(([key, data]) => (
-                                <button
-                                  key={key}
-                                  onClick={() => setSubGroupFilterMap(prev => ({ ...prev, [mtg.id]: key }))}
-                                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer flex items-center gap-1.5 ${
-                                    currentFilter === key
-                                      ? 'bg-indigo-600 text-white shadow-sm'
-                                      : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50'
-                                  }`}
-                                >
-                                  <span>{data.label}</span>
-                                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
-                                    currentFilter === key ? 'bg-indigo-700 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
-                                  }`}>
-                                    {data.count}
-                                  </span>
-                                </button>
-                              ))}
+                              {sortedSubGroups.map(([key, data]) => {
+                                const shortLabel = getShortLabel(data.code, data.label);
+                                return (
+                                  <button
+                                    key={key}
+                                    type="button"
+                                    onClick={() => setSubGroupFilterMap(prev => ({ ...prev, [mtg.id]: key }))}
+                                    title={data.label}
+                                    className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap active:scale-95 ${
+                                      currentFilter === key
+                                        ? 'bg-indigo-600 text-white shadow-sm'
+                                        : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50'
+                                    }`}
+                                  >
+                                    <span>{shortLabel}</span>
+                                    <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${
+                                      currentFilter === key ? 'bg-indigo-700 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                                    }`}>
+                                      {data.count}
+                                    </span>
+                                  </button>
+                                );
+                              })}
                             </div>
                           )}
                         </div>
