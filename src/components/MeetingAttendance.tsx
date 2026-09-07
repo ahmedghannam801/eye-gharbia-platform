@@ -301,6 +301,21 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
         )}
       </div>
 
+      {/* Cloud Sync Notice if Supabase Egress limit exceeded */}
+      {db.isEgressQuotaExceeded() && isLeaderOrAdmin(currentUser) && (
+        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="space-y-1 text-xs">
+            <p className="font-black">{isAr ? '⚠️ تنبيه مزامنة السحابة (Supabase Egress Limit)' : '⚠️ Cloud Sync Notice (Supabase Egress Limit)'}</p>
+            <p className="font-medium text-slate-600 dark:text-slate-300 leading-relaxed">
+              {isAr
+                ? 'مشروع Supabase تجاوز الحد الأقصى الشهري للباندويث المجاني (exceed_egress_quota). جميع تسجيلات الحضور الحالية محفوظة بأمان ومحلياً على هذا المتصفح. لاستئناف مزامنة الحضور الفورية بين جميع الأجهزة السحابية، يرجى ترقية الخطة أو إزالة الحد من لوحة تحكم Supabase.'
+                : 'The Supabase project exceeded the free monthly bandwidth quota. All attendance records are safely stored locally on this device. To resume real-time cross-device cloud sync, please upgrade or remove the spend cap in the Supabase Dashboard.'}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Meetings List */}
       {meetings.length === 0 ? (
         <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-16 text-center shadow-sm">
@@ -899,9 +914,19 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
                           <p className="text-xs text-slate-400 font-semibold">{isAr ? 'لم يُسجّل أي عضو حضوره حتى الآن.' : 'No attendees checked in yet.'}</p>
                         </div>
                       ) : filteredAttendees.length === 0 ? (
-                        <div className="p-8 text-center bg-white dark:bg-slate-800/50 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700">
-                          <Filter className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                          <p className="text-xs text-slate-400 font-semibold">{isAr ? 'لا توجد نتائج تطابق خيارات البحث الحالية.' : 'No members match the current filter/search.'}</p>
+                        <div className="p-8 text-center bg-white dark:bg-slate-800/50 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 space-y-3">
+                          <Filter className="w-8 h-8 text-slate-300 mx-auto" />
+                          <p className="text-xs text-slate-400 font-semibold">{isAr ? 'لا توجد نتائج تطابق خيارات البحث أو التصفية الحالية.' : 'No members match the current filter/search.'}</p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSubGroupFilterMap(prev => ({ ...prev, [mtg.id]: 'all' }));
+                              setSearchAttendeeMap(prev => ({ ...prev, [mtg.id]: '' }));
+                            }}
+                            className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/50 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 rounded-xl text-xs font-black transition-all border border-indigo-200 dark:border-indigo-800 cursor-pointer shadow-xs active:scale-95"
+                          >
+                            {isAr ? `إلغاء التصفية وعرض جميع الحاضرين (${att.length}) 🔄` : `Reset Filter & Show All (${att.length}) 🔄`}
+                          </button>
                         </div>
                       ) : currentViewMode === 'grouped' ? (
                         /* ===== GROUPED BY COMMITTEE & SUB-COMMITTEE VIEW ===== */

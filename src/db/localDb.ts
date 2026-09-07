@@ -625,6 +625,11 @@ class SupabaseDatabase {
 
   private listeners = new Set<() => void>();
   private initialized = false;
+  private egressQuotaExceeded = false;
+
+  isEgressQuotaExceeded(): boolean {
+    return this.egressQuotaExceeded;
+  }
 
   onChange(cb: () => void): () => void {
     this.listeners.add(cb);
@@ -766,22 +771,11 @@ class SupabaseDatabase {
     this.sanitizeSingleGovernorateGharbia();
     this.fixSpecificMemberRoles();
 
-    // Check if client is on older localStorage cache format and sanitize stale ghosts
+    // Keep local data safe - never delete user attendance or meetings on startup
     const CACHE_SYNC_VERSION = 'EYE_PLATFORM_V3_GHARBIA_ONLY';
-    const lastSyncVer = localStorage.getItem('eye_cache_sync_version');
-    if (lastSyncVer !== CACHE_SYNC_VERSION) {
-      try {
-        localStorage.removeItem('eye_tasks');
-        localStorage.removeItem('eye_announcements');
-        localStorage.removeItem('eye_disciplinary_records');
-        localStorage.removeItem('eye_meetings');
-        localStorage.removeItem('eye_attendance');
-        localStorage.removeItem('eye_work_plans');
-        localStorage.removeItem('eye_ideas');
-        localStorage.removeItem('eye_member_evaluations');
-        localStorage.setItem('eye_cache_sync_version', CACHE_SYNC_VERSION);
-      } catch {}
-    }
+    try {
+      localStorage.setItem('eye_cache_sync_version', CACHE_SYNC_VERSION);
+    } catch {}
 
     // 0. Pre-load all in-memory collections from localStorage synchronously on boot
     try {
@@ -791,7 +785,15 @@ class SupabaseDatabase {
       this.cache.announcements = this._ls<Announcement>('eye_announcements');
       this.cache.notifications = this._ls<SystemNotification>('eye_notifications');
       this.cache.meetings = this._ls<Meeting>('eye_meetings');
-      this.cache.attendance = this._ls<AttendanceRecord>('eye_attendance');
+
+      // Safely merge primary attendance with backup attendance
+      const primaryAtt = this._ls<AttendanceRecord>('eye_attendance');
+      const backupAtt = this._ls<AttendanceRecord>('eye_attendance_backup');
+      const mergedAttMap = new Map<string, AttendanceRecord>();
+      backupAtt.forEach(a => { if (a && a.id) mergedAttMap.set(a.id, a); });
+      primaryAtt.forEach(a => { if (a && a.id) mergedAttMap.set(a.id, a); });
+      this.cache.attendance = Array.from(mergedAttMap.values());
+
       this.cache.certificates = this._ls<IssuedCertificate>('eye_certificates');
       this.cache.workPlans = this._ls<WorkPlan>('eye_work_plans');
       this.cache.ideas = this._ls<VolunteerIdea>('eye_ideas');
@@ -842,12 +844,20 @@ class SupabaseDatabase {
       try {
         const result = await query;
         if (result.error) {
-          console.warn('[Supabase refreshAll] query error:', result.error.message || result.error);
+          const errMsg = String(result.error?.message || result.error || '');
+          if (errMsg.includes('exceed_egress_quota') || (result as any).status === 402) {
+            this.egressQuotaExceeded = true;
+          }
+          console.warn('[Supabase refreshAll] query error:', errMsg);
           return { data: null, error: result.error };
         }
         return result;
       } catch (e: any) {
-        console.warn('[Supabase refreshAll] query exception:', e?.message || e);
+        const errMsg = String(e?.message || e || '');
+        if (errMsg.includes('exceed_egress_quota') || (e as any)?.status === 402) {
+          this.egressQuotaExceeded = true;
+        }
+        console.warn('[Supabase refreshAll] query exception:', errMsg);
         return { data: null, error: e };
       }
     };
@@ -1033,53 +1043,90 @@ class SupabaseDatabase {
 
     if (certificates.data) {
       const remoteCertificates = certificates.data.map(certFromRow);
-      const localCertificates = this.cache.certificates || this._ls<IssuedCertificate>('eye_certificates');
+      const localCertificates = (this.cache.certificates && this.cache.certificates.length > 0)
+        ? this.cache.certificates
+        : this._ls<IssuedCertificate>('eye_certificates');
       this.cache.certificates = mergeById(remoteCertificates, localCertificates, deletedCertIds);
+      this._lsSave('eye_certificates', this.cache.certificates);
     }
 
     if (meetings.data) {
       const remoteMeetings = meetings.data.map(meetingFromRow);
-      const localMeetings = this.cache.meetings || this._ls<Meeting>('eye_meetings');
+      const localMeetings = (this.cache.meetings && this.cache.meetings.length > 0)
+        ? this.cache.meetings
+        : this._ls<Meeting>('eye_meetings');
       this.cache.meetings = mergeById(remoteMeetings, localMeetings, deletedMeetingIds);
+      this._lsSave('eye_meetings', this.cache.meetings);
     } else {
-      const localMeetings = this._ls<Meeting>('eye_meetings');
+      const localMeetings = (this.cache.meetings && this.cache.meetings.length > 0)
+        ? this.cache.meetings
+        : this._ls<Meeting>('eye_meetings');
       this.cache.meetings = localMeetings.filter(m => !deletedMeetingIds.includes(m.id));
+      this._lsSave('eye_meetings', this.cache.meetings);
     }
+
+    const backupAttendance = this._ls<AttendanceRecord>('eye_attendance_backup');
+    const localAttendanceList = (this.cache.attendance && this.cache.attendance.length > 0)
+      ? this.cache.attendance
+      : this._ls<AttendanceRecord>('eye_attendance');
+    const combinedLocalAtt = mergeById(localAttendanceList, backupAttendance);
 
     if (attendance.data) {
       const remoteAttendance = attendance.data.map(attendanceFromRow);
-      const localAttendance = this.cache.attendance || this._ls<AttendanceRecord>('eye_attendance');
-      this.cache.attendance = mergeById(remoteAttendance, localAttendance, deletedMeetingIds);
+      const validRemote = remoteAttendance.filter(a => !deletedMeetingIds.includes(a.meetingId));
+      const validLocal = combinedLocalAtt.filter(a => !deletedMeetingIds.includes(a.meetingId));
+      this.cache.attendance = mergeById(validRemote, validLocal);
+      this._lsSave('eye_attendance', this.cache.attendance);
+      this._lsSave('eye_attendance_backup', this.cache.attendance);
     } else {
-      const localAttendance = this._ls<AttendanceRecord>('eye_attendance');
-      this.cache.attendance = localAttendance.filter(a => !deletedMeetingIds.includes(a.meetingId));
+      this.cache.attendance = combinedLocalAtt.filter(a => !deletedMeetingIds.includes(a.meetingId));
+      this._lsSave('eye_attendance', this.cache.attendance);
+      this._lsSave('eye_attendance_backup', this.cache.attendance);
     }
 
     if (workPlans.data) {
       const remoteWorkPlans = workPlans.data.map(workPlanFromRow);
-      const localWorkPlans = this.cache.workPlans || this._ls<WorkPlan>('eye_work_plans');
+      const localWorkPlans = (this.cache.workPlans && this.cache.workPlans.length > 0)
+        ? this.cache.workPlans
+        : this._ls<WorkPlan>('eye_work_plans');
       this.cache.workPlans = mergeById(remoteWorkPlans, localWorkPlans, deletedWorkPlanIds);
+      this._lsSave('eye_work_plans', this.cache.workPlans);
     } else {
-      const localWorkPlans = this._ls<WorkPlan>('eye_work_plans');
+      const localWorkPlans = (this.cache.workPlans && this.cache.workPlans.length > 0)
+        ? this.cache.workPlans
+        : this._ls<WorkPlan>('eye_work_plans');
       this.cache.workPlans = localWorkPlans.filter(w => !deletedWorkPlanIds.includes(w.id));
+      this._lsSave('eye_work_plans', this.cache.workPlans);
     }
 
     if (ideas.data) {
       const remoteIdeas = ideas.data.map(ideaFromRow);
-      const localIdeas = this.cache.ideas || this._ls<VolunteerIdea>('eye_ideas');
+      const localIdeas = (this.cache.ideas && this.cache.ideas.length > 0)
+        ? this.cache.ideas
+        : this._ls<VolunteerIdea>('eye_ideas');
       this.cache.ideas = mergeById(remoteIdeas, localIdeas, deletedIdeaIds);
+      this._lsSave('eye_ideas', this.cache.ideas);
     } else {
-      const localIdeas = this._ls<VolunteerIdea>('eye_ideas');
+      const localIdeas = (this.cache.ideas && this.cache.ideas.length > 0)
+        ? this.cache.ideas
+        : this._ls<VolunteerIdea>('eye_ideas');
       this.cache.ideas = localIdeas.filter(i => !deletedIdeaIds.includes(i.id));
+      this._lsSave('eye_ideas', this.cache.ideas);
     }
 
     if (evaluations.data) {
       const remoteEvaluations = evaluations.data.map(evaluationFromRow);
-      const localEvaluations = this.cache.evaluations || this._ls<MemberEvaluation>('eye_member_evaluations');
+      const localEvaluations = (this.cache.evaluations && this.cache.evaluations.length > 0)
+        ? this.cache.evaluations
+        : this._ls<MemberEvaluation>('eye_member_evaluations');
       this.cache.evaluations = mergeById(remoteEvaluations, localEvaluations, deletedEvalIds);
+      this._lsSave('eye_member_evaluations', this.cache.evaluations);
     } else {
-      const localEvaluations = this._ls<MemberEvaluation>('eye_member_evaluations');
+      const localEvaluations = (this.cache.evaluations && this.cache.evaluations.length > 0)
+        ? this.cache.evaluations
+        : this._ls<MemberEvaluation>('eye_member_evaluations');
       this.cache.evaluations = localEvaluations.filter(e => !deletedEvalIds.includes(e.id));
+      this._lsSave('eye_member_evaluations', this.cache.evaluations);
     }
     if (leaderFeedbacks && leaderFeedbacks.data) {
       this.cache.leaderFeedbacks = leaderFeedbacks.data.map(leaderFeedbackFromRow).filter(f => !deletedFeedbackIds.includes(f.id));
@@ -4061,6 +4108,7 @@ class SupabaseDatabase {
       const allAtts = this.getAllAttendance().filter(a => a.meetingId !== meetingId);
       this.cache.attendance = allAtts;
       this._lsSave('eye_attendance', allAtts);
+      this._lsSave('eye_attendance_backup', allAtts);
       this.notify();
 
       if (isSupabaseConfigured && supabase) {
@@ -4077,10 +4125,22 @@ class SupabaseDatabase {
   }
 
   getAllAttendance(): AttendanceRecord[] {
-    if (this.cache.attendance && this.cache.attendance.length > 0) {
-      return this.cache.attendance;
+    const fromCache = this.cache.attendance || [];
+    const fromLs = this._ls<AttendanceRecord>('eye_attendance');
+    const fromBackup = this._ls<AttendanceRecord>('eye_attendance_backup');
+
+    const merged = new Map<string, AttendanceRecord>();
+    fromBackup.forEach(a => { if (a && a.id) merged.set(a.id, a); });
+    fromLs.forEach(a => { if (a && a.id) merged.set(a.id, a); });
+    fromCache.forEach(a => { if (a && a.id) merged.set(a.id, a); });
+
+    const result = Array.from(merged.values());
+    if (result.length > 0 && result.length !== fromCache.length) {
+      this.cache.attendance = result;
+      this._lsSave('eye_attendance', result);
+      this._lsSave('eye_attendance_backup', result);
     }
-    return this._ls<AttendanceRecord>('eye_attendance');
+    return result;
   }
 
   checkIn(meetingId: string, code: string, member: UserProfile, feedback?: string, rating?: number): 'ok' | 'wrong_code' | 'already' | 'closed' {
@@ -4106,12 +4166,13 @@ class SupabaseDatabase {
     const all = this.getAllAttendance();
     this.cache.attendance = [...all, record];
     this._lsSave('eye_attendance', this.cache.attendance);
+    this._lsSave('eye_attendance_backup', this.cache.attendance);
     this.notify();
 
     (async () => {
       try {
         if (!isSupabaseConfigured || !supabase) return;
-        await supabase.from('attendance').insert({
+        const res = await supabase.from('attendance').insert({
           id: record.id,
           meeting_id: record.meetingId,
           member_id: record.memberId,
@@ -4124,7 +4185,18 @@ class SupabaseDatabase {
           feedback: record.feedback,
           rating: record.rating,
         });
-      } catch (err) {
+        if (res.error) {
+          const errMsg = String(res.error?.message || '');
+          if (errMsg.includes('exceed_egress_quota') || (res as any)?.status === 402) {
+            this.egressQuotaExceeded = true;
+            this.notify();
+          }
+        }
+      } catch (err: any) {
+        if (err?.message?.includes('exceed_egress_quota') || err?.status === 402) {
+          this.egressQuotaExceeded = true;
+          this.notify();
+        }
         console.error('[Supabase CheckIn Insert Error]:', err);
       }
     })();
@@ -4133,10 +4205,12 @@ class SupabaseDatabase {
   }
 
   markExcused(attendanceId: string, reason: string): void {
-    const all = this._ls<AttendanceRecord>('eye_attendance').map(a =>
+    const all = this.getAllAttendance().map(a =>
       a.id === attendanceId ? { ...a, isExcused: true, excuseReason: reason } : a
     );
+    this.cache.attendance = all;
     this._lsSave('eye_attendance', all);
+    this._lsSave('eye_attendance_backup', all);
     this.notify();
   }
 
@@ -4363,6 +4437,7 @@ class SupabaseDatabase {
     ];
     this.cache.attendance = finalAttendance;
     this._lsSave('eye_attendance', finalAttendance);
+    this._lsSave('eye_attendance_backup', finalAttendance);
     this.notify();
 
     // --- Sync to Supabase ---
