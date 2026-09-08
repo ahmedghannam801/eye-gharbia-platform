@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../db/localDb';
 import { UserProfile, ExcuseRequest, FreezeRequest, CommitteeChangeRequest, ExcuseType, Meeting, Task } from '../types';
 import { useLanguage } from '../lib/LanguageContext';
-import { isAdminUser } from '../lib/permissions';
+import { isAdminUser, isSuperAdmin, canApproveExcuseOrRequest } from '../lib/permissions';
 import { FileText, Snowflake, Clock, CheckCircle2, XCircle, Send, MessageSquare, ArrowRightLeft } from 'lucide-react';
 
 interface ExcusesAndFreezeProps {
@@ -37,16 +37,14 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
   const isLeader = currentUser.role === 'Leader';
   const isLeadership = isHeadOrHighboard || isLeader;
 
-  // Check if a user can approve/reject requests (Super Admin / Head / Vice / HR have full management and approval authority)
-  const canApproveRequest = (requestMemberId?: string): boolean => {
-    if (isAdminUser(currentUser) || isHighboardOrHR || isHead) {
-      return true; // Unrestricted access for all leadership and HR admins
-    }
-    if (isLeader) {
-      if (requestMemberId && requestMemberId === currentUser.id) return false;
-      return true;
-    }
-    return false;
+  // Strict Rule: "ف الاعذار محدش يقبل او يرفض اي عذر او فريز او اي حاجه غير القائد الخاص باللجنه فقط وانا"
+  // Only the specific committee Leader and Super Admin (Ahmed Ghannam) can approve or reject
+  const canApproveRequest = (
+    reqCommittee?: string,
+    requestMemberId?: string,
+    targetCommittee?: string
+  ): boolean => {
+    return canApproveExcuseOrRequest(currentUser, reqCommittee, requestMemberId, targetCommittee);
   };
 
   const [activeTab, setActiveTab] = useState<'manage' | 'excuses' | 'freeze' | 'committee-change' | 'activity'>(() => {
@@ -203,7 +201,7 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
     setSelectedMeetingId('');
     setSelectedTaskId('');
     setIsCustomTarget(false);
-    setSuccessMsg(isAr ? 'تم تقديم طلب العذر بنجاح، وسوف تراجعه الإدارة وقادة اللجان قريباً.' : 'Excuse request submitted successfully.');
+    setSuccessMsg(isAr ? 'تم تقديم طلب العذر بنجاح، وسوف يراجعه قائد لجنتك أو السوبر أدمن قريباً.' : 'Excuse request submitted successfully.');
     setTimeout(() => setSuccessMsg(''), 3000);
     setActiveTab('manage');
   };
@@ -225,7 +223,7 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
     setFreezeStart('');
     setFreezeEnd('');
     setFreezeReason('');
-    setSuccessMsg(isAr ? 'تم تقديم طلب فريز العضوية بنجاح، وسوف تراجعه الإدارة.' : 'Freeze request submitted successfully.');
+    setSuccessMsg(isAr ? 'تم تقديم طلب فريز العضوية بنجاح، وسوف يراجعه قائد لجنتك أو السوبر أدمن.' : 'Freeze request submitted successfully.');
     setTimeout(() => setSuccessMsg(''), 3000);
     setActiveTab('manage');
   };
@@ -250,7 +248,7 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
     }, currentUser);
 
     setCommitteeChangeReason('');
-    setSuccessMsg(isAr ? 'تم إرسال طلب تغيير اللجنة بنجاح! تم إشعار القادة والإدارة لمراجعة طلبك.' : 'Committee change request submitted to Leaders and Admins.');
+    setSuccessMsg(isAr ? 'تم إرسال طلب تغيير اللجنة بنجاح! تم إشعار قائد اللجنة والسوبر أدمن لمراجعة طلبك.' : 'Committee change request submitted to Committee Leader and Super Admin.');
     setTimeout(() => setSuccessMsg(''), 4000);
     setActiveTab('manage');
   };
@@ -258,12 +256,32 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
   const handleAdminDecision = async (status: 'Approved' | 'Rejected') => {
     if (!selectedRequest) return;
 
-    if (selectedRequest.type === 'committee') {
-      await db.updateCommitteeChangeRequestStatus(selectedRequest.item.id, status, adminNote, currentUser);
-    } else if (selectedRequest.type === 'excuse') {
-      await db.updateExcuseStatus(selectedRequest.item.id, status, adminNote, currentUser);
-    } else {
-      await db.updateFreezeStatus(selectedRequest.item.id, status, adminNote, currentUser);
+    const item = selectedRequest.item;
+    const reqComm = selectedRequest.type === 'committee' ? item.currentCommittee : item.committee;
+    const targetComm = selectedRequest.type === 'committee' ? item.targetCommittee : undefined;
+
+    if (!canApproveRequest(reqComm, item.memberId, targetComm)) {
+      alert(isAr ? 'غير مصرح: قبول أو رفض هذا الطلب مقتصر فقط على قائد اللجنة المختص أو السوبر أدمن.' : 'Unauthorized: Only the committee leader or Super Admin can approve/reject.');
+      setSelectedRequest(null);
+      return;
+    }
+
+    try {
+      if (selectedRequest.type === 'committee') {
+        await db.updateCommitteeChangeRequestStatus(item.id, status, adminNote, currentUser);
+      } else if (selectedRequest.type === 'excuse') {
+        await db.updateExcuseStatus(item.id, status, adminNote, currentUser);
+      } else {
+        await db.updateFreezeStatus(item.id, status, adminNote, currentUser);
+      }
+      setSuccessMsg(
+        isAr
+          ? (status === 'Approved' ? 'تم اعتماد وقبول الطلب بنجاح ✅' : 'تم رفض الطلب بنجاح ❌')
+          : `Request ${status.toLowerCase()} successfully.`
+      );
+      setTimeout(() => setSuccessMsg(''), 3500);
+    } catch (err: any) {
+      alert(err?.message || (isAr ? 'حدث خطأ أثناء تحديث حالة الطلب' : 'Failed to update request status'));
     }
 
     setSelectedRequest(null);
@@ -362,11 +380,11 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
           <p className="text-xs sm:text-sm text-slate-300 max-w-2xl font-semibold">
             {isLeadership
               ? (isAr
-                  ? 'يمكنك مراجعة كافة طلبات الأعضاء واللجان (طلبات نقل اللجان، الأعذار الرسمية، وتجميد العضوية) واعتمادها أو رفضها فورياً مع إشعار الأعضاء بالقرار.'
-                  : 'Review, approve, or reject member requests for committee transfers, excuses, and membership freezes with instant notifications.')
+                  ? 'يمكنك مراجعة طلبات الأعضاء واللجان (طلبات نقل اللجان، الأعذار الرسمية، وتجميد العضوية). الاعتماد أو الرفض مقتصر حصرياً على قائد اللجنة المختص والسوبر أدمن.'
+                  : 'Review member requests for committee transfers, excuses, and membership freezes. Approval and rejection are restricted exclusively to the Committee Leader and Super Admin.')
               : (isAr 
-                  ? 'يمكنك تقديم عذر رسمي عن عدم حضور اجتماع، أو طلب فريز لتجميد نشاطك مؤقتاً، أو تقديم طلب رسمي لتغيير ونقل لجنتك إلى لجنة أخرى بموافقة القادة والإدارة.' 
-                  : 'Submit official excuses for meetings, request membership freezes, or request a committee transfer with Leader and Admin approval.')}
+                  ? 'يمكنك تقديم عذر رسمي عن عدم حضور اجتماع، أو طلب فريز لتجميد نشاطك مؤقتاً، أو تقديم طلب رسمي لتغيير ونقل لجنتك بموافقة قائد لجنتك أو السوبر أدمن.' 
+                  : 'Submit official excuses for meetings, request membership freezes, or request a committee transfer with Leader or Admin approval.')}
           </p>
         </div>
       </div>
@@ -504,8 +522,8 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
             </div>
             <p className="text-xs text-blue-800 dark:text-blue-300 leading-relaxed font-semibold">
               {isAr
-                ? '• عند قبول العذر رسمياً من قِبل الليدر أو الإدارة: يحصل العضو على نصف درجة التقييم (50%) الخاصة بالاجتماع أو التكليف في الـ AVG.\n• عند رفض العذر أو الغياب بدون عذر مقبول: يحصل العضو على (0) درجة من تقييم الاجتماع.'
-                : '• If accepted by Leader/Admin: Member earns 50% (half score) of the meeting/task points.\n• If rejected or unexcused: Member earns 0 points.'}
+                ? '• عند قبول العذر رسمياً من قِبل قائد اللجنة أو السوبر أدمن: يحصل العضو على نصف درجة التقييم (50%) الخاصة بالاجتماع أو التكليف في الـ AVG.\n• عند رفض العذر أو الغياب بدون عذر مقبول: يحصل العضو على (0) درجة من تقييم الاجتماع.'
+                : '• If accepted by Committee Leader or Super Admin: Member earns 50% (half score) of the meeting/task points.\n• If rejected or unexcused: Member earns 0 points.'}
             </p>
           </div>
 
@@ -1015,7 +1033,7 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
                         {getStatusBadge(commReq.status)}
 
                         {commReq.status === 'Pending' && (
-                          canApproveRequest(commReq.memberId) ? (
+                          canApproveRequest(commReq.currentCommittee, commReq.memberId, commReq.targetCommittee) ? (
                             <button
                               onClick={() => setSelectedRequest({ type: 'committee', item: commReq })}
                               className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] shadow-sm cursor-pointer"
@@ -1024,7 +1042,7 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
                             </button>
                           ) : (
                             <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-lg border border-amber-200 dark:border-amber-800">
-                              🔒 {isAr ? 'يتطلب موافقة القادة أو الإدارة' : 'Leader / Admin Approval Required'}
+                              🔒 {isAr ? `يتطلب موافقة قائد اللجنة (${commReq.currentCommittee}) فقط أو السوبر أدمن` : 'Committee Leader / Super Admin Only'}
                             </span>
                           )
                         )}
@@ -1082,7 +1100,7 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
                         {getStatusBadge(exc.status)}
 
                         {exc.status === 'Pending' && (
-                          canApproveRequest(exc.memberId) ? (
+                          canApproveRequest(exc.committee, exc.memberId) ? (
                             <button
                               onClick={() => setSelectedRequest({ type: 'excuse', item: exc })}
                               className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] shadow-sm cursor-pointer"
@@ -1091,7 +1109,7 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
                             </button>
                           ) : (
                             <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-lg border border-amber-200 dark:border-amber-800">
-                              🔒 {isAr ? 'يتطلب موافقة مسئول HR أو النائب' : 'Requires HEAD HR / Vice Approval'}
+                              🔒 {isAr ? `يتطلب موافقة قائد لجنة (${exc.committee}) فقط أو السوبر أدمن` : 'Committee Leader / Super Admin Only'}
                             </span>
                           )
                         )}
@@ -1148,7 +1166,7 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
                         {getStatusBadge(frz.status)}
 
                         {frz.status === 'Pending' && (
-                          canApproveRequest(frz.memberId) ? (
+                          canApproveRequest(frz.committee, frz.memberId) ? (
                             <button
                               onClick={() => setSelectedRequest({ type: 'freeze', item: frz })}
                               className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] shadow-sm cursor-pointer"
@@ -1157,7 +1175,7 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
                             </button>
                           ) : (
                             <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-lg border border-amber-200 dark:border-amber-800">
-                              🔒 {isAr ? 'يتطلب موافقة مسئول HR أو النائب' : 'Requires HEAD HR / Vice Approval'}
+                              🔒 {isAr ? `يتطلب موافقة قائد لجنة (${frz.committee}) فقط أو السوبر أدمن` : 'Committee Leader / Super Admin Only'}
                             </span>
                           )
                         )}

@@ -28,6 +28,68 @@ export const isAdminUser = (user: Partial<UserProfile> | null | undefined): bool
 };
 
 /**
+ * Returns true if user is the Super Admin / Platform Owner (Ahmed Ghannam)
+ */
+export const isSuperAdmin = (user: Partial<UserProfile> | null | undefined): boolean => {
+  if (!user) return false;
+  return (
+    user.role === 'Super Admin' ||
+    user.email === 'ahmedghannam801@gmail.com' ||
+    (user as any).membershipCode === 'EYE-ADMIN-0001'
+  );
+};
+
+/**
+ * Strict permission rule for Excuses, Freezes, and Committee Change requests:
+ * "ف الاعذار محدش يقبل او يرفض اي عذر او فريز او اي حاجه غير القائد الخاص باللجنه فقط وانا"
+ * Only the specific committee Leader and the Super Admin (Ahmed Ghannam) can approve or reject.
+ */
+export const canApproveExcuseOrRequest = (
+  actor: Partial<UserProfile> | null | undefined,
+  requestCommittee?: string,
+  requestMemberId?: string,
+  targetCommittee?: string
+): boolean => {
+  if (!actor) return false;
+
+  // 1. Super Admin ("وانا") has full authority across all requests
+  if (isSuperAdmin(actor)) {
+    return true;
+  }
+
+  // 2. Self-approval is strictly forbidden (leaders cannot approve their own requests)
+  if (requestMemberId && actor.id === requestMemberId) {
+    return false;
+  }
+
+  // 3. ONLY the Leader of that specific committee
+  if (actor.role !== 'Leader') {
+    return false;
+  }
+
+  const userComm = (actor.committee || '').trim().toUpperCase();
+  const effectiveComm = getEffectiveCommittee(actor).trim().toUpperCase();
+
+  const matchComm = (c?: string) => {
+    if (!c) return false;
+    const norm = c.trim().toUpperCase();
+    return userComm === norm || effectiveComm === norm;
+  };
+
+  // For excuses and freezes (target committee of the request)
+  if (requestCommittee && matchComm(requestCommittee)) {
+    return true;
+  }
+
+  // For committee transfers (leader of target committee can also review)
+  if (targetCommittee && matchComm(targetCommittee)) {
+    return true;
+  }
+
+  return false;
+};
+
+/**
  * Normalizes committee names for comparison (handles department mappings like 'HRM - HR OF OR' -> 'OR')
  */
 export const getEffectiveCommittee = (user: Partial<UserProfile> | null | undefined): string => {

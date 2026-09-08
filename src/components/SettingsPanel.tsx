@@ -15,6 +15,7 @@ import { getEmailQueue, retryQueuedEmails, clearEmailQueue, QueuedEmail } from '
 import { sendTestPushNotification } from '../lib/pushNotifications';
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
 import { matchesSearch } from '../lib/searchUtils';
+import { canApproveExcuseOrRequest } from '../lib/permissions';
 
 interface SettingsPanelProps {
   currentUser: UserProfile;
@@ -353,6 +354,11 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
   }, [allCommitteeRequests, commReqSearch, commReqStatusFilter, commReqCommitteeFilter]);
 
   const handleExecuteCommReview = async (reqId: string, decision: 'Approved' | 'Rejected', note: string) => {
+    const targetReq = allCommitteeRequests.find(r => r.id === reqId);
+    if (targetReq && !canApproveExcuseOrRequest(currentUser, targetReq.currentCommittee, targetReq.memberId, targetReq.targetCommittee)) {
+      showFeedback(ar ? 'غير مصرح: قبول أو رفض نقل اللجنة مقتصر فقط على قائد اللجنة المعنية أو السوبر أدمن.' : 'Unauthorized: Committee leader or Super Admin only.', false);
+      return;
+    }
     setIsSubmittingCommReview(true);
     try {
       await db.updateCommitteeChangeRequestStatus(reqId, decision, note, currentUser);
@@ -1349,32 +1355,38 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
 
                           {/* Quick Action Buttons for Pending */}
                           {isPending && (
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setReviewingCommReq(req);
-                                  setCommReviewDecision('Rejected');
-                                  setCommReviewNote('');
-                                }}
-                                className="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/50 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-300 font-bold text-xs border border-rose-200 dark:border-rose-800 transition-colors cursor-pointer"
-                              >
-                                {ar ? 'رفض ❌' : 'Reject'}
-                              </button>
+                            canApproveExcuseOrRequest(currentUser, req.currentCommittee, req.memberId, req.targetCommittee) ? (
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setReviewingCommReq(req);
+                                    setCommReviewDecision('Rejected');
+                                    setCommReviewNote('');
+                                  }}
+                                  className="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/50 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-300 font-bold text-xs border border-rose-200 dark:border-rose-800 transition-colors cursor-pointer"
+                                >
+                                  {ar ? 'رفض ❌' : 'Reject'}
+                                </button>
 
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setReviewingCommReq(req);
-                                  setCommReviewDecision('Approved');
-                                  setCommReviewNote('تمت الموافقة ونقل العضو وتحديث السجلات الرسمية بنجاح.');
-                                }}
-                                className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-xs shadow-md shadow-emerald-500/20 active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
-                              >
-                                <Check className="w-3.5 h-3.5" />
-                                <span>{ar ? 'قبول ونقل العضو فوراً ✅' : 'Approve & Transfer ✅'}</span>
-                              </button>
-                            </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setReviewingCommReq(req);
+                                    setCommReviewDecision('Approved');
+                                    setCommReviewNote('تمت الموافقة ونقل العضو وتحديث السجلات الرسمية بنجاح.');
+                                  }}
+                                  className="px-4 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-xs shadow-md shadow-emerald-500/20 active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
+                                >
+                                  <Check className="w-3.5 h-3.5" />
+                                  <span>{ar ? 'قبول ونقل العضو فوراً ✅' : 'Approve & Transfer ✅'}</span>
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-lg border border-amber-200 dark:border-amber-800">
+                                🔒 {ar ? `يتطلب موافقة قائد اللجنة (${req.currentCommittee}) أو السوبر أدمن` : 'Committee Leader / Super Admin Only'}
+                              </span>
+                            )
                           )}
                         </div>
 

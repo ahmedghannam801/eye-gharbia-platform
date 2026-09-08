@@ -2,7 +2,7 @@ import { supabase, isSupabaseConfigured, getPermanentStorageUrl } from '../lib/s
 import { localInputToIso } from '../lib/dateUtils';
 import { sendEmailAlert } from '../lib/emailService';
 import { triggerPushFromSystemNotif } from '../lib/pushNotifications';
-import { isHRM, filterEvaluationsByPermission, filterMembersByPermission, getEffectiveCommittee } from '../lib/permissions';
+import { isHRM, filterEvaluationsByPermission, filterMembersByPermission, getEffectiveCommittee, isSuperAdmin, canApproveExcuseOrRequest } from '../lib/permissions';
 import {
   UserProfile,
   Task,
@@ -7648,6 +7648,10 @@ class SupabaseDatabase {
   }
 
   clearAllExcuseAndFreezeRequests(actor: UserProfile): void {
+    if (!isSuperAdmin(actor)) {
+      console.warn('Unauthorized: Only Super Admin can clear all requests.');
+      return;
+    }
     this._lsSave('eye_excuse_requests', []);
     this._lsSave('eye_freeze_requests', []);
     this._lsSave('eye_committee_requests', []);
@@ -7694,21 +7698,21 @@ class SupabaseDatabase {
       }
     })();
 
-    // Notify Super Admin, Vice, Coordinators, HRM, Head, and Committee Leaders
+    // Notify Super Admin ("وانا") and the specific Committee Leader only
     const reqComm = (req.committee || '').trim().toLowerCase();
     const receivers = this.getUsers().filter((u) => {
       const uRole = (u.role || '').trim();
       const uComm = (u.committee || '').trim().toLowerCase();
+      const effectiveComm = getEffectiveCommittee(u).trim().toLowerCase();
       const isActive = !u.status || u.status.toLowerCase() === 'active';
       if (!isActive) return false;
 
-      // Executive admins & HRM always receive
-      if (['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM'].includes(uRole)) return true;
-      if (u.department === 'HRM' || uComm === 'hr' || uComm === 'all') return true;
+      // Super Admin ("وانا")
+      if (isSuperAdmin(u)) return true;
 
-      // Committee Head and Leaders receive for their committee
-      if (uRole === 'Head' || uRole === 'Leader') {
-        return uComm === reqComm || uComm === 'all' || (reqComm.includes('hr') && uComm.includes('hr'));
+      // Committee Leader of this committee only
+      if (uRole === 'Leader') {
+        return uComm === reqComm || effectiveComm === reqComm;
       }
       return false;
     });
@@ -7731,13 +7735,9 @@ class SupabaseDatabase {
       const list = this._ls<ExcuseRequest>('eye_excuse_requests') || [];
       const target = list.find((r) => r.id === id);
       if (target) {
-        const isExecutive =
-          ['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM', 'Head', 'Leader'].includes(actor.role) ||
-          actor.department === 'HRM' ||
-          actor.committee === 'HR';
-        if (!isExecutive) {
-          console.warn('Unauthorized: Only Leaders / Super Admin / HEAD HR & Vice can approve/reject excuse requests.');
-          return;
+        if (!canApproveExcuseOrRequest(actor, target.committee, target.memberId)) {
+          console.warn('Unauthorized: Only the committee leader or Super Admin can approve/reject excuse requests.');
+          throw new Error('غير مصرح: قبول أو رفض العذر مقتصر فقط على قائد اللجنة المعنية أو السوبر أدمن.');
         }
 
         target.status = status;
@@ -7926,21 +7926,21 @@ class SupabaseDatabase {
       }
     })();
 
-    // Notify Super Admin, Vice, Coordinators, HRM, Head, and Committee Leaders
+    // Notify Super Admin ("وانا") and the specific Committee Leader only
     const reqComm = (req.committee || '').trim().toLowerCase();
     const receivers = this.getUsers().filter((u) => {
       const uRole = (u.role || '').trim();
       const uComm = (u.committee || '').trim().toLowerCase();
+      const effectiveComm = getEffectiveCommittee(u).trim().toLowerCase();
       const isActive = !u.status || u.status.toLowerCase() === 'active';
       if (!isActive) return false;
 
-      // Executive admins & HRM always receive
-      if (['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM'].includes(uRole)) return true;
-      if (u.department === 'HRM' || uComm === 'hr' || uComm === 'all') return true;
+      // Super Admin ("وانا")
+      if (isSuperAdmin(u)) return true;
 
-      // Committee Head and Leaders receive for their committee
-      if (uRole === 'Head' || uRole === 'Leader') {
-        return uComm === reqComm || uComm === 'all' || (reqComm.includes('hr') && uComm.includes('hr'));
+      // Committee Leader of this committee only
+      if (uRole === 'Leader') {
+        return uComm === reqComm || effectiveComm === reqComm;
       }
       return false;
     });
@@ -7963,13 +7963,9 @@ class SupabaseDatabase {
       const list = this._ls<FreezeRequest>('eye_freeze_requests') || [];
       const target = list.find((r) => r.id === id);
       if (target) {
-        const isExecutive =
-          ['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM', 'Head', 'Leader'].includes(actor.role) ||
-          actor.department === 'HRM' ||
-          actor.committee === 'HR';
-        if (!isExecutive) {
-          console.warn('Unauthorized: Only Leaders / Super Admin / HEAD HR & Vice can approve/reject freeze requests.');
-          return;
+        if (!canApproveExcuseOrRequest(actor, target.committee, target.memberId)) {
+          console.warn('Unauthorized: Only the committee leader or Super Admin can approve/reject freeze requests.');
+          throw new Error('غير مصرح: قبول أو رفض الفريز مقتصر فقط على قائد اللجنة المعنية أو السوبر أدمن.');
         }
 
         target.status = status;
@@ -8101,22 +8097,22 @@ class SupabaseDatabase {
       }
     })();
 
-    // Notify Super Admin, Vice, Coordinators, HRM, and Committee Leaders (both current and target committee)
+    // Notify Super Admin ("وانا") and Committee Leaders (current or target committee)
     const curComm = (req.currentCommittee || '').trim().toLowerCase();
     const targetComm = (req.targetCommittee || '').trim().toLowerCase();
     const receivers = this.getUsers().filter((u) => {
       const uRole = (u.role || '').trim();
       const uComm = (u.committee || '').trim().toLowerCase();
+      const effectiveComm = getEffectiveCommittee(u).trim().toLowerCase();
       const isActive = !u.status || u.status.toLowerCase() === 'active';
       if (!isActive) return false;
 
-      // Executive admins & HRM always receive
-      if (['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM'].includes(uRole)) return true;
-      if (u.department === 'HRM' || uComm === 'hr' || uComm === 'all') return true;
+      // Super Admin ("وانا")
+      if (isSuperAdmin(u)) return true;
 
-      // Committee Heads & Leaders of current or target committee receive
-      if (uRole === 'Head' || uRole === 'Leader') {
-        return uComm === curComm || uComm === targetComm || uComm === 'all';
+      // Committee Leaders of current or target committee
+      if (uRole === 'Leader') {
+        return uComm === curComm || effectiveComm === curComm || uComm === targetComm || effectiveComm === targetComm;
       }
       return false;
     });
@@ -8150,13 +8146,9 @@ class SupabaseDatabase {
       const list = this._ls<CommitteeChangeRequest>('eye_committee_requests') || [];
       const target = list.find((r) => r.id === id);
       if (target) {
-        const isExecutive =
-          ['Super Admin', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM', 'Head', 'Leader'].includes(actor.role) ||
-          actor.department === 'HRM' ||
-          actor.committee === 'HR';
-        if (!isExecutive) {
-          console.warn('Unauthorized: Only Leaders / Super Admin / HR leaders can approve/reject committee change requests.');
-          return;
+        if (!canApproveExcuseOrRequest(actor, target.currentCommittee, target.memberId, target.targetCommittee)) {
+          console.warn('Unauthorized: Only the committee leader or Super Admin can approve/reject committee change requests.');
+          throw new Error('غير مصرح: قبول أو رفض طلب نقل اللجنة مقتصر فقط على قائد اللجنة المعنية أو السوبر أدمن.');
         }
 
         target.status = status;
