@@ -40,15 +40,14 @@ export const isSuperAdmin = (user: Partial<UserProfile> | null | undefined): boo
 };
 
 /**
- * Strict permission rule for Excuses, Freezes, and Committee Change requests:
+ * Strict permission rule for Excuses and Freezes:
  * "ف الاعذار محدش يقبل او يرفض اي عذر او فريز او اي حاجه غير القائد الخاص باللجنه فقط وانا"
  * Only the specific committee Leader and the Super Admin (Ahmed Ghannam) can approve or reject.
  */
 export const canApproveExcuseOrRequest = (
   actor: Partial<UserProfile> | null | undefined,
   requestCommittee?: string,
-  requestMemberId?: string,
-  targetCommittee?: string
+  requestMemberId?: string
 ): boolean => {
   if (!actor) return false;
 
@@ -81,12 +80,18 @@ export const canApproveExcuseOrRequest = (
     return true;
   }
 
-  // For committee transfers (leader of target committee can also review)
-  if (targetCommittee && matchComm(targetCommittee)) {
-    return true;
-  }
-
   return false;
+};
+
+/**
+ * Strict permission rule for Committee Transfers & changing a member's committee:
+ * "مش عايز اي قائد يغير لجنه حد غير super admin بس اللي يعمل كدا"
+ * Exclusively restricted to Super Admin (Ahmed Ghannam) only!
+ */
+export const canApproveCommitteeTransfer = (
+  actor: Partial<UserProfile> | null | undefined
+): boolean => {
+  return isSuperAdmin(actor);
 };
 
 /**

@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../db/localDb';
 import { UserProfile, ExcuseRequest, FreezeRequest, CommitteeChangeRequest, ExcuseType, Meeting, Task } from '../types';
-import { useLanguage } from '../lib/LanguageContext';
-import { isAdminUser, isSuperAdmin, canApproveExcuseOrRequest } from '../lib/permissions';
+import { isAdminUser, isSuperAdmin, canApproveExcuseOrRequest, canApproveCommitteeTransfer } from '../lib/permissions';
 import { FileText, Snowflake, Clock, CheckCircle2, XCircle, Send, MessageSquare, ArrowRightLeft } from 'lucide-react';
 
 interface ExcusesAndFreezeProps {
@@ -37,14 +36,13 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
   const isLeader = currentUser.role === 'Leader';
   const isLeadership = isHeadOrHighboard || isLeader;
 
-  // Strict Rule: "ف الاعذار محدش يقبل او يرفض اي عذر او فريز او اي حاجه غير القائد الخاص باللجنه فقط وانا"
-  // Only the specific committee Leader and Super Admin (Ahmed Ghannam) can approve or reject
+  // Strict Rule: Excuses & Freezes -> Committee Leader & Super Admin
+  // Strict Rule: Committee Transfers -> Strictly Super Admin only!
   const canApproveRequest = (
     reqCommittee?: string,
-    requestMemberId?: string,
-    targetCommittee?: string
+    requestMemberId?: string
   ): boolean => {
-    return canApproveExcuseOrRequest(currentUser, reqCommittee, requestMemberId, targetCommittee);
+    return canApproveExcuseOrRequest(currentUser, reqCommittee, requestMemberId);
   };
 
   const [activeTab, setActiveTab] = useState<'manage' | 'excuses' | 'freeze' | 'committee-change' | 'activity'>(() => {
@@ -257,13 +255,20 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
     if (!selectedRequest) return;
 
     const item = selectedRequest.item;
-    const reqComm = selectedRequest.type === 'committee' ? item.currentCommittee : item.committee;
-    const targetComm = selectedRequest.type === 'committee' ? item.targetCommittee : undefined;
 
-    if (!canApproveRequest(reqComm, item.memberId, targetComm)) {
-      alert(isAr ? 'غير مصرح: قبول أو رفض هذا الطلب مقتصر فقط على قائد اللجنة المختص أو السوبر أدمن.' : 'Unauthorized: Only the committee leader or Super Admin can approve/reject.');
-      setSelectedRequest(null);
-      return;
+    if (selectedRequest.type === 'committee') {
+      if (!canApproveCommitteeTransfer(currentUser)) {
+        alert(isAr ? 'غير مصرح: قبول أو رفض طلبات نقل وتغيير اللجان مقتصر حصرياً على السوبر أدمن (Super Admin) فقط.' : 'Unauthorized: Only the Super Admin can approve or reject committee transfer requests.');
+        setSelectedRequest(null);
+        return;
+      }
+    } else {
+      const reqComm = item.committee;
+      if (!canApproveRequest(reqComm, item.memberId)) {
+        alert(isAr ? 'غير مصرح: قبول أو رفض هذا الطلب مقتصر فقط على قائد اللجنة المختص أو السوبر أدمن.' : 'Unauthorized: Only the committee leader or Super Admin can approve/reject.');
+        setSelectedRequest(null);
+        return;
+      }
     }
 
     try {
@@ -1033,7 +1038,7 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
                         {getStatusBadge(commReq.status)}
 
                         {commReq.status === 'Pending' && (
-                          canApproveRequest(commReq.currentCommittee, commReq.memberId, commReq.targetCommittee) ? (
+                          canApproveCommitteeTransfer(currentUser) ? (
                             <button
                               onClick={() => setSelectedRequest({ type: 'committee', item: commReq })}
                               className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] shadow-sm cursor-pointer"
@@ -1042,7 +1047,7 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
                             </button>
                           ) : (
                             <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-lg border border-amber-200 dark:border-amber-800">
-                              🔒 {isAr ? `يتطلب موافقة قائد اللجنة (${commReq.currentCommittee}) فقط أو السوبر أدمن` : 'Committee Leader / Super Admin Only'}
+                              🔒 {isAr ? 'اعتماد أو رفض نقل اللجان مقتصر حصرياً على السوبر أدمن فقط' : 'Super Admin Only'}
                             </span>
                           )
                         )}

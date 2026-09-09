@@ -2,7 +2,7 @@ import { supabase, isSupabaseConfigured, getPermanentStorageUrl } from '../lib/s
 import { localInputToIso } from '../lib/dateUtils';
 import { sendEmailAlert } from '../lib/emailService';
 import { triggerPushFromSystemNotif } from '../lib/pushNotifications';
-import { isHRM, filterEvaluationsByPermission, filterMembersByPermission, getEffectiveCommittee, isSuperAdmin, canApproveExcuseOrRequest } from '../lib/permissions';
+import { isHRM, filterEvaluationsByPermission, filterMembersByPermission, getEffectiveCommittee, isSuperAdmin, canApproveExcuseOrRequest, canApproveCommitteeTransfer } from '../lib/permissions';
 import {
   UserProfile,
   Task,
@@ -2263,6 +2263,22 @@ class SupabaseDatabase {
   ): boolean {
     const idx = this.cache.users.findIndex((u) => u.id === id);
     if (idx === -1) return false;
+
+    // Strict rule: "مش عايز اي قائد يغير لجنه حد غير super admin بس اللي يعمل كدا"
+    // Only Super Admin can change someone's committee, department, or sub-committee
+    const currentUserObj = this.cache.users[idx];
+    const isChangingCommittee =
+      (updates.committee !== undefined && updates.committee !== currentUserObj.committee) ||
+      (updates.department !== undefined && updates.department !== currentUserObj.department) ||
+      (updates.subCommittee !== undefined && updates.subCommittee !== currentUserObj.subCommittee);
+
+    if (isChangingCommittee && !isSuperAdmin(updater)) {
+      console.warn('[updateUserFullDetails] Unauthorized: Only Super Admin can change user committee/department.');
+      delete updates.committee;
+      delete updates.department;
+      delete updates.subCommittee;
+    }
+
     saveProfileOverride(id, updates);
     
     this.cache.users[idx] = { ...this.cache.users[idx], ...updates };
@@ -8146,9 +8162,9 @@ class SupabaseDatabase {
       const list = this._ls<CommitteeChangeRequest>('eye_committee_requests') || [];
       const target = list.find((r) => r.id === id);
       if (target) {
-        if (!canApproveExcuseOrRequest(actor, target.currentCommittee, target.memberId, target.targetCommittee)) {
-          console.warn('Unauthorized: Only the committee leader or Super Admin can approve/reject committee change requests.');
-          throw new Error('غير مصرح: قبول أو رفض طلب نقل اللجنة مقتصر فقط على قائد اللجنة المعنية أو السوبر أدمن.');
+        if (!canApproveCommitteeTransfer(actor)) {
+          console.warn('Unauthorized: Only the Super Admin can approve/reject committee change requests.');
+          throw new Error('غير مصرح: قبول أو رفض طلب نقل وتغيير اللجان مقتصر حصرياً على السوبر أدمن (Super Admin) فقط.');
         }
 
         target.status = status;

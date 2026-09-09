@@ -14,8 +14,7 @@ import { useLanguage } from '../lib/LanguageContext';
 import { getEmailQueue, retryQueuedEmails, clearEmailQueue, QueuedEmail } from '../lib/emailService';
 import { sendTestPushNotification } from '../lib/pushNotifications';
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
-import { matchesSearch } from '../lib/searchUtils';
-import { canApproveExcuseOrRequest } from '../lib/permissions';
+import { canApproveExcuseOrRequest, canApproveCommitteeTransfer, isSuperAdmin } from '../lib/permissions';
 
 interface SettingsPanelProps {
   currentUser: UserProfile;
@@ -355,8 +354,8 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
 
   const handleExecuteCommReview = async (reqId: string, decision: 'Approved' | 'Rejected', note: string) => {
     const targetReq = allCommitteeRequests.find(r => r.id === reqId);
-    if (targetReq && !canApproveExcuseOrRequest(currentUser, targetReq.currentCommittee, targetReq.memberId, targetReq.targetCommittee)) {
-      showFeedback(ar ? 'غير مصرح: قبول أو رفض نقل اللجنة مقتصر فقط على قائد اللجنة المعنية أو السوبر أدمن.' : 'Unauthorized: Committee leader or Super Admin only.', false);
+    if (!canApproveCommitteeTransfer(currentUser)) {
+      showFeedback(ar ? 'غير مصرح: قبول أو رفض نقل اللجان مقتصر حصرياً على السوبر أدمن (Super Admin) فقط.' : 'Unauthorized: Super Admin only.', false);
       return;
     }
     setIsSubmittingCommReview(true);
@@ -461,18 +460,26 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
     e.preventDefault();
     if (!editingUser) return;
 
-    const updatedFields = {
+    const updatedFields: any = {
       fullName: editFullName,
       email: editEmail,
       phoneNumber: editPhone,
       role: editRole,
       status: editStatus,
-      committee: editCommittee,
-      department: editDepartment,
-      subCommittee: editCommittee === 'HRM' || editCommittee === 'HR' || editDepartment.startsWith('HRM') ? editSubCommittee : '',
       membershipCode: editCode,
       dateOfBirth: editDob,
     };
+
+    // Strict Rule: Only Super Admin can change a member's committee
+    if (isSuperAdmin(currentUser)) {
+      updatedFields.committee = editCommittee;
+      updatedFields.department = editDepartment;
+      updatedFields.subCommittee = editCommittee === 'HRM' || editCommittee === 'HR' || editDepartment.startsWith('HRM') ? editSubCommittee : '';
+    } else {
+      updatedFields.committee = editingUser.committee;
+      updatedFields.department = editingUser.department;
+      updatedFields.subCommittee = editingUser.subCommittee;
+    }
 
     db.updateUserFullDetails(
       editingUser.id,
@@ -1355,7 +1362,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
 
                           {/* Quick Action Buttons for Pending */}
                           {isPending && (
-                            canApproveExcuseOrRequest(currentUser, req.currentCommittee, req.memberId, req.targetCommittee) ? (
+                            canApproveCommitteeTransfer(currentUser) ? (
                               <div className="flex items-center gap-2">
                                 <button
                                   type="button"
@@ -1384,7 +1391,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                               </div>
                             ) : (
                               <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-lg border border-amber-200 dark:border-amber-800">
-                                🔒 {ar ? `يتطلب موافقة قائد اللجنة (${req.currentCommittee}) أو السوبر أدمن` : 'Committee Leader / Super Admin Only'}
+                                🔒 {ar ? 'اعتماد أو رفض نقل اللجان مقتصر حصرياً على السوبر أدمن فقط' : 'Super Admin Only'}
                               </span>
                             )
                           )}
@@ -2662,16 +2669,24 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                 </div>
 
                 <div>
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">{ar ? 'اللجنة' : 'Committee'}</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300">{ar ? 'اللجنة' : 'Committee'}</label>
+                    {!isSuperAdmin(currentUser) && (
+                      <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50 px-1.5 py-0.5 rounded border border-amber-200 dark:border-amber-800">
+                        🔒 {ar ? 'للسوبر أدمن فقط' : 'Super Admin Only'}
+                      </span>
+                    )}
+                  </div>
                   <select
                     value={editCommittee}
+                    disabled={!isSuperAdmin(currentUser)}
                     onChange={e => {
                       const comm = e.target.value;
                       setEditCommittee(comm);
                       const depts = COMMITTEE_STRUCTURE[comm] || [];
                       if (depts.length > 0) setEditDepartment(depts[0]);
                     }}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white"
+                    className={`w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white ${!isSuperAdmin(currentUser) ? 'opacity-60 cursor-not-allowed' : ''}`}
                   >
                     <option value="None">None</option>
                     {['HR', 'PR', 'SM', 'OR'].map(c => (
@@ -2681,11 +2696,19 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                 </div>
 
                 <div>
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">{ar ? 'القسم' : 'Department'}</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300">{ar ? 'القسم' : 'Department'}</label>
+                    {!isSuperAdmin(currentUser) && (
+                      <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50 px-1.5 py-0.5 rounded border border-amber-200 dark:border-amber-800">
+                        🔒 {ar ? 'للسوبر أدمن فقط' : 'Super Admin Only'}
+                      </span>
+                    )}
+                  </div>
                   <select
                     value={editDepartment}
+                    disabled={!isSuperAdmin(currentUser)}
                     onChange={e => setEditDepartment(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white"
+                    className={`w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 dark:text-white ${!isSuperAdmin(currentUser) ? 'opacity-60 cursor-not-allowed' : ''}`}
                   >
                     <option value="None">None</option>
                     {(COMMITTEE_STRUCTURE[editCommittee] || ['HRM', 'HRD', 'HRS', 'HRIS']).map(d => (
@@ -2697,13 +2720,21 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                 {/* Sub-committee dropdown shown ONLY when HR committee and HRM department are chosen */}
                 {editCommittee === 'HR' && (editDepartment === 'HRM' || editDepartment.startsWith('HRM')) && (
                   <div className="col-span-2 bg-indigo-50/70 dark:bg-indigo-950/40 p-3.5 rounded-2xl border border-indigo-200 dark:border-indigo-800/60 space-y-1">
-                    <label className="text-xs font-black text-indigo-900 dark:text-indigo-200 block mb-1">
-                      {ar ? 'اللجنة الفرعية لـ HRM (التكليف) *' : 'HRM Sub-Committee *'}
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-black text-indigo-900 dark:text-indigo-200">
+                        {ar ? 'اللجنة الفرعية لـ HRM (التكليف) *' : 'HRM Sub-Committee *'}
+                      </label>
+                      {!isSuperAdmin(currentUser) && (
+                        <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50 px-1.5 py-0.5 rounded border border-amber-200 dark:border-amber-800">
+                          🔒 {ar ? 'للسوبر أدمن فقط' : 'Super Admin Only'}
+                        </span>
+                      )}
+                    </div>
                     <select
                       value={editSubCommittee || 'HR OF PR'}
+                      disabled={!isSuperAdmin(currentUser)}
                       onChange={e => setEditSubCommittee(e.target.value)}
-                      className="w-full bg-white dark:bg-slate-800 border border-indigo-200 dark:border-indigo-700 rounded-xl px-3 py-2 text-xs font-bold text-indigo-900 dark:text-indigo-100"
+                      className={`w-full bg-white dark:bg-slate-800 border border-indigo-200 dark:border-indigo-700 rounded-xl px-3 py-2 text-xs font-bold text-indigo-900 dark:text-indigo-100 ${!isSuperAdmin(currentUser) ? 'opacity-60 cursor-not-allowed' : ''}`}
                     >
                       <option value="HR OF PR">HR OF PR (Human Resources of Public Relations)</option>
                       <option value="HR OF SM">HR OF SM (Human Resources of Social Media)</option>
