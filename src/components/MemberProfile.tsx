@@ -521,6 +521,8 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({
 }) => {
   const { language, translateCommittee, translateDepartment } = useLanguage();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cropViewportRef = useRef<HTMLDivElement>(null);
+  const [avatarSuccessMsg, setAvatarSuccessMsg] = useState('');
 
   // Determine active profile to show (either targetUserId or currentUser)
   const activeUser = targetUserId 
@@ -1257,17 +1259,18 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({
       ctx.rotate((cropRotation * Math.PI) / 180);
 
       // Draw image using the offsets and zoom
-      // The preview container is 256px wide. We scale coordinates to match the output canvas.
-      const scaleFactor = cropDimension / 256;
+      // Dynamically measure viewport container width
+      const containerWidth = cropViewportRef.current?.offsetWidth || 240;
+      const scaleFactor = cropDimension / containerWidth;
 
-      // Compute width and height maintaining image aspect ratio relative to preview box (256px)
-      let w = 256;
-      let h = 256;
+      // Compute width and height maintaining image aspect ratio relative to preview box
+      let w = containerWidth;
+      let h = containerWidth;
       const aspect = img.width / img.height;
       if (aspect > 1) {
-        h = 256 / aspect;
+        h = containerWidth / aspect;
       } else {
-        w = 256 * aspect;
+        w = containerWidth * aspect;
       }
 
       const drawWidth = w * cropZoom * scaleFactor;
@@ -1283,8 +1286,12 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({
       // 4. Update database profile
       db.updateProfile(currentUser.id, { avatarUrl: finalBase64 }, currentUser);
 
-      // Update local state
+      // Update local state & form inputs
       setUserProfile(prev => ({ ...prev, avatarUrl: finalBase64 }));
+      setAvatarUrlInput(finalBase64);
+      setIsSaved(true);
+      setAvatarSuccessMsg(language === 'ar' ? 'تم حفظ وتحديث صورتك الشخصية بنجاح! 🎉' : 'Profile photo saved successfully! 🎉');
+      setTimeout(() => setAvatarSuccessMsg(''), 4000);
     } catch (err: any) {
       console.error('Avatar cropping/upload error:', err);
       setAvatarError(
@@ -1299,6 +1306,16 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({
         fileInputRef.current.value = '';
       }
     }
+  };
+
+  const handleSaveAvatarDirectly = () => {
+    if (!avatarUrlInput.trim()) return;
+    const cleanUrl = getPermanentStorageUrl(avatarUrlInput.trim());
+    db.updateProfile(currentUser.id, { avatarUrl: cleanUrl }, currentUser);
+    setUserProfile(prev => ({ ...prev, avatarUrl: cleanUrl }));
+    setIsSaved(true);
+    setAvatarSuccessMsg(language === 'ar' ? 'تم حفظ وتطبيق الصورة الشخصية بنجاح! 🎉' : 'Profile photo saved successfully! 🎉');
+    setTimeout(() => setAvatarSuccessMsg(''), 4000);
   };
 
   const handleRemoveAvatar = () => {
@@ -1993,6 +2010,12 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({
                   {avatarError}
                 </div>
               )}
+              {avatarSuccessMsg && (
+                <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-800 rounded-2xl text-emerald-700 dark:text-emerald-300 text-xs font-black max-w-xs text-center flex items-center justify-center gap-1.5 shadow-sm animate-fade-in">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>{avatarSuccessMsg}</span>
+                </div>
+              )}
 
               {/* Title & Code */}
               <div>
@@ -2306,6 +2329,23 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({
                   <span>{language === 'ar' ? 'اختيار صورة' : 'Choose File'}</span>
                 </button>
               </div>
+
+              {/* Quick direct save button for avatar URL change */}
+              {avatarUrlInput && avatarUrlInput.trim() !== (userProfile.avatarUrl || '').trim() && (
+                <div className="flex items-center justify-between p-2.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 animate-fade-in mt-1.5">
+                  <span className="text-[11px] font-bold text-amber-800 dark:text-amber-300">
+                    {language === 'ar' ? '💡 تم تحديد صورة جديدة:' : 'New photo selected:'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleSaveAvatarDirectly}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1 cursor-pointer shadow-sm active:scale-95 transition-all"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>{language === 'ar' ? 'حفظ الصورة الآن ✅' : 'Save Photo Now ✅'}</span>
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="space-y-1">
@@ -3451,132 +3491,173 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({
         </div>
       </div>
 
-      {/* Image Adjuster & Cropper Modal */}
+      {/* Image Adjuster & Cropper Modal with Sticky Header & Sticky Footer */}
       {cropImageSrc && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 w-full max-w-md p-6 shadow-xl space-y-6 animate-scale-in text-slate-800 dark:text-slate-100">
-            {/* Header */}
-            <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3">
-              <h3 className="text-sm font-black text-slate-900 dark:text-white">
-                {language === 'ar' ? 'تعديل وقص الصورة الشخصية' : 'Adjust & Crop Profile Image'}
-              </h3>
+        <div 
+          className="fixed inset-0 z-[99999] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, width: '100vw', height: '100vh' }}
+        >
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 w-full max-w-md max-h-[92vh] flex flex-col shadow-2xl animate-scale-in text-slate-800 dark:text-slate-100 overflow-hidden relative">
+            
+            {/* 1. Fixed Header (Always visible at top) */}
+            <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 px-5 py-3.5 shrink-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm z-10">
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400">
+                  <Camera className="w-4 h-4" />
+                </span>
+                <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                  {language === 'ar' ? 'تعديل وقص الصورة الشخصية' : 'Adjust & Crop Profile Image'}
+                </h3>
+              </div>
               <button
                 type="button"
                 onClick={() => { setCropImageSrc(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}
-                className="p-1 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Hint */}
-            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold text-center leading-relaxed">
-              {language === 'ar'
-                ? 'اسحب الصورة داخل الإطار لضبط الموضع، واستخدم شريط التكبير لضبط الحجم.'
-                : 'Drag the image inside the frame to adjust position, and use the zoom slider to resize.'}
-            </p>
+            {/* 2. Scrollable Body Content */}
+            <div className="overflow-y-auto px-5 py-3.5 space-y-4 flex-1 overscroll-contain">
+              {/* Hint */}
+              <div className="bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-800/40 rounded-2xl p-2.5 text-center">
+                <p className="text-[11px] text-amber-800 dark:text-amber-300 font-bold leading-relaxed">
+                  {language === 'ar'
+                    ? '💡 اسحب الصورة داخل الإطار لضبط الموضع، واستخدم أشرطة التكبير والتدوير بالأسفل.'
+                    : '💡 Drag the image to reposition, and use the zoom & rotation sliders below.'}
+                </p>
+              </div>
 
-            {/* Drag & Drop Crop viewport */}
-            <div
-              className="relative w-64 h-64 mx-auto overflow-hidden rounded-3xl bg-slate-100 dark:bg-slate-950 border-2 border-slate-200 dark:border-slate-800 cursor-move select-none"
-              onMouseDown={handleMouseDown}
-              onMouseMove={handleMouseMove}
-              onMouseUp={handleMouseUp}
-              onMouseLeave={handleMouseUp}
-              onTouchStart={handleTouchStart}
-              onTouchMove={handleTouchMove}
-              onTouchEnd={handleTouchEnd}
-            >
-              <img
-                src={cropImageSrc}
-                alt="Crop preview"
-                style={{
-                  transform: `translate(${cropX}px, ${cropY}px) scale(${cropZoom}) rotate(${cropRotation}deg)`,
-                  transformOrigin: 'center center',
-                  transition: isDragging ? 'none' : 'transform 0.1s ease-out',
-                }}
-                className="absolute max-w-none w-full h-full object-contain pointer-events-none"
-              />
-              {/* Overlay Circular guideline */}
-              <div className="absolute inset-0 border-[6px] border-black/40 pointer-events-none rounded-3xl"></div>
-              <div className="absolute inset-[6px] border border-dashed border-white/60 pointer-events-none rounded-full"></div>
+              {/* Drag & Drop Crop viewport */}
+              <div
+                ref={cropViewportRef}
+                className="relative w-52 h-52 sm:w-60 sm:h-60 mx-auto overflow-hidden rounded-3xl bg-slate-900 border-2 border-amber-400/40 cursor-move select-none shadow-inner touch-none"
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+              >
+                <img
+                  src={cropImageSrc}
+                  alt="Crop preview"
+                  style={{
+                    transform: `translate(${cropX}px, ${cropY}px) scale(${cropZoom}) rotate(${cropRotation}deg)`,
+                    transformOrigin: 'center center',
+                    transition: isDragging ? 'none' : 'transform 0.1s ease-out',
+                  }}
+                  className="absolute max-w-none w-full h-full object-contain pointer-events-none"
+                />
+                {/* Overlay Circular guideline */}
+                <div className="absolute inset-0 border-[6px] border-black/50 pointer-events-none rounded-3xl"></div>
+                <div className="absolute inset-[6px] border-2 border-dashed border-amber-300/80 pointer-events-none rounded-full shadow-[0_0_0_9999px_rgba(0,0,0,0.4)]"></div>
+              </div>
+
+              {/* Sliders & Adjustment Inputs */}
+              <div className="space-y-3 text-xs font-bold">
+                {/* Zoom control slider */}
+                <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-1.5 text-start">
+                  <div className="flex justify-between items-center text-[10px] text-slate-500 dark:text-slate-400">
+                    <span className="font-bold flex items-center gap-1">
+                      <ZoomIn className="w-3 h-3 text-amber-500" />
+                      {language === 'ar' ? 'درجة التكبير' : 'Zoom Level'}
+                    </span>
+                    <span className="font-mono font-black text-amber-600 dark:text-amber-400">{Math.round(cropZoom * 100)}%</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <ZoomOut className="w-4 h-4 text-slate-400" />
+                    <input
+                      type="range"
+                      min="0.5"
+                      max="3"
+                      step="0.05"
+                      value={cropZoom}
+                      onChange={(e) => setCropZoom(parseFloat(e.target.value))}
+                      className="flex-1 accent-amber-500 h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                    />
+                    <ZoomIn className="w-4 h-4 text-slate-400" />
+                  </div>
+                </div>
+
+                {/* Rotation control slider */}
+                <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-1.5 text-start">
+                  <div className="flex justify-between items-center text-[10px] text-slate-500 dark:text-slate-400">
+                    <span className="font-bold flex items-center gap-1">
+                      <RotateCw className="w-3 h-3 text-indigo-500" />
+                      {language === 'ar' ? 'درجة الدوران' : 'Rotation Angle'}
+                    </span>
+                    <span className="font-mono font-black text-indigo-600 dark:text-indigo-400">{cropRotation}°</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <RotateCw className="w-4 h-4 text-slate-400" />
+                    <input
+                      type="range"
+                      min="-180"
+                      max="180"
+                      step="5"
+                      value={cropRotation}
+                      onChange={(e) => setCropRotation(parseInt(e.target.value))}
+                      className="flex-1 accent-indigo-500 h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setCropRotation(0)}
+                      className="text-[10px] text-slate-400 hover:text-indigo-500 underline cursor-pointer"
+                      title={language === 'ar' ? 'إعادة ضبط الدوران' : 'Reset'}
+                    >
+                      {language === 'ar' ? 'صفر' : '0°'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Output Quality/Dimension Selector */}
+                <div className="space-y-1 text-start">
+                  <label className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-black">{language === 'ar' ? 'أبعاد وجودة الصورة' : 'Image Resolution'}</label>
+                  <select
+                    value={cropDimension}
+                    onChange={(e) => setCropDimension(parseInt(e.target.value))}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  >
+                    <option value={150}>{language === 'ar' ? '150 × 150 (حجم خفيف وسريع - مستحسن)' : '150 x 150 (Compact - Recommended)'}</option>
+                    <option value={250}>{language === 'ar' ? '250 × 250 (جودة متوسطة متوازنة)' : '250 x 250 (Medium Quality)'}</option>
+                    <option value={400}>{language === 'ar' ? '400 × 400 (دقة فائقة عالية الوضوح)' : '400 x 400 (Ultra Quality)'}</option>
+                  </select>
+                </div>
+              </div>
             </div>
 
-            {/* Sliders & Adjustment Inputs */}
-            <div className="space-y-4 text-xs font-bold">
-              {/* Zoom control slider */}
-              <div className="space-y-1.5 text-start">
-                <div className="flex justify-between items-center text-[10px] text-slate-500">
-                  <span>{language === 'ar' ? 'درجة التكبير' : 'Zoom Level'}</span>
-                  <span>{Math.round(cropZoom * 100)}%</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <ZoomOut className="w-4 h-4 text-slate-400" />
-                  <input
-                    type="range"
-                    min="0.5"
-                    max="3"
-                    step="0.05"
-                    value={cropZoom}
-                    onChange={(e) => setCropZoom(parseFloat(e.target.value))}
-                    className="flex-1 accent-amber-500 h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer"
-                  />
-                  <ZoomIn className="w-4 h-4 text-slate-400" />
-                </div>
-              </div>
-
-              {/* Rotation control slider */}
-              <div className="space-y-1.5 text-start">
-                <div className="flex justify-between items-center text-[10px] text-slate-500">
-                  <span>{language === 'ar' ? 'درجة الدوران' : 'Rotation Angle'}</span>
-                  <span>{cropRotation}°</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <RotateCw className="w-4 h-4 text-slate-400" />
-                  <input
-                    type="range"
-                    min="-180"
-                    max="180"
-                    step="5"
-                    value={cropRotation}
-                    onChange={(e) => setCropRotation(parseInt(e.target.value))}
-                    className="flex-1 accent-amber-500 h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer"
-                  />
-                </div>
-              </div>
-
-              {/* Output Quality/Dimension Selector */}
-              <div className="space-y-1.5 text-start">
-                <label className="text-[10px] text-slate-500 uppercase">{language === 'ar' ? 'أبعاد الصورة وحجمها' : 'Image Resolution'}</label>
-                <select
-                  value={cropDimension}
-                  onChange={(e) => setCropDimension(parseInt(e.target.value))}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-800 dark:bg-slate-850 dark:border-slate-800 dark:text-slate-100 focus:outline-none"
-                >
-                  <option value={150}>{language === 'ar' ? '150 × 150 (حجم صغير وسريع)' : '150 x 150 (Compact - Recommended)'}</option>
-                  <option value={250}>{language === 'ar' ? '250 × 250 (جودة متوسطة)' : '250 x 250 (Medium Quality)'}</option>
-                  <option value={400}>{language === 'ar' ? '400 × 400 (دقة فائقة وواضحة)' : '400 x 400 (Ultra Quality)'}</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="grid grid-cols-2 gap-3 pt-2">
+            {/* 3. Sticky Bottom Action Bar (ALWAYS VISIBLE - NO SCROLL NEEDED!) */}
+            <div className="p-3.5 sm:p-4 border-t border-slate-100 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm shrink-0 grid grid-cols-2 gap-3 z-10">
               <button
                 type="button"
                 onClick={() => { setCropImageSrc(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}
-                className="bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-100 font-bold py-2.5 rounded-xl text-xs transition-all cursor-pointer"
+                className="bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 font-bold py-2.5 rounded-xl text-xs transition-all cursor-pointer text-center"
               >
                 {language === 'ar' ? 'إلغاء' : 'Cancel'}
               </button>
               <button
                 type="button"
                 onClick={handleSaveCrop}
-                className="bg-amber-500 hover:bg-amber-600 text-white font-bold py-2.5 rounded-xl text-xs transition-all shadow-sm shadow-amber-500/10 cursor-pointer"
+                disabled={isUploadingAvatar}
+                className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black py-2.5 rounded-xl text-xs transition-all shadow-md shadow-amber-500/25 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
-                {language === 'ar' ? 'قص وحفظ الصورة' : 'Crop & Save'}
+                {isUploadingAvatar ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>{language === 'ar' ? 'جاري الحفظ...' : 'Saving...'}</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>{language === 'ar' ? 'قص وحفظ الصورة ✅' : 'Crop & Save ✅'}</span>
+                  </>
+                )}
               </button>
             </div>
+
           </div>
         </div>
       )}
