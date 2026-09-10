@@ -23,6 +23,7 @@ import { DeveloperWatermark } from './components/DeveloperWatermark';
 import { playRoyalNotificationSound } from './lib/notificationSound';
 
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { canAccessSettings } from './lib/permissions';
 
 // Helper for safe lazy loading with auto-recovery on new deployment chunk changes
 function safeLazy<T extends React.ComponentType<any>>(
@@ -565,7 +566,7 @@ export default function App() {
       case 'social':
         return <SocialMediaView />;
       case 'settings':
-        if (!['Super Admin', 'Head', 'Vice', 'HRM'].includes(currentUser.role)) {
+        if (!canAccessSettings(currentUser)) {
           return <DashboardStats currentUser={currentUser} onNavigateToView={handleNavigateToView} />;
         }
         return <SettingsPanel currentUser={currentUser} onNavigateToView={handleNavigateToView} />;

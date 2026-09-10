@@ -28,6 +28,20 @@ export const isAdminUser = (user: Partial<UserProfile> | null | undefined): bool
 };
 
 /**
+ * Strict permission rule for Settings Panel:
+ * Accessible by Super Admin (by role, email, or membership code),
+ * Administrative tier (Head, Vice, HRM, Coordinator, Deputy Coordinator),
+ * or any Admin role defined in ADMIN_ROLES.
+ */
+export const canAccessSettings = (user: Partial<UserProfile> | null | undefined): boolean => {
+  if (!user) return false;
+  if (isSuperAdmin(user)) return true;
+  if (isAdminUser(user)) return true;
+  const role = user.role || '';
+  return ['Super Admin', 'Head', 'Vice', 'Coordinator', 'Deputy Coordinator', 'HRM'].includes(role);
+};
+
+/**
  * Returns true if user is the Super Admin / Platform Owner (Ahmed Ghannam)
  */
 export const isSuperAdmin = (user: Partial<UserProfile> | null | undefined): boolean => {

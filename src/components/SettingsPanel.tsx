@@ -14,7 +14,7 @@ import { useLanguage } from '../lib/LanguageContext';
 import { getEmailQueue, retryQueuedEmails, clearEmailQueue, QueuedEmail } from '../lib/emailService';
 import { sendTestPushNotification } from '../lib/pushNotifications';
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
-import { canApproveExcuseOrRequest, canApproveCommitteeTransfer, isSuperAdmin } from '../lib/permissions';
+import { canApproveExcuseOrRequest, canApproveCommitteeTransfer, isSuperAdmin, canAccessSettings } from '../lib/permissions';
 
 interface SettingsPanelProps {
   currentUser: UserProfile;
@@ -49,7 +49,22 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
   const { language, isRtl } = useLanguage();
   const ar = language === 'ar';
   const [activeTab, setActiveTab] = useState<'members' | 'committee-transfers' | 'update-requests' | 'config' | 'master' | 'logs' | 'security-codes'>('members');
-  const [settings, setSettings] = useState<OrganizationSettings>(db.getSettings());
+  const [settings, setSettings] = useState<OrganizationSettings>(() => {
+    const raw = db.getSettings();
+    return {
+      orgName: raw?.orgName || 'EYE Workflow Hub',
+      orgLogoUrl: raw?.orgLogoUrl || '',
+      theme: raw?.theme || 'System',
+      language: raw?.language || 'English',
+      allowSelfRegistration: raw?.allowSelfRegistration ?? true,
+      defaultMaxFileSizeMb: raw?.defaultMaxFileSizeMb || 25,
+      notificationChannels: {
+        email: raw?.notificationChannels?.email ?? true,
+        push: raw?.notificationChannels?.push ?? true,
+        system: raw?.notificationChannels?.system ?? true,
+      },
+    };
+  });
   const [isSaved, setIsSaved] = useState(false);
 
   // Committee Transfers Review State
@@ -731,7 +746,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
   const ALL_ROLES: UserRole[] = ['Member', 'Leader', 'Deputy Coordinator', 'Coordinator', 'Vice', 'Head', 'Super Admin'];
   const ALL_STATUSES: UserStatus[] = ['Active', 'Pending Approval', 'Disabled'];
 
-  if (!['Super Admin', 'Head', 'Vice', 'HRM'].includes(currentUser.role)) {
+  if (!canAccessSettings(currentUser)) {
     return (
       <div className="p-8 text-center bg-white dark:bg-slate-900 rounded-3xl border border-red-200 dark:border-red-900/40 shadow-xl max-w-lg mx-auto my-12" dir={isRtl ? 'rtl' : 'ltr'}>
         <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm">
