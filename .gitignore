@@ -43,3 +43,7 @@ Thumbs.db
 # Deployment
 .vercel
 supabase/.temp/
+
+# Local spreadsheet files
+*.xlsx
+*.xls

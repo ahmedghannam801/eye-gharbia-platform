@@ -801,6 +801,13 @@ class SupabaseDatabase {
       this.cache.disciplinaryRecords = this._ls<DisciplinaryRecord>('eye_disciplinary_records');
       this.cache.leaderFeedbacks = this._ls<LeaderFeedback>('eye_leader_feedback');
       this.cache.workshops = this._ls<LiveWorkshop>('eye_live_workshops');
+
+      try {
+        const savedSettingsStr = localStorage.getItem('eye_org_settings');
+        if (savedSettingsStr) {
+          this.cache.settings = { ...this.cache.settings, ...JSON.parse(savedSettingsStr) };
+        }
+      } catch {}
     } catch (e) {
       console.warn('Error restoring initial cache from localStorage:', e);
     }
@@ -1392,7 +1399,19 @@ class SupabaseDatabase {
       this._lsSave('eye_committee_requests', mergedCommitteeChanges);
     }
 
-    if (settings.data) this.cache.settings = settingsFromRow(settings.data);
+    if (settings.data) {
+      this.cache.settings = settingsFromRow(settings.data);
+      try {
+        localStorage.setItem('eye_org_settings', JSON.stringify(this.cache.settings));
+      } catch {}
+    } else {
+      try {
+        const savedSettingsStr = localStorage.getItem('eye_org_settings');
+        if (savedSettingsStr) {
+          this.cache.settings = { ...this.cache.settings, ...JSON.parse(savedSettingsStr) };
+        }
+      } catch {}
+    }
 
     if (this.cache.currentUser) {
       const updatedUser = this.cache.users.find(u => u.id === this.cache.currentUser?.id);
@@ -1629,6 +1648,24 @@ class SupabaseDatabase {
 
     this.notify();
     return newEntry;
+  }
+
+  deleteCustomSecurityCode(code: string): boolean {
+    const custom = this._ls<any>('eye_custom_security_codes') || [];
+    const upperCode = code.trim().toUpperCase();
+    const filtered = custom.filter((c: any) => c.code.toUpperCase() !== upperCode);
+    this._lsSave('eye_custom_security_codes', filtered);
+
+    if (isSupabaseConfigured && supabase) {
+      supabase
+        .from('security_codes')
+        .delete()
+        .eq('code', upperCode)
+        .then(() => {});
+    }
+
+    this.notify();
+    return true;
   }
 
   private getClaimedCodes(): Record<string, string> {
@@ -2439,6 +2476,8 @@ class SupabaseDatabase {
     const deletedUser = this.cache.users[idx];
     this.cache.users.splice(idx, 1);
 
+    this.cache.certificates = this.cache.certificates.filter(c => c.userId !== id);
+    this._lsSave('eye_certificates', this.cache.certificates);
     this.recordDeletedId('eye_deleted_user_ids', id);
     this._lsSave('eye_users', this.cache.users);
     this.notify();
@@ -2460,6 +2499,7 @@ class SupabaseDatabase {
             supabase.from('member_evaluations').delete().eq('member_id', id),
             supabase.from('reward_purchases').delete().eq('user_id', id),
             supabase.from('issued_posters').delete().eq('user_id', id),
+            supabase.from('issued_certificates').delete().eq('user_id', id),
             deleteAuthUsers([id]),
           ]);
 
@@ -3884,6 +3924,9 @@ class SupabaseDatabase {
 
   updateSettings(newSettings: OrganizationSettings, updater: UserProfile): void {
     this.cache.settings = newSettings;
+    try {
+      localStorage.setItem('eye_org_settings', JSON.stringify(newSettings));
+    } catch {}
     this.notify();
 
     supabase
@@ -5419,13 +5462,68 @@ class SupabaseDatabase {
     return this.getCertificates().filter((c) => c.recipientId === userId);
   }
 
+  findDuplicateCertificate(params: {
+    recipientId?: string;
+    recipientName?: string;
+    certType?: string;
+    title?: string;
+    body?: string;
+  }): IssuedCertificate | null {
+    const allCerts = this.getCertificates();
+    const normalize = (str?: string) => (str || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+    const normRecipId = (params.recipientId || '').trim();
+    const normRecipName = normalize(params.recipientName);
+    const normType = params.certType;
+    const normTitle = normalize(params.title);
+    const normBody = normalize(params.body);
+
+    for (const cert of allCerts) {
+      if (cert.status === 'rejected') continue;
+
+      const isSameRecipient =
+        (normRecipId && cert.recipientId === normRecipId) ||
+        (normRecipName && normalize(cert.recipientName) === normRecipName);
+
+      if (!isSameRecipient) continue;
+      if (normType && cert.certType !== normType) continue;
+      if (normTitle && normalize(cert.title) !== normTitle) continue;
+
+      if (normBody && cert.body) {
+        const existingBody = normalize(cert.body);
+        if (existingBody === normBody) return cert;
+        if (cert.certType?.includes('workshop')) return cert;
+      }
+
+      return cert;
+    }
+    return null;
+  }
+
   async issueCertificate(
     recipientId: string, recipientName: string, recipientRole: string,
     certType: CertificateType, title: string, body: string,
     issuer: UserProfile, committee: string, grade?: number,
     lang: 'ar' | 'en' = 'ar',
-    designStyle: CertificateDesignStyle = 'style1'
+    designStyle: CertificateDesignStyle = 'style1',
+    options?: { allowDuplicate?: boolean; recipientEmail?: string }
   ): Promise<IssuedCertificate> {
+    // 0) Duplicate Check
+    if (!options?.allowDuplicate) {
+      const duplicate = this.findDuplicateCertificate({
+        recipientId,
+        recipientName,
+        certType,
+        title,
+        body,
+      });
+      if (duplicate) {
+        throw new Error(
+          `تم إصدار هذه الشهادة بالفعل للعضو (${recipientName}) بعنوان "${duplicate.title}" بتاريخ ${new Date(duplicate.issuedAt).toLocaleDateString('ar-EG')}. تم إلغاء الإصدار لمنع التكرار.`
+        );
+      }
+    }
+
     const isAutoApproved = issuer.role === 'Super Admin' || issuer.role === 'Vice';
     // جلب المحافظة من بيانات المصدر أو الـ session
     let issuerGovernorate: string | undefined;
@@ -5530,7 +5628,8 @@ class SupabaseDatabase {
 
     // 4) Email the recipient with a beautiful HTML template
     const recipient = this.cache.users.find((u) => u.id === recipientId);
-    if (recipient?.email) {
+    const targetEmail = recipient?.email || options?.recipientEmail;
+    if (targetEmail) {
       const certUrl = `${window.location.origin}/?cert=${cert.id}`;
       const html = `
         <div dir="rtl" style="font-family:'Cairo',Tahoma,Arial,sans-serif;text-align:right;padding:0;margin:0;background:#f5eed8;">
@@ -5552,15 +5651,16 @@ class SupabaseDatabase {
               <p style="color:#94a3b8;font-size:10px;margin-top:20px;">رقم الشهادة: ${cert.id}</p>
             </div>
             <p style="color:#64748b;font-size:10px;text-align:center;margin-top:14px;">
-              وصلك هذا الإيميل لأنك عضو في كيان المصريون الشباب EYE.<br/>
+              وصلك هذا الإيميل لأنك مسجل في كشوفات كيان المصريون الشباب EYE.<br/>
               لإيقاف الإشعارات، عدّل إعداداتك من <a href="${window.location.origin}" style="color:#2b66ff;">هنا</a>.
             </p>
           </div>
         </div>`;
       sendEmailAlert(
-        [recipient.email],
+        [targetEmail],
         `📜 شهادة جديدة لك من ${cert.issuedByName} — EYE Workflow Hub`,
-        html
+        html,
+        options?.allowDuplicate || false
       );
     }
 
@@ -5578,13 +5678,66 @@ class SupabaseDatabase {
     if (this.cache.certificates) {
       this.cache.certificates = this.cache.certificates.filter(c => c.id !== certId);
     }
+
+    // 3) Remove associated notifications from local cache and localStorage
+    if (this.cache.notifications) {
+      this.cache.notifications = this.cache.notifications.filter(n => n.relatedId !== certId);
+      this._lsSave('eye_notifications', this.cache.notifications);
+    }
     this.notify();
 
-    // 3) Remove from Supabase database
-    await supabase.from('issued_certificates').delete().eq('id', certId);
+    // 4) Remove from Supabase database (certificates + related notifications)
+    try {
+      await Promise.all([
+        supabase.from('issued_certificates').delete().eq('id', certId),
+        supabase.from('notifications').delete().eq('related_id', certId),
+      ]);
+    } catch (err) {
+      console.warn('[Supabase Certificate Delete Warn]:', err);
+    }
 
-    this.logActivity(actor.id, actor.fullName, actor.role, 'Certificate Revoked', `Revoked/Deleted certificate ID: ${certId}`);
+    this.logActivity(actor.id, actor.fullName, actor.role, 'Certificate Revoked', `Revoked/Deleted certificate ID: ${certId} completely from all records`);
     return true;
+  }
+
+  async deleteCertificatesBulk(certIds: string[], actor: UserProfile): Promise<{ deletedCount: number; success: boolean }> {
+    if (!certIds || certIds.length === 0) return { deletedCount: 0, success: true };
+    const idSet = new Set(certIds);
+
+    // 1) Remove from localStorage
+    const all = this._ls<IssuedCertificate>('eye_certificates');
+    this._lsSave('eye_certificates', all.filter(c => !idSet.has(c.id)));
+
+    // 2) Remove from in-memory cache
+    if (this.cache.certificates) {
+      this.cache.certificates = this.cache.certificates.filter(c => !idSet.has(c.id));
+    }
+
+    // 3) Remove associated notifications from local cache & localStorage
+    if (this.cache.notifications) {
+      this.cache.notifications = this.cache.notifications.filter(n => !n.relatedId || !idSet.has(n.relatedId));
+      this._lsSave('eye_notifications', this.cache.notifications);
+    }
+    this.notify();
+
+    // 4) Remove from Supabase in bulk (certificates + related notifications)
+    try {
+      await Promise.all([
+        supabase.from('issued_certificates').delete().in('id', certIds),
+        supabase.from('notifications').delete().in('related_id', certIds),
+      ]);
+    } catch (err) {
+      console.warn('[Supabase Bulk Certificate Delete Warn]:', err);
+    }
+
+    this.logActivity(
+      actor.id,
+      actor.fullName,
+      actor.role,
+      'Certificates Bulk Purged',
+      `Purged ${certIds.length} certificates completely from all records and notifications.`
+    );
+    return { deletedCount: certIds.length, success: true };
   }
 
   async approveCertificate(certId: string, approver: UserProfile): Promise<boolean> {

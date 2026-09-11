@@ -535,7 +535,16 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
     e.preventDefault();
     db.updateSettings(settings, currentUser);
     setIsSaved(true);
-    setTimeout(() => setIsSaved(false), 1500);
+    showFeedback(ar ? 'تم حفظ إعدادات المنظمة بنجاح! ⚙️' : 'Organization settings saved successfully! ⚙️', true);
+    setTimeout(() => setIsSaved(false), 2000);
+  };
+
+  const handleDeleteSecCode = (code: string) => {
+    if (window.confirm(ar ? `هل أنت متأكد من حذف وإلغاء الكود الأمني (${code})؟` : `Are you sure you want to revoke code (${code})?`)) {
+      db.deleteCustomSecurityCode(code);
+      showFeedback(ar ? `تم حذف وإلغاء الكود الأمني (${code}) بنجاح.` : `Security code (${code}) revoked successfully.`, true);
+      setRefreshKey(k => k + 1);
+    }
   };
 
   // ─── One-time local → Supabase sync ───────────────────────────────────
@@ -627,7 +636,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
         await supabase
           .from('profiles')
           .update({
-            user_role: 'Super Admin',
+            role: 'Super Admin',
             status: 'Active',
             committee: 'All',
           })
@@ -1163,7 +1172,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
 
                   {filtered.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="py-8 text-center text-slate-400 font-bold">
+                      <td colSpan={7} className="py-8 text-center text-slate-400 font-bold">
                         {ar ? 'لا يوجد أعضاء مطابقين للبحث.' : 'No members found matching filter.'}
                       </td>
                     </tr>
@@ -2198,92 +2207,267 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
 
       {/* TAB 3: CONFIGURATION SETTINGS */}
       {activeTab === 'config' && (
-        <form onSubmit={handleSaveSettings} className="bg-white dark:bg-slate-900 p-6 md:p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-6">
-          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
-            <h2 className="text-base font-black text-slate-900 dark:text-white">
-              {ar ? 'إعدادات المنظمة العامة' : 'General Organization Settings'}
-            </h2>
+        <form onSubmit={handleSaveSettings} className="bg-white dark:bg-slate-900 p-6 md:p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-8">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
+            <div>
+              <h2 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+                <Sliders className="w-5 h-5 text-indigo-600" />
+                <span>{ar ? 'إعدادات النظام والمنظمة العامة' : 'General Organization Settings'}</span>
+              </h2>
+              <p className="text-xs text-slate-500 font-medium mt-1">
+                {ar ? 'التحكم بالهوية الرسمية، سعة الملفات، القنوات التنبيهية، وضوابط التسجيل' : 'Manage official branding, upload quotas, notification channels, and registration policy.'}
+              </p>
+            </div>
             <button
               type="submit"
-              className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-500/20"
+              className="flex items-center justify-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-2xl text-xs font-bold shadow-md shadow-indigo-500/20 transition-all cursor-pointer"
             >
               <Save className="w-4 h-4" />
-              <span>{isSaved ? (ar ? 'تم الحفظ!' : 'Saved!') : (ar ? 'حفظ التعديلات' : 'Save Changes')}</span>
+              <span>{isSaved ? (ar ? 'تم الحفظ بنجاح! ✓' : 'Saved! ✓') : (ar ? 'حفظ كافة الإعدادات' : 'Save Changes')}</span>
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">{ar ? 'اسم المنظمة / الكيان' : 'Organization Name'}</label>
-              <input
-                type="text"
-                value={settings.orgName}
-                onChange={e => setSettings({ ...settings, orgName: e.target.value })}
-                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold"
-              />
-            </div>
+          {/* Section 1: Branding & Quotas */}
+          <div className="space-y-4">
+            <h3 className="text-xs font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">
+              {ar ? 'الهوية والحدود التقنية' : 'Branding & Quota Limits'}
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                  {ar ? 'اسم المنظمة / الكيان الرسمي' : 'Organization Name'}
+                </label>
+                <input
+                  type="text"
+                  value={settings.orgName}
+                  onChange={e => setSettings({ ...settings, orgName: e.target.value })}
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold focus:outline-none focus:border-indigo-500"
+                />
+              </div>
 
-            <div>
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">{ar ? 'رابط شعار المنظمة (Logo URL)' : 'Logo URL'}</label>
-              <input
-                type="text"
-                value={settings.orgLogoUrl || ''}
-                onChange={e => setSettings({ ...settings, orgLogoUrl: e.target.value })}
-                placeholder="https://..."
-                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold"
-              />
-            </div>
+              <div>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                  {ar ? 'الحد الأقصى لحجم الملفات المرفوعة (ميجابايت)' : 'Default Max File Upload Size (MB)'}
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="100"
+                  value={settings.defaultMaxFileSizeMb}
+                  onChange={e => setSettings({ ...settings, defaultMaxFileSizeMb: Number(e.target.value) })}
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold focus:outline-none focus:border-indigo-500"
+                />
+              </div>
 
-            <div>
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">{ar ? 'الحد الأقصى لحجم الملفات (ميجابايت)' : 'Default Max File Upload Size (MB)'}</label>
-              <input
-                type="number"
-                value={settings.defaultMaxFileSizeMb}
-                onChange={e => setSettings({ ...settings, defaultMaxFileSizeMb: Number(e.target.value) })}
-                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold"
-              />
-            </div>
+              <div>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                  {ar ? 'رابط شعار المنظمة (Logo URL)' : 'Organization Logo URL'}
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="text"
+                    value={settings.orgLogoUrl || ''}
+                    onChange={e => setSettings({ ...settings, orgLogoUrl: e.target.value })}
+                    placeholder="https://..."
+                    className="flex-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold focus:outline-none focus:border-indigo-500"
+                  />
+                  {settings.orgLogoUrl ? (
+                    <div className="w-10 h-10 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-1 flex items-center justify-center shrink-0 shadow-sm overflow-hidden">
+                      <img src={settings.orgLogoUrl} alt="Logo" className="w-full h-full object-contain" onError={(e) => (e.currentTarget.style.display = 'none')} />
+                    </div>
+                  ) : (
+                    <div className="w-10 h-10 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 flex items-center justify-center shrink-0 text-slate-400 text-xs">
+                      LOGO
+                    </div>
+                  )}
+                </div>
+              </div>
 
-            <div className="flex items-center gap-3 pt-6">
-              <input
-                type="checkbox"
-                id="allowSelfReg"
-                checked={settings.allowSelfRegistration}
-                onChange={e => setSettings({ ...settings, allowSelfRegistration: e.target.checked })}
-                className="w-4 h-4 text-indigo-600 rounded"
-              />
-            </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                    {ar ? 'المظهر الافتراضي للمنصة' : 'Default Platform Theme'}
+                  </label>
+                  <select
+                    value={settings.theme || 'System'}
+                    onChange={e => setSettings({ ...settings, theme: e.target.value })}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold focus:outline-none focus:border-indigo-500"
+                  >
+                    <option value="System">{ar ? 'تلقائي (حسب النظام)' : 'System Default'}</option>
+                    <option value="Light">{ar ? 'الوضع الفاتح ☀️' : 'Light Mode ☀️'}</option>
+                    <option value="Dark">{ar ? 'الوضع الداكن 🌙' : 'Dark Mode 🌙'}</option>
+                  </select>
+                </div>
 
-            {/* Mobile Push & OneSignal PWA Integration Card */}
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50/50 dark:from-slate-850 dark:to-slate-800 rounded-2xl p-4 border border-blue-200/50 dark:border-slate-700 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">📱</span>
+                <div>
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                    {ar ? 'اللغة الافتراضية' : 'Default Language'}
+                  </label>
+                  <select
+                    value={settings.language || 'Arabic'}
+                    onChange={e => setSettings({ ...settings, language: e.target.value })}
+                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold focus:outline-none focus:border-indigo-500"
+                  >
+                    <option value="Arabic">العربية (Egypt 🇪🇬)</option>
+                    <option value="English">English (Global 🌐)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 2: Registration & Membership Policy */}
+          <div className="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+            <h3 className="text-xs font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">
+              {ar ? 'سياسة العضوية والتسجيل' : 'Membership & Registration Policy'}
+            </h3>
+            
+            <div className="bg-slate-50 dark:bg-slate-850 p-4 rounded-2xl border border-slate-200 dark:border-slate-750 flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <label htmlFor="allowSelfReg" className="text-xs font-black text-slate-900 dark:text-white block cursor-pointer">
+                  {ar ? 'السماح بالتسجيل الذاتي للأعضاء الجدد (Self Registration)' : 'Allow Member Self-Registration'}
+                </label>
+                <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
+                  {ar
+                    ? 'عند التفعيل، يمكن لأي عضو جديد فتح حساب من شاشة الدخول؛ وعند التعطيل، يقتصر الانضمام على التسكين الإداري أو الأكواد المعتمدة فقط.'
+                    : 'When enabled, new users can create an account directly from the login page. When disabled, accounts must be created by an administrator.'}
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-1">
+                <input
+                  type="checkbox"
+                  id="allowSelfReg"
+                  checked={settings.allowSelfRegistration}
+                  onChange={e => setSettings({ ...settings, allowSelfRegistration: e.target.checked })}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+              </label>
+            </div>
+          </div>
+
+          {/* Section 3: Notification Channels */}
+          <div className="space-y-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+            <h3 className="text-xs font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">
+              {ar ? 'قنوات الإشعارات والتنبيهات' : 'Active Notification Channels'}
+            </h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <label className="bg-slate-50 dark:bg-slate-850 p-4 rounded-2xl border border-slate-200 dark:border-slate-750 flex items-center justify-between gap-3 cursor-pointer hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-blue-100 dark:bg-blue-950/60 flex items-center justify-center text-blue-600">
+                    <Mail className="w-4 h-4" />
+                  </div>
                   <div>
-                    <h4 className="text-xs font-black text-slate-900 dark:text-white">
-                      {ar ? 'إعدادات إشعارات الموبايل المباشرة (Mobile Push & PWA)' : 'Mobile Web Push & PWA Settings'}
-                    </h4>
-                    <p className="text-[10px] text-slate-500 font-semibold">
-                      {ar ? 'تتيح استقبال إشعارات فورية على الموبايلات (أندرويد وآيفون) عند نشر المهام والأعذار' : 'Send instant push alerts to Android & iOS devices for tasks, excuses, and updates.'}
-                    </p>
+                    <span className="text-xs font-black text-slate-900 dark:text-white block">
+                      {ar ? 'البريد الإلكتروني' : 'Email Alerts'}
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-medium">
+                      {ar ? 'إرسال الشهادات والتعاميم' : 'Send emails & certs'}
+                    </span>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    const ok = await sendTestPushNotification();
-                    if (ok) {
-                      showFeedback(ar ? 'تم إرسال إشعار التجربة بنجاح على هذا الموبايل! 📲' : 'Test push sent to device!', true);
-                    } else {
-                      showFeedback(ar ? 'تأكد من السماح بالإشعارات في إعدادات الموبايل/المتصفح.' : 'Please allow notifications in browser/phone settings.', false);
+                <input
+                  type="checkbox"
+                  checked={settings.notificationChannels?.email ?? true}
+                  onChange={e => setSettings({
+                    ...settings,
+                    notificationChannels: {
+                      ...settings.notificationChannels,
+                      email: e.target.checked
                     }
-                  }}
-                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Bell className="w-3.5 h-3.5" />
-                  <span>{ar ? 'اختبار الإشعار 📱' : 'Test Push 📱'}</span>
-                </button>
+                  })}
+                  className="w-4 h-4 text-indigo-600 rounded"
+                />
+              </label>
+
+              <label className="bg-slate-50 dark:bg-slate-850 p-4 rounded-2xl border border-slate-200 dark:border-slate-750 flex items-center justify-between gap-3 cursor-pointer hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-indigo-100 dark:bg-indigo-950/60 flex items-center justify-center text-indigo-600">
+                    <Bell className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-black text-slate-900 dark:text-white block">
+                      {ar ? 'إشعارات الموبايل المباشرة' : 'Mobile Push'}
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-medium">
+                      {ar ? 'تنبيهات فورية على الهاتف' : 'Web push alerts'}
+                    </span>
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={settings.notificationChannels?.push ?? true}
+                  onChange={e => setSettings({
+                    ...settings,
+                    notificationChannels: {
+                      ...settings.notificationChannels,
+                      push: e.target.checked
+                    }
+                  })}
+                  className="w-4 h-4 text-indigo-600 rounded"
+                />
+              </label>
+
+              <label className="bg-slate-50 dark:bg-slate-850 p-4 rounded-2xl border border-slate-200 dark:border-slate-750 flex items-center justify-between gap-3 cursor-pointer hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 flex items-center justify-center text-emerald-600">
+                    <Activity className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-black text-slate-900 dark:text-white block">
+                      {ar ? 'إشعارات النظام الداخلية' : 'In-App System'}
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-medium">
+                      {ar ? 'أجراس وتنبيهات المنصة' : 'Top bar bell alerts'}
+                    </span>
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={settings.notificationChannels?.system ?? true}
+                  onChange={e => setSettings({
+                    ...settings,
+                    notificationChannels: {
+                      ...settings.notificationChannels,
+                      system: e.target.checked
+                    }
+                  })}
+                  className="w-4 h-4 text-indigo-600 rounded"
+                />
+              </label>
+            </div>
+          </div>
+
+          {/* Section 4: Mobile Push & OneSignal PWA Integration Card */}
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50/50 dark:from-slate-850 dark:to-slate-800 rounded-2xl p-5 border border-blue-200/60 dark:border-slate-700 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">📱</span>
+                <div>
+                  <h4 className="text-xs font-black text-slate-900 dark:text-white">
+                    {ar ? 'إعدادات واختبار إشعارات الموبايل المباشرة (Mobile Push & PWA)' : 'Mobile Web Push & PWA Settings'}
+                  </h4>
+                  <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                    {ar ? 'تتيح استقبال إشعارات فورية على أجهزة الموبايل (Android & iOS) لجميع التكليفات والمهام والأعذار.' : 'Send instant push alerts to Android & iOS devices for tasks, excuses, and announcements.'}
+                  </p>
+                </div>
               </div>
+              <button
+                type="button"
+                onClick={async () => {
+                  const ok = await sendTestPushNotification();
+                  if (ok) {
+                    showFeedback(ar ? 'تم إرسال إشعار التجربة بنجاح على هذا الجهاز! 📲' : 'Test push sent to device!', true);
+                  } else {
+                    showFeedback(ar ? 'تأكد من السماح بالإشعارات في إعدادات المتصفح/الموبايل أولاً.' : 'Please allow notifications in browser/phone settings.', false);
+                  }
+                }}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0 active:scale-95"
+              >
+                <Bell className="w-3.5 h-3.5" />
+                <span>{ar ? 'اختبار الإشعار المباشر 📲' : 'Send Test Push 📲'}</span>
+              </button>
             </div>
           </div>
         </form>
@@ -2431,13 +2615,26 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                           {details.email || '-'}
                         </td>
                         <td className="py-3 px-4 text-center">
-                          <button
-                            onClick={() => handleCopySecCode(code)}
-                            className="px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-400/40 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1.5 cursor-pointer"
-                          >
-                            <Key className="w-3.5 h-3.5" />
-                            <span>{copiedCode === code ? (ar ? 'تم النسخ! ✓' : 'Copied! ✓') : (ar ? 'نسخ الكود 📋' : 'Copy Code 📋')}</span>
-                          </button>
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              onClick={() => handleCopySecCode(code)}
+                              className="px-2.5 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-400/40 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1 cursor-pointer"
+                              title={ar ? 'نسخ الكود' : 'Copy Code'}
+                            >
+                              <Key className="w-3.5 h-3.5" />
+                              <span>{copiedCode === code ? (ar ? 'تم النسخ! ✓' : 'Copied!') : (ar ? 'نسخ' : 'Copy')}</span>
+                            </button>
+
+                            {isSuperAdmin(currentUser) && (
+                              <button
+                                onClick={() => handleDeleteSecCode(code)}
+                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-xl transition-colors cursor-pointer"
+                                title={ar ? 'حذف / إلغاء الكود' : 'Delete / Revoke Code'}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}

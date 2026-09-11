@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import html2canvas from 'html2canvas';
+import ExcelJS from 'exceljs';
 import { db } from '../db/localDb';
 import { UserProfile, CertificateType, IssuedCertificate, getUserRoleTitle } from '../types';
-import { Award, Download, User, Star, CheckCircle, Eye, Mail, X, Search, FileText, CheckSquare, Square, Loader2, Sparkles, Clock } from 'lucide-react';
+import { Award, Download, User, Star, CheckCircle, Eye, Mail, X, Search, FileText, CheckSquare, Square, Loader2, Sparkles, Clock, Trash2, AlertTriangle, Filter, Check, Upload, FileSpreadsheet, CheckCircle2, RefreshCw } from 'lucide-react';
 import { useLanguage } from '../lib/LanguageContext';
 import { downloadCertificate, downloadBulkCertificatesAsPdf, downloadCertificateAsPdf, printCertificate, getCommitteeSignatories, formatArabicConjunctions } from '../lib/certificateGenerator';
 import {
@@ -35,6 +36,81 @@ const WORKSHOP_TYPES_LIST: { id: CertificateType; labelAr: string; label: string
 
 const ALL_KNOWN_CERT_TYPES = [...BASE_CERT_TYPES, ...WORKSHOP_TYPES_LIST];
 const CERT_TYPES = ALL_KNOWN_CERT_TYPES;
+
+export interface SheetRecipient {
+  id: string;
+  name: string;
+  code?: string;
+  email?: string;
+  committee?: string;
+  role?: string;
+  grade?: number;
+  customTitle?: string;
+  customBody?: string;
+  matchedUser?: UserProfile;
+  status: 'matched' | 'unmatched';
+  selected: boolean;
+}
+
+export const normalizeArabicName = (str: string): string => {
+  return (str || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[إأآا]/g, 'ا')
+    .replace(/ة/g, 'ه')
+    .replace(/ى/g, 'ي')
+    .replace(/[\u064B-\u065F]/g, '')
+    .replace(/\s+/g, ' ');
+};
+
+export const matchMember = (
+  rawName: string,
+  rawCode: string,
+  rawEmail: string,
+  allUsers: UserProfile[]
+): UserProfile | undefined => {
+  const cleanCode = (rawCode || '').trim().toLowerCase();
+  const cleanEmail = (rawEmail || '').trim().toLowerCase();
+  const cleanName = normalizeArabicName(rawName);
+
+  // 1. Exact code match
+  if (cleanCode) {
+    const byCode = allUsers.find(u => (u.membershipCode || '').trim().toLowerCase() === cleanCode);
+    if (byCode) return byCode;
+  }
+
+  // 2. Exact email match
+  if (cleanEmail) {
+    const byEmail = allUsers.find(u => (u.email || '').trim().toLowerCase() === cleanEmail);
+    if (byEmail) return byEmail;
+  }
+
+  // 3. Name match
+  if (cleanName && cleanName.length >= 3) {
+    const exact = allUsers.find(u => normalizeArabicName(u.fullName) === cleanName);
+    if (exact) return exact;
+
+    const words = cleanName.split(' ').filter(Boolean);
+    if (words.length >= 2) {
+      const partial = allUsers.find(u => {
+        const uNorm = normalizeArabicName(u.fullName);
+        const uWords = uNorm.split(' ').filter(Boolean);
+        if (words.length >= 2 && uWords.length >= 2) {
+          if (words[0] === uWords[0] && words[1] === uWords[1]) {
+            if (words.length >= 3 && uWords.length >= 3) {
+              return words[2] === uWords[2];
+            }
+            return true;
+          }
+        }
+        return false;
+      });
+      if (partial) return partial;
+    }
+  }
+
+  return undefined;
+};
 
 export const CERT_STYLES = [
   { id: 'style1' as const, labelAr: 'القالب الأصلي المعتمد 👑', label: 'Original Approved Template', descAr: 'الإطار الأزرق الملكي المعتمد لجميع شهادات الكيان', icon: '👑', color: 'from-blue-600 to-indigo-700' },
@@ -599,6 +675,36 @@ export const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ curr
   const [pdfProgress, setPdfProgress] = useState<{ current: number; total: number } | null>(null);
   const [lastBulkIssuedCerts, setLastBulkIssuedCerts] = useState<IssuedCertificate[]>([]);
 
+  // Bulk Deletion & Deduplication states
+  const [bulkSkippedCount, setBulkSkippedCount] = useState<number>(0);
+  const [isDeletingBulk, setIsDeletingBulk] = useState(false);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [bulkDeleteSuccessMsg, setBulkDeleteSuccessMsg] = useState<string | null>(null);
+  const [customSelectCount, setCustomSelectCount] = useState<string>('');
+  const [allowDuplicateOverride, setAllowDuplicateOverride] = useState(false);
+
+  const handleBulkDelete = async () => {
+    if (selectedCertIds.length === 0) return;
+    setIsDeletingBulk(true);
+    try {
+      const countToDelete = selectedCertIds.length;
+      await db.deleteCertificatesBulk(selectedCertIds, currentUser);
+      setSelectedCertIds([]);
+      setShowBulkDeleteModal(false);
+      setBulkDeleteSuccessMsg(
+        ar
+          ? `✅ تم مسح ${countToDelete} شهادة بنجاح وبشكل نهائي من قاعدة البيانات وكافة السجلات والإشعارات!`
+          : `✅ Successfully purged ${countToDelete} certificates completely from all records!`
+      );
+      setTimeout(() => setBulkDeleteSuccessMsg(null), 8000);
+    } catch (err: any) {
+      console.error('Bulk delete failed:', err);
+      alert(ar ? `حدث خطأ أثناء مسح الشهادات: ${err.message}` : `Failed to delete certificates: ${err.message}`);
+    } finally {
+      setIsDeletingBulk(false);
+    }
+  };
+
   const handleDownloadBatchPdf = async (certsList: IssuedCertificate[], customFilename?: string) => {
     const validCerts = certsList.filter(c => c.status !== 'pending' || canApprove);
     if (validCerts.length === 0) {
@@ -679,11 +785,363 @@ export const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ curr
     return `يشهد كيان المصريون الشباب EYE بتميز واستحقاق العضو ${name}.`;
   };
 
+  // Issue Mode: single | bulk | sheet
+  const [issueMode, setIssueMode] = useState<'single' | 'bulk' | 'sheet'>('single');
+  const isBulkMode = issueMode === 'bulk';
+
+  // Sheet Import State
+  const [sheetRecipients, setSheetRecipients] = useState<SheetRecipient[]>([]);
+  const [sheetFileName, setSheetFileName] = useState<string>('');
+  const [sheetParseError, setSheetParseError] = useState<string>('');
+  const [isParsingSheet, setIsParsingSheet] = useState<boolean>(false);
+  const [isDraggingSheet, setIsDraggingSheet] = useState<boolean>(false);
+  const [sheetFilter, setSheetFilter] = useState<'all' | 'matched' | 'unmatched'>('all');
+  const [sheetSearch, setSheetSearch] = useState<string>('');
+  const sheetFileInputRef = useRef<HTMLInputElement>(null);
+
+  const downloadSampleCertificatesSheet = () => {
+    const csvContent = `اسم العضو,كود العضو,البريد الإلكتروني,اللجنة,الدرجة
+أحمد محمد إبراهيم,EYE-HR-0001,ahmed@example.com,HR,95
+سارة محمود علي,EYE-PR-0002,sara@example.com,PR,90
+محمود خالد حسن,EYE-SM-0003,mahmoud@example.com,SM,88
+فاطمة مصطفى أحمد,EYE-OR-0004,fatma@example.com,OR,92`;
+
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'نموذج_شيت_الشهادات_EYE.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const parseSheetFile = async (file: File) => {
+    setSheetParseError('');
+    setSheetFileName(file.name);
+    setIsParsingSheet(true);
+
+    const isCSV = file.name.toLowerCase().endsWith('.csv');
+    const isExcel = file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls');
+
+    if (!isCSV && !isExcel) {
+      setSheetParseError(ar ? 'صيغة الملف غير مدعومة. يُرجى رفع ملف إكسيل (.xlsx / .csv)' : 'Unsupported format. Please upload .xlsx or .csv');
+      setIsParsingSheet(false);
+      return;
+    }
+
+    try {
+      let rawRows: Array<Record<string, string>> = [];
+
+      if (isCSV) {
+        const text = await file.text();
+        const lines = text.split(/\r?\n/).filter(line => line.trim());
+        if (lines.length === 0) {
+          setSheetParseError(ar ? 'الملف فارغ ولا يحتوي على بيانات.' : 'File is empty.');
+          setIsParsingSheet(false);
+          return;
+        }
+
+        const parseCSVLine = (line: string) => {
+          const result: string[] = [];
+          let cur = '';
+          let inQuotes = false;
+          for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            if (char === '"') {
+              inQuotes = !inQuotes;
+            } else if (char === ',' && !inQuotes) {
+              result.push(cur.trim().replace(/^"|"$/g, ''));
+              cur = '';
+            } else {
+              cur += char;
+            }
+          }
+          result.push(cur.trim().replace(/^"|"$/g, ''));
+          return result;
+        };
+
+        const headers = parseCSVLine(lines[0]);
+        rawRows = lines.slice(1).map(line => {
+          const cols = parseCSVLine(line);
+          const obj: Record<string, string> = {};
+          headers.forEach((h, i) => {
+            obj[h || `col_${i}`] = cols[i] || '';
+          });
+          return obj;
+        });
+      } else {
+        const buffer = await file.arrayBuffer();
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(buffer);
+        const worksheet = workbook.worksheets[0];
+        if (!worksheet) {
+          setSheetParseError(ar ? 'الملف لا يحتوي على صفحات بيانات.' : 'No worksheet found.');
+          setIsParsingSheet(false);
+          return;
+        }
+
+        const grid: string[][] = [];
+        worksheet.eachRow((row) => {
+          const rowData: string[] = [];
+          row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+            let val = '';
+            if (cell.value !== null && cell.value !== undefined) {
+              if (typeof cell.value === 'object' && 'text' in cell.value) {
+                val = String((cell.value as any).text || '');
+              } else if (typeof cell.value === 'object' && 'result' in cell.value) {
+                val = String((cell.value as any).result || '');
+              } else {
+                val = String(cell.value);
+              }
+            }
+            rowData[colNumber - 1] = val.trim();
+          });
+          grid.push(rowData);
+        });
+
+        if (grid.length === 0) {
+          setSheetParseError(ar ? 'الملف فارغ ولا يحتوي على بيانات.' : 'File is empty.');
+          setIsParsingSheet(false);
+          return;
+        }
+
+        const headers = grid[0];
+        rawRows = grid.slice(1).map(row => {
+          const obj: Record<string, string> = {};
+          headers.forEach((h, i) => {
+            obj[h || `col_${i}`] = row[i] || '';
+          });
+          return obj;
+        });
+      }
+
+      if (rawRows.length === 0) {
+        setSheetParseError(ar ? 'الملف لا يحتوي على أي صفوف بعد رأس الجدول.' : 'No data rows found.');
+        setIsParsingSheet(false);
+        return;
+      }
+
+      const getColVal = (row: Record<string, string>, possibleNames: string[]): string => {
+        const keys = Object.keys(row);
+        for (const name of possibleNames) {
+          const norm = name.trim().toLowerCase();
+          const k = keys.find(key => key.trim().toLowerCase() === norm || key.trim().toLowerCase().includes(norm));
+          if (k && row[k]?.trim()) return row[k].trim();
+        }
+        return '';
+      };
+
+      const allUsers = db.getUsers();
+      const recipients: SheetRecipient[] = [];
+
+      rawRows.forEach((row, idx) => {
+        const rawName = getColVal(row, ['اسم العضو', 'الاسم', 'اسم', 'الاسم بالكامل', 'الاسم الثلاثي', 'name', 'member name', 'full name', 'student name', 'fullname', 'recipient']);
+        const rawCode = getColVal(row, ['كود العضو', 'كود', 'الكود', 'كود العضوية', 'code', 'membership code', 'id', 'member code']);
+        const rawEmail = getColVal(row, ['البريد الإلكتروني', 'الإيميل', 'البريد', 'email', 'e-mail', 'mail']);
+        const rawGrade = getColVal(row, ['الدرجة', 'التقييم', 'درجة التقييم', 'grade', 'rating', 'score']);
+        const rawCommittee = getColVal(row, ['اللجنة', 'القسم', 'committee', 'dept', 'department']);
+        const rawRole = getColVal(row, ['المنصب', 'الدور', 'role', 'position']);
+        const rawTitle = getColVal(row, ['عنوان الشهادة', 'عنوان', 'title', 'cert title']);
+        const rawBody = getColVal(row, ['نص الشهادة', 'النص', 'body', 'cert body']);
+
+        if (!rawName && !rawCode && !rawEmail) return;
+
+        const matched = matchMember(rawName, rawCode, rawEmail, allUsers);
+        const gradeNum = rawGrade ? parseInt(rawGrade.replace(/[^0-9]/g, '')) : undefined;
+
+        recipients.push({
+          id: `sheet-${idx + 1}-${Math.random().toString(36).slice(2, 6)}`,
+          name: matched ? matched.fullName : (rawName || rawCode || 'عضو'),
+          code: matched?.membershipCode || rawCode || undefined,
+          email: matched?.email || rawEmail || undefined,
+          committee: matched?.committee || rawCommittee || 'General',
+          role: matched?.role || rawRole || 'Member',
+          grade: !isNaN(Number(gradeNum)) ? gradeNum : undefined,
+          customTitle: rawTitle || undefined,
+          customBody: rawBody || undefined,
+          matchedUser: matched,
+          status: matched ? 'matched' : 'unmatched',
+          selected: true,
+        });
+      });
+
+      if (recipients.length === 0) {
+        setSheetParseError(ar ? 'لم يتم العثور على أي أسماء أو أكواد صالحة في الشيت. تأكد من وجود عمود باسم العضو أو الكود.' : 'No valid recipient names found in sheet.');
+        setIsParsingSheet(false);
+        return;
+      }
+
+      setSheetRecipients(recipients);
+    } catch (err: any) {
+      console.error('Error parsing sheet:', err);
+      setSheetParseError(ar ? `حدث خطأ أثناء قراءة الملف: ${err.message || err}` : `Failed to parse sheet: ${err.message || err}`);
+    } finally {
+      setIsParsingSheet(false);
+    }
+  };
+
+  const handleIssueSheet = async (downloadPdfDirectly: boolean = false) => {
+    setError('');
+    const toIssue = sheetRecipients.filter(r => r.selected);
+    if (toIssue.length === 0) {
+      setError(ar ? 'يرجى تحديد شخص واحد على الأقل من الشيت لإصدار الشهادات.' : 'Please select at least one person from sheet.');
+      return;
+    }
+
+    const isEnCert = certLang === 'en' || isWorkshopCertType(certType);
+    const workshopTpl = WORKSHOP_CERT_TEMPLATES.find(t => t.id === certType);
+    const baseTitle = workshopTpl
+      ? (customTitle || workshopTpl.title)
+      : certType === 'custom'
+        ? customTitle
+        : (isEnCert ? (selectedDef?.label || 'Certificate') : (selectedDef?.labelAr || 'شهادة'));
+    if (certType === 'custom' && !customTitle) {
+      setError(ar ? 'يرجى كتابة عنوان الشهادة.' : 'Please enter a certificate title.');
+      return;
+    }
+
+    if (downloadPdfDirectly) {
+      setIsGeneratingPdf(true);
+      setPdfProgress({ current: 0, total: toIssue.length });
+    }
+
+    try {
+      let count = 0;
+      let skippedDuplicateCount = 0;
+      const newlyIssued: IssuedCertificate[] = [];
+
+      for (let i = 0; i < toIssue.length; i++) {
+        const item = toIssue[i];
+        const recipientId = item.matchedUser ? item.matchedUser.id : `ext-${item.id}`;
+        const recipientName = item.name;
+        const recipientRole = item.role || item.matchedUser?.role || 'Member';
+        const committee = item.committee || item.matchedUser?.committee || 'General';
+        const title = item.customTitle || baseTitle;
+        const rawBody = item.customBody || customBody || buildDefaultBody(recipientId, certType, certLang);
+        const body = formatBodyForRecipient(rawBody, recipientName);
+        const grade = item.grade !== undefined ? item.grade : (certGrade ? parseInt(certGrade) : undefined);
+
+        // Deduplication Check
+        if (!allowDuplicateOverride) {
+          const existing = db.findDuplicateCertificate({
+            recipientId,
+            recipientName,
+            certType,
+            title,
+            body,
+          });
+          if (existing) {
+            skippedDuplicateCount++;
+            continue;
+          }
+        }
+
+        const cert = await db.issueCertificate(
+          recipientId,
+          recipientName,
+          recipientRole,
+          certType,
+          title,
+          body,
+          currentUser,
+          committee,
+          grade,
+          certLang,
+          selectedStyle,
+          {
+            allowDuplicate: allowDuplicateOverride,
+            recipientEmail: item.email || item.matchedUser?.email,
+          }
+        );
+        newlyIssued.push(cert);
+        count++;
+
+        if (downloadPdfDirectly) {
+          setPdfProgress({ current: count, total: toIssue.length });
+        }
+      }
+
+      if (count === 0 && skippedDuplicateCount > 0) {
+        if (downloadPdfDirectly) setIsGeneratingPdf(false);
+        setError(
+          ar
+            ? `⚠️ لم يتم إصدار أي شهادات؛ لأن جميع الأشخاص المحددين من الشيت (${skippedDuplicateCount}) حصلوا على هذه الشهادة مسبقاً بنفس البيانات.`
+            : `No certificates issued. All ${skippedDuplicateCount} selected people already received this certificate.`
+        );
+        return;
+      }
+
+      setBulkCountSuccess(count);
+      setBulkSkippedCount(skippedDuplicateCount);
+      setLastBulkIssuedCerts(newlyIssued);
+      setSheetRecipients([]);
+      setSheetFileName('');
+
+      if (downloadPdfDirectly && newlyIssued.length > 0) {
+        const certsData = newlyIssued.map(toCertGeneratorData);
+        const dateStr = new Date().toISOString().slice(0, 10);
+        const filename = `شهادات_شيت_${sheetFileName ? sheetFileName.replace(/\.[^/.]+$/, '') : 'دفعة'}_${dateStr}.pdf`;
+        await downloadBulkCertificatesAsPdf(certsData, filename, (cur, tot) => {
+          setPdfProgress({ current: cur, total: tot });
+        });
+      }
+
+      setTimeout(() => {
+        setBulkCountSuccess(null);
+        setBulkSkippedCount(0);
+      }, 10000);
+    } catch (err: any) {
+      console.error(err);
+      setError(ar ? `فشل إصدار الشهادات من الشيت: ${err.message}` : `Sheet issue failed: ${err.message}`);
+    } finally {
+      setIsGeneratingPdf(false);
+      setPdfProgress(null);
+    }
+  };
+
   // Build live preview cert object whenever form fields change
   useEffect(() => {
-    if (!selectedRecipient) { setLivePreview(null); return; }
-    const recipient = users.find(u => u.id === selectedRecipient);
-    if (!recipient) return;
+    let previewName = '';
+    let previewRole = 'Member';
+    let previewCommittee = 'General';
+    let previewId = 'preview-0000';
+    let previewGrade = certGrade ? parseInt(certGrade) : undefined;
+
+    if (issueMode === 'sheet') {
+      const firstSelected = sheetRecipients.find(r => r.selected);
+      if (firstSelected) {
+        previewName = firstSelected.name;
+        previewRole = firstSelected.role || 'Member';
+        previewCommittee = firstSelected.committee || 'General';
+        previewId = firstSelected.matchedUser?.id || 'preview-0000';
+        if (firstSelected.grade !== undefined) previewGrade = firstSelected.grade;
+      } else {
+        setLivePreview(null);
+        return;
+      }
+    } else if (isBulkMode) {
+      if (selectedRecipients.length > 0) {
+        const u = users.find(user => user.id === selectedRecipients[0]);
+        if (u) {
+          previewName = u.fullName;
+          previewRole = u.role;
+          previewCommittee = u.committee;
+          previewId = u.id;
+        }
+      } else {
+        setLivePreview(null);
+        return;
+      }
+    } else {
+      if (!selectedRecipient) { setLivePreview(null); return; }
+      const recipient = users.find(u => u.id === selectedRecipient);
+      if (!recipient) return;
+      previewName = recipient.fullName;
+      previewRole = recipient.role;
+      previewCommittee = recipient.committee;
+      previewId = recipient.id;
+    }
+
     const isEnCert = certLang === 'en' || isWorkshopCertType(certType);
     const workshopTpl = WORKSHOP_CERT_TEMPLATES.find(t => t.id === certType);
     const title = workshopTpl
@@ -691,30 +1149,29 @@ export const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ curr
       : certType === 'custom'
         ? (customTitle || (isEnCert ? 'Custom Certificate' : 'شهادة مخصصة'))
         : (isEnCert ? (selectedDef?.label || 'Certificate') : (selectedDef?.labelAr || 'شهادة'));
-    const rawBody = customBody || buildDefaultBody(selectedRecipient, certType, certLang);
-    const body = formatBodyForRecipient(rawBody, recipient.fullName);
+    const rawBody = customBody || buildDefaultBody(previewId, certType, certLang);
+    const body = formatBodyForRecipient(rawBody, previewName);
     const preview: IssuedCertificate = {
       id: 'preview-0000',
-      recipientId: recipient.id,
-      recipientName: recipient.fullName,
-      recipientRole: recipient.role,
+      recipientId: previewId,
+      recipientName: previewName,
+      recipientRole: previewRole,
       certType,
       designStyle: selectedStyle,
       title,
       body,
-      committee: recipient.committee,
+      committee: previewCommittee,
       issuedBy: currentUser.id,
       issuedByName: currentUser.fullName,
       issuedByTitle: getUserRoleTitle(currentUser, certLang),
       issuedAt: new Date().toISOString(),
-      grade: certGrade ? parseInt(certGrade) : undefined,
+      grade: previewGrade,
       lang: certLang,
     };
     setLivePreview(preview);
-  }, [selectedRecipient, certType, selectedStyle, certLang, customTitle, customBody, certGrade]);
+  }, [selectedRecipient, selectedRecipients, sheetRecipients, issueMode, isBulkMode, certType, selectedStyle, certLang, customTitle, customBody, certGrade]);
 
   // Bulk issue state
-  const [isBulkMode, setIsBulkMode] = useState(false);
   const [selectedRecipients, setSelectedRecipients] = useState<string[]>([]);
   const [bulkCountSuccess, setBulkCountSuccess] = useState<number | null>(null);
 
@@ -739,6 +1196,12 @@ export const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ curr
     setError('');
     setIssueSuccess(null);
 
+    // Sheet Mode Issue
+    if (issueMode === 'sheet') {
+      await handleIssueSheet(false);
+      return;
+    }
+
     // Bulk Mode Issue
     if (isBulkMode) {
       if (selectedRecipients.length === 0) {
@@ -759,12 +1222,29 @@ export const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ curr
 
       try {
         let count = 0;
+        let skippedDuplicateCount = 0;
         const newlyIssued: IssuedCertificate[] = [];
         for (const recipientId of selectedRecipients) {
           const recipient = users.find(u => u.id === recipientId);
           if (!recipient) continue;
           const rawBody = customBody || buildDefaultBody(recipientId, certType, certLang);
           const body = formatBodyForRecipient(rawBody, recipient.fullName);
+
+          // Deduplication Check
+          if (!allowDuplicateOverride) {
+            const existing = db.findDuplicateCertificate({
+              recipientId: recipient.id,
+              recipientName: recipient.fullName,
+              certType,
+              title,
+              body,
+            });
+            if (existing) {
+              skippedDuplicateCount++;
+              continue;
+            }
+          }
+
           const cert = await db.issueCertificate(
             recipient.id,
             recipient.fullName,
@@ -775,18 +1255,34 @@ export const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ curr
             currentUser,
             recipient.committee,
             certGrade ? parseInt(certGrade) : undefined,
-            certLang
+            certLang,
+            selectedStyle,
+            { allowDuplicate: allowDuplicateOverride }
           );
           newlyIssued.push(cert);
           count++;
         }
+
+        if (count === 0 && skippedDuplicateCount > 0) {
+          setError(
+            ar
+              ? `⚠️ لم يتم إصدار أي شهادات؛ لأن جميع الأعضاء المحددين (${skippedDuplicateCount}) حصلوا على هذه الشهادة مسبقاً بنفس البيانات لمنع التكرار.`
+              : `No certificates issued. All ${skippedDuplicateCount} selected members already received this certificate.`
+          );
+          return;
+        }
+
         setBulkCountSuccess(count);
+        setBulkSkippedCount(skippedDuplicateCount);
         setLastBulkIssuedCerts(newlyIssued);
         setSelectedRecipients([]);
         setCustomBody('');
         setCustomTitle('');
         setCertGrade('');
-        setTimeout(() => setBulkCountSuccess(null), 8000);
+        setTimeout(() => {
+          setBulkCountSuccess(null);
+          setBulkSkippedCount(0);
+        }, 9000);
       } catch (err: any) {
         console.error(err);
         setError(ar ? `فشل الإصدار الجماعي: ${err.message}` : `Bulk issue failed: ${err.message}`);
@@ -807,8 +1303,41 @@ export const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ curr
     const recipient = users.find(u => u.id === selectedRecipient)!;
     const rawBody = customBody || buildDefaultBody(selectedRecipient, certType, certLang);
     const body = formatBodyForRecipient(rawBody, recipient.fullName);
+
+    // Single Deduplication Check
+    if (!allowDuplicateOverride) {
+      const duplicate = db.findDuplicateCertificate({
+        recipientId: recipient.id,
+        recipientName: recipient.fullName,
+        certType,
+        title,
+        body,
+      });
+      if (duplicate) {
+        setError(
+          ar
+            ? `⚠️ تم إصدار هذه الشهادة للعضو (${recipient.fullName}) مسبقاً بنفس البيانات بعنوان "${duplicate.title}" بتاريخ ${new Date(duplicate.issuedAt).toLocaleDateString('ar-EG')}. تم إلغاء الإصدار لحمايته من تكرار الاستلام.`
+            : `Duplicate certificate detected for ${recipient.fullName}. Issue prevented to avoid duplicate delivery.`
+        );
+        return;
+      }
+    }
+
     try {
-      const cert = await db.issueCertificate(recipient.id, recipient.fullName, recipient.role, certType, title, body, currentUser, recipient.committee, certGrade ? parseInt(certGrade) : undefined, certLang);
+      const cert = await db.issueCertificate(
+        recipient.id,
+        recipient.fullName,
+        recipient.role,
+        certType,
+        title,
+        body,
+        currentUser,
+        recipient.committee,
+        certGrade ? parseInt(certGrade) : undefined,
+        certLang,
+        selectedStyle,
+        { allowDuplicate: allowDuplicateOverride }
+      );
       setIssueSuccess(cert);
       setPreviewCert(cert);
       setLivePreview(null);
@@ -847,6 +1376,7 @@ export const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ curr
       setIsGeneratingPdf(true);
       setPdfProgress({ current: 0, total: selectedRecipients.length });
       let count = 0;
+      let skippedDuplicateCount = 0;
       const newlyIssued: IssuedCertificate[] = [];
       for (let i = 0; i < selectedRecipients.length; i++) {
         const recipientId = selectedRecipients[i];
@@ -854,6 +1384,22 @@ export const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ curr
         if (!recipient) continue;
         const rawBody = customBody || buildDefaultBody(recipientId, certType, certLang);
         const body = formatBodyForRecipient(rawBody, recipient.fullName);
+
+        // Deduplication Check
+        if (!allowDuplicateOverride) {
+          const existing = db.findDuplicateCertificate({
+            recipientId: recipient.id,
+            recipientName: recipient.fullName,
+            certType,
+            title,
+            body,
+          });
+          if (existing) {
+            skippedDuplicateCount++;
+            continue;
+          }
+        }
+
         const cert = await db.issueCertificate(
           recipient.id,
           recipient.fullName,
@@ -864,14 +1410,27 @@ export const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ curr
           currentUser,
           recipient.committee,
           certGrade ? parseInt(certGrade) : undefined,
-          certLang
+          certLang,
+          selectedStyle,
+          { allowDuplicate: allowDuplicateOverride }
         );
         newlyIssued.push(cert);
         count++;
         setPdfProgress({ current: count, total: selectedRecipients.length });
       }
 
+      if (count === 0 && skippedDuplicateCount > 0) {
+        setIsGeneratingPdf(false);
+        setError(
+          ar
+            ? `⚠️ لم يتم إصدار أي شهادات؛ لأن جميع الأعضاء المحددين (${skippedDuplicateCount}) استلموا هذه الشهادة مسبقاً بنفس البيانات.`
+            : `No certificates issued. All ${skippedDuplicateCount} selected members already received this certificate.`
+        );
+        return;
+      }
+
       setBulkCountSuccess(count);
+      setBulkSkippedCount(skippedDuplicateCount);
       setLastBulkIssuedCerts(newlyIssued);
       setSelectedRecipients([]);
       setCustomBody('');
@@ -975,27 +1534,37 @@ export const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ curr
               </div>
             )}
 
-            {/* Mode Switch: Single vs Bulk */}
-            <div className="flex items-center justify-between bg-slate-100 dark:bg-slate-800 p-1.5 rounded-2xl">
+            {/* Mode Switch: Single vs Bulk vs Sheet */}
+            <div className="grid grid-cols-3 gap-1.5 bg-slate-100 dark:bg-slate-800 p-1.5 rounded-2xl">
               <button
                 type="button"
-                onClick={() => { setIsBulkMode(false); setSelectedRecipients([]); }}
-                className={`flex-1 py-2 text-xs font-black rounded-xl transition-all cursor-pointer ${!isBulkMode
+                onClick={() => { setIssueMode('single'); setSelectedRecipients([]); }}
+                className={`py-2 px-1 text-center text-xs font-black rounded-xl transition-all cursor-pointer ${issueMode === 'single'
                     ? 'bg-white dark:bg-slate-900 text-eye-brand shadow-xs'
-                    : 'text-slate-500 hover:text-slate-800'
+                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
                   }`}
               >
-                {ar ? '👤 إصدار فردي (عضو واحد)' : '👤 Single Issue'}
+                {ar ? '👤 إصدار فردي' : '👤 Single Issue'}
               </button>
               <button
                 type="button"
-                onClick={() => { setIsBulkMode(true); setSelectedRecipient(''); }}
-                className={`flex-1 py-2 text-xs font-black rounded-xl transition-all cursor-pointer ${isBulkMode
+                onClick={() => { setIssueMode('bulk'); setSelectedRecipient(''); }}
+                className={`py-2 px-1 text-center text-xs font-black rounded-xl transition-all cursor-pointer ${issueMode === 'bulk'
                     ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-xs'
-                    : 'text-slate-500 hover:text-slate-800'
+                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
                   }`}
               >
-                {ar ? '👥 إصدار جماعي (عدة أعضاء)' : '👥 Bulk Issue'}
+                {ar ? '👥 إصدار جماعي' : '👥 Bulk Issue'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setIssueMode('sheet'); setSelectedRecipient(''); setSelectedRecipients([]); }}
+                className={`py-2 px-1 text-center text-xs font-black rounded-xl transition-all cursor-pointer ${issueMode === 'sheet'
+                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-xs'
+                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                  }`}
+              >
+                {ar ? '📊 استيراد شيت' : '📊 Import Sheet'}
               </button>
             </div>
 
@@ -1003,8 +1572,13 @@ export const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ curr
               <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border-2 border-emerald-300 dark:border-emerald-700 text-xs font-black text-emerald-800 dark:text-emerald-200 space-y-2.5">
                 <div className="flex items-center gap-2">
                   <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
-                  <span>{ar ? `🎉 تم إصدار وإرسال ${bulkCountSuccess} شهادة معتمدة بنجاح لجميع الأعضاء المحددين!` : `🎉 Successfully issued ${bulkCountSuccess} certificates to selected members!`}</span>
+                  <span>{ar ? `🎉 تم إصدار وإرسال ${bulkCountSuccess} شهادة معتمدة بنجاح لجميع الأشخاص المحددين!` : `🎉 Successfully issued ${bulkCountSuccess} certificates!`}</span>
                 </div>
+                {bulkSkippedCount > 0 && (
+                  <div className="text-[11px] text-amber-700 dark:text-amber-300 font-bold bg-amber-100/50 dark:bg-amber-950/40 p-2 rounded-xl border border-amber-300">
+                    {ar ? `⚠️ تم تخطي (${bulkSkippedCount}) شهادة مكررة استلم أصحابها نفس الشهادة مسبقاً لحمايتهم من التكرار.` : `⚠️ Skipped ${bulkSkippedCount} duplicate certificates.`}
+                  </div>
+                )}
                 {lastBulkIssuedCerts.length > 0 && canApprove && (
                   <button
                     type="button"
@@ -1136,6 +1710,404 @@ export const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ curr
 
             {/* Recipient Search & Selector */}
             {(() => {
+              // Sheet Import Mode View
+              if (issueMode === 'sheet') {
+                const selectedCount = sheetRecipients.filter(r => r.selected).length;
+                const matchedCount = sheetRecipients.filter(r => r.status === 'matched').length;
+                const unmatchedCount = sheetRecipients.filter(r => r.status === 'unmatched').length;
+                const activeTitle = (WORKSHOP_CERT_TEMPLATES.find(t => t.id === certType)?.title) || (certType === 'custom' ? customTitle : (certLang === 'en' ? selectedDef?.label : selectedDef?.labelAr));
+
+                const duplicateCount = sheetRecipients.filter(r => {
+                  return db.findDuplicateCertificate({
+                    recipientId: r.matchedUser?.id,
+                    recipientName: r.name,
+                    certType,
+                    title: r.customTitle || activeTitle,
+                  });
+                }).length;
+
+                const filteredSheetList = sheetRecipients.filter(r => {
+                  if (sheetFilter === 'matched' && r.status !== 'matched') return false;
+                  if (sheetFilter === 'unmatched' && r.status !== 'unmatched') return false;
+                  if (sheetSearch.trim()) {
+                    const q = sheetSearch.toLowerCase().trim();
+                    const matchName = r.name.toLowerCase().includes(q);
+                    const matchCode = r.code?.toLowerCase().includes(q);
+                    const matchEmail = r.email?.toLowerCase().includes(q);
+                    const matchComm = r.committee?.toLowerCase().includes(q);
+                    if (!matchName && !matchCode && !matchEmail && !matchComm) return false;
+                  }
+                  return true;
+                });
+
+                return (
+                  <div className="space-y-3">
+                    {/* Hidden file input */}
+                    <input
+                      type="file"
+                      ref={sheetFileInputRef}
+                      accept=".xlsx,.xls,.csv"
+                      className="hidden"
+                      onChange={e => {
+                        const file = e.target.files?.[0];
+                        if (file) parseSheetFile(file);
+                        e.target.value = '';
+                      }}
+                    />
+
+                    {sheetRecipients.length === 0 ? (
+                      <div
+                        onDragOver={e => { e.preventDefault(); setIsDraggingSheet(true); }}
+                        onDragLeave={() => setIsDraggingSheet(false)}
+                        onDrop={e => {
+                          e.preventDefault();
+                          setIsDraggingSheet(false);
+                          const file = e.dataTransfer.files?.[0];
+                          if (file) parseSheetFile(file);
+                        }}
+                        className={`border-2 border-dashed rounded-3xl p-6 sm:p-8 text-center transition-all flex flex-col items-center justify-center gap-3 ${
+                          isDraggingSheet
+                            ? 'border-emerald-500 bg-emerald-500/10 scale-[1.01]'
+                            : 'border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 hover:border-emerald-500 hover:bg-emerald-50/20'
+                        }`}
+                      >
+                        <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shadow-inner">
+                          <FileSpreadsheet className="w-8 h-8 animate-pulse" />
+                        </div>
+
+                        <div className="space-y-1 max-w-md">
+                          <h4 className="text-sm font-black text-slate-800 dark:text-white">
+                            {ar ? 'ارفع شيت الإكسيل أو CSV للشهادات' : 'Upload Certificates Sheet (Excel / CSV)'}
+                          </h4>
+                          <p className="text-[11px] text-slate-500 leading-relaxed font-semibold">
+                            {ar
+                              ? 'اسحب الملف وأفلته هنا أو اضغط للاختيار. يقوم النظام تلقائياً بالتعرف على أسماء المكرمين ومطابقتهم بالكود أو الاسم أو الإيميل مع بيانات المنصة!'
+                              : 'Drag & drop or browse sheet file. The system automatically matches recipients with platform members!'}
+                          </p>
+                        </div>
+
+                        {isParsingSheet ? (
+                          <div className="flex items-center gap-2 text-xs font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-4 py-2 rounded-xl border border-emerald-300">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>{ar ? 'جاري فحص ومطابقة بيانات الشيت مع قاعدة البيانات...' : 'Inspecting & matching sheet data...'}</span>
+                          </div>
+                        ) : (
+                          <div className="flex flex-wrap items-center justify-center gap-2.5 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => sheetFileInputRef.current?.click()}
+                              className="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-xs rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
+                            >
+                              <Upload className="w-4 h-4" />
+                              <span>{ar ? 'اختيار ملف إكسيل / CSV' : 'Browse Excel / CSV'}</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={downloadSampleCertificatesSheet}
+                              className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-xl border border-slate-200 dark:border-slate-700 transition-all flex items-center gap-2 cursor-pointer"
+                            >
+                              <Download className="w-4 h-4 text-slate-500" />
+                              <span>{ar ? '📥 تحميل نموذج الشيت (CSV Template)' : '📥 Download Sample Template'}</span>
+                            </button>
+                          </div>
+                        )}
+
+                        {sheetParseError && (
+                          <div className="w-full mt-2 p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs font-bold flex items-center justify-between gap-2">
+                            <span>⚠️ {sheetParseError}</span>
+                            <button
+                              type="button"
+                              onClick={() => setSheetParseError('')}
+                              className="text-red-500 hover:text-red-800"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        )}
+
+                        <div className="text-[10px] text-slate-400 font-medium pt-1">
+                          {ar
+                            ? '💡 الأعمدة المقترحة: اسم العضو، كود العضو، البريد الإلكتروني، اللجنة، الدرجة (اختياري)'
+                            : '💡 Recognized columns: Name, Code, Email, Committee, Grade (optional)'}
+                        </div>
+                      </div>
+                    ) : (
+                      /* Sheet Loaded View */
+                      <div className="space-y-3">
+                        {/* Header Card with File info & stats */}
+                        <div className="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-teal-500/5 to-blue-500/10 border border-emerald-400/50 space-y-2.5 shadow-xs">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                                <FileSpreadsheet className="w-4 h-4" />
+                              </div>
+                              <div className="min-w-0">
+                                <h4 className="text-xs font-black text-slate-900 dark:text-white truncate" title={sheetFileName}>
+                                  {sheetFileName}
+                                </h4>
+                                <p className="text-[10px] text-slate-500">
+                                  {ar ? `تم استخراج ${sheetRecipients.length} شخص من الشيت` : `${sheetRecipients.length} recipients parsed`}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 ms-auto">
+                              <button
+                                type="button"
+                                onClick={() => sheetFileInputRef.current?.click()}
+                                className="px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-[11px] font-bold border border-slate-200 dark:border-slate-700 hover:border-emerald-500 shadow-2xs transition-all flex items-center gap-1 cursor-pointer"
+                              >
+                                <RefreshCw className="w-3 h-3 text-emerald-600" />
+                                <span>{ar ? 'استبدال الشيت' : 'Replace'}</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSheetRecipients([]);
+                                  setSheetFileName('');
+                                }}
+                                className="px-2.5 py-1.5 rounded-lg bg-red-50 dark:bg-red-950/30 text-red-600 text-[11px] font-bold border border-red-200 dark:border-red-900/50 hover:bg-red-100 shadow-2xs transition-all flex items-center gap-1 cursor-pointer"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                                <span>{ar ? 'مسح' : 'Clear'}</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Quick Badges Counter */}
+                          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 text-[10px] font-bold border border-slate-200 dark:border-slate-800">
+                              <span>👥 الإجمالي:</span>
+                              <strong className="text-slate-900 dark:text-white">{sheetRecipients.length}</strong>
+                            </span>
+
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold border border-emerald-300 dark:border-emerald-800">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              <span>أعضاء بالمنصة:</span>
+                              <strong>{matchedCount}</strong>
+                            </span>
+
+                            {unmatchedCount > 0 && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 text-[10px] font-bold border border-blue-300 dark:border-blue-800">
+                                <span>🌐 خارجي / غير مسجل:</span>
+                                <strong>{unmatchedCount}</strong>
+                              </span>
+                            )}
+
+                            {duplicateCount > 0 && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-[10px] font-bold border border-amber-300 dark:border-amber-800">
+                                <span>⚠️ مستلم مسبقاً:</span>
+                                <strong>{duplicateCount}</strong>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Search + Filter Tabs */}
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <div className="relative flex-1">
+                            <input
+                              type="text"
+                              value={sheetSearch}
+                              onChange={e => setSheetSearch(e.target.value)}
+                              placeholder={ar ? '🔍 بحث في أسماء أو أكواد أو إيميلات الشيت...' : 'Search sheet recipients...'}
+                              className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-800 dark:text-slate-100 font-bold focus:outline-none focus:border-emerald-500"
+                            />
+                          </div>
+
+                          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+                            <button
+                              type="button"
+                              onClick={() => setSheetFilter('all')}
+                              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${
+                                sheetFilter === 'all'
+                                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-2xs'
+                                  : 'text-slate-500 hover:text-slate-900'
+                              }`}
+                            >
+                              {ar ? `الكل (${sheetRecipients.length})` : `All (${sheetRecipients.length})`}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setSheetFilter('matched')}
+                              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${
+                                sheetFilter === 'matched'
+                                  ? 'bg-emerald-600 text-white shadow-2xs'
+                                  : 'text-slate-500 hover:text-slate-900'
+                              }`}
+                            >
+                              {ar ? `مسجلين (${matchedCount})` : `Matched (${matchedCount})`}
+                            </button>
+                            {unmatchedCount > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => setSheetFilter('unmatched')}
+                                className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${
+                                  sheetFilter === 'unmatched'
+                                    ? 'bg-blue-600 text-white shadow-2xs'
+                                    : 'text-slate-500 hover:text-slate-900'
+                                }`}
+                              >
+                                {ar ? `خارجي (${unmatchedCount})` : `External (${unmatchedCount})`}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Selection Actions Bar */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 p-2 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold">
+                          <span className="text-slate-600 dark:text-slate-300">
+                            {ar ? `تم تحديد (${selectedCount}) من (${sheetRecipients.length})` : `Selected (${selectedCount}) of (${sheetRecipients.length})`}
+                          </span>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSheetRecipients(prev => prev.map(r => {
+                                  const dup = db.findDuplicateCertificate({
+                                    recipientId: r.matchedUser?.id,
+                                    recipientName: r.name,
+                                    certType,
+                                    title: r.customTitle || activeTitle,
+                                  });
+                                  return { ...r, selected: !dup };
+                                }));
+                              }}
+                              className="text-[11px] font-black text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer flex items-center gap-1"
+                            >
+                              <span>✨ {ar ? 'تحديد غير المستلمين فقط' : 'Select Unawarded Only'}</span>
+                            </button>
+                            <span className="text-slate-300 dark:text-slate-600">|</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const filteredIds = new Set(filteredSheetList.map(r => r.id));
+                                const allSelected = filteredSheetList.every(r => r.selected);
+                                setSheetRecipients(prev => prev.map(r => {
+                                  if (filteredIds.has(r.id)) {
+                                    return { ...r, selected: !allSelected };
+                                  }
+                                  return r;
+                                }));
+                              }}
+                              className="text-[11px] font-black text-slate-700 dark:text-slate-300 hover:underline cursor-pointer"
+                            >
+                              {filteredSheetList.every(r => r.selected)
+                                ? (ar ? 'إلغاء تحديد المفلتر' : 'Deselect Filtered')
+                                : (ar ? 'تحديد كل المفلتر' : 'Select All Filtered')}
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Recipient Rows List */}
+                        <div className="max-h-60 overflow-y-auto space-y-1.5 pe-1 border border-slate-200 dark:border-slate-700 rounded-2xl p-2 bg-slate-50/50 dark:bg-slate-800/40">
+                          {filteredSheetList.length === 0 ? (
+                            <div className="text-center py-6 text-slate-400 text-xs font-bold">
+                              {ar ? 'لا يوجد أشخاص متطابقين مع البحث' : 'No recipients match search'}
+                            </div>
+                          ) : (
+                            filteredSheetList.map(r => {
+                              const isDup = db.findDuplicateCertificate({
+                                recipientId: r.matchedUser?.id,
+                                recipientName: r.name,
+                                certType,
+                                title: r.customTitle || activeTitle,
+                              });
+
+                              return (
+                                <div
+                                  key={r.id}
+                                  onClick={() => {
+                                    setSheetRecipients(prev => prev.map(item => item.id === r.id ? { ...item, selected: !item.selected } : item));
+                                  }}
+                                  className={`flex items-center justify-between p-2.5 rounded-xl text-xs font-bold cursor-pointer transition-all border ${
+                                    r.selected
+                                      ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-400 text-emerald-900 dark:text-emerald-200'
+                                      : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-slate-300'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2.5 min-w-0">
+                                    <input
+                                      type="checkbox"
+                                      checked={r.selected}
+                                      onChange={() => {}}
+                                      className="rounded text-emerald-600 focus:ring-emerald-500 shrink-0 w-4 h-4"
+                                    />
+                                    <div className="min-w-0 space-y-0.5">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="truncate font-black text-slate-900 dark:text-white">{r.name}</span>
+                                        {r.matchedUser ? (
+                                          <span className="text-[9px] bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 font-black px-1.5 py-0.5 rounded-md shrink-0 border border-emerald-300 flex items-center gap-0.5">
+                                            <Check className="w-2.5 h-2.5" />
+                                            <span>{ar ? 'عضو مسجل' : 'Registered'}</span>
+                                          </span>
+                                        ) : (
+                                          <span className="text-[9px] bg-blue-100 text-blue-800 dark:bg-blue-950/80 dark:text-blue-300 font-bold px-1.5 py-0.5 rounded-md shrink-0 border border-blue-200">
+                                            <span>{ar ? 'خارجي' : 'External'}</span>
+                                          </span>
+                                        )}
+
+                                        {isDup && (
+                                          <span className="text-[9px] bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 font-black px-1.5 py-0.5 rounded-md shrink-0 border border-amber-300">
+                                            {ar ? 'مستلم مسبقاً ⚠️' : 'Received ⚠️'}
+                                          </span>
+                                        )}
+                                      </div>
+
+                                      <div className="flex items-center gap-2 text-[10px] text-slate-400 font-medium">
+                                        {r.code && <span>كود: {r.code}</span>}
+                                        {r.email && <span>• {r.email}</span>}
+                                        {r.committee && <span>• {r.committee}</span>}
+                                        {r.grade !== undefined && <span>• درجة: {r.grade}</span>}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="text-[10px] text-end text-slate-400 font-medium shrink-0 ps-2">
+                                    {r.matchedUser?.role || r.role}
+                                  </div>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+
+                        {/* Duplicate Override Checkbox */}
+                        {duplicateCount > 0 && (
+                          <div className="p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 text-xs font-bold text-amber-800 dark:text-amber-200 flex items-start gap-2.5 shadow-2xs">
+                            <span className="text-base leading-none">⚠️</span>
+                            <div className="space-y-1 min-w-0">
+                              <p className="font-black text-amber-900 dark:text-amber-100">
+                                {ar ? `يوجد (${duplicateCount}) شخص في الشيت استلموا هذه الشهادة مسبقاً!` : `${duplicateCount} recipients already received this certificate!`}
+                              </p>
+                              <p className="text-[11px] leading-relaxed opacity-90">
+                                {ar
+                                  ? 'سيقوم النظام تلقائياً بتخطي المكرر وحماية العضو من استلام شهادته مرتين إلا في حالة تفعيل خيار الاستثناء أدناه.'
+                                  : 'System will safely skip duplicates unless override is checked.'}
+                              </p>
+                              <label className="flex items-center gap-1.5 pt-1 cursor-pointer select-none">
+                                <input
+                                  type="checkbox"
+                                  checked={allowDuplicateOverride}
+                                  onChange={e => setAllowDuplicateOverride(e.target.checked)}
+                                  className="rounded text-amber-600 focus:ring-amber-500 w-3.5 h-3.5"
+                                />
+                                <span className="text-[10px] text-amber-900 dark:text-amber-200 font-black">
+                                  {ar ? 'السماح بإصدار النسخ المكررة لجميع المحددين استثنائياً' : 'Allow duplicate override exceptionally'}
+                                </span>
+                              </label>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              // Normal Single or Bulk Recipient Selector
               const filteredMembers = users.filter(u =>
                 u.fullName.toLowerCase().includes(memberSearch.toLowerCase()) ||
                 u.role.toLowerCase().includes(memberSearch.toLowerCase()) ||
@@ -1166,22 +2138,49 @@ export const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ curr
 
                   {isBulkMode ? (
                     <div className="space-y-2 border border-slate-200 dark:border-slate-700 rounded-2xl p-3 bg-slate-50/50 dark:bg-slate-800/40">
-                      <div className="flex items-center justify-between text-xs font-bold text-slate-600 dark:text-slate-300 pb-2 border-b border-slate-200 dark:border-slate-700">
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-bold text-slate-600 dark:text-slate-300 pb-2 border-b border-slate-200 dark:border-slate-700">
                         <span>{ar ? `تم تحديد (${selectedRecipients.length}) عضو` : `Selected (${selectedRecipients.length})`}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleSelectAllFiltered(filteredMembers)}
-                          className="text-xs font-black text-amber-600 hover:text-amber-700 underline cursor-pointer"
-                        >
-                          {filteredMembers.every(u => selectedRecipients.includes(u.id))
-                            ? (ar ? 'إلغاء تحديد الكل' : 'Deselect All')
-                            : (ar ? 'تحديد الكل المفلتر' : 'Select All Filtered')}
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const activeTitle = (WORKSHOP_CERT_TEMPLATES.find(t => t.id === certType)?.title) || (certType === 'custom' ? customTitle : (certLang === 'en' ? selectedDef?.label : selectedDef?.labelAr));
+                              const unawarded = filteredMembers.filter(u => !db.findDuplicateCertificate({
+                                recipientId: u.id,
+                                recipientName: u.fullName,
+                                certType,
+                                title: activeTitle,
+                              })).map(u => u.id);
+                              setSelectedRecipients(unawarded);
+                            }}
+                            className="text-xs font-black text-eye-brand hover:underline cursor-pointer flex items-center gap-1"
+                          >
+                            <span>✨ {ar ? 'تحديد غير المستلمين فقط' : 'Select Unawarded Only'}</span>
+                          </button>
+                          <span className="text-slate-300 dark:text-slate-600">|</span>
+                          <button
+                            type="button"
+                            onClick={() => handleSelectAllFiltered(filteredMembers)}
+                            className="text-xs font-black text-amber-600 hover:text-amber-700 underline cursor-pointer"
+                          >
+                            {filteredMembers.every(u => selectedRecipients.includes(u.id))
+                              ? (ar ? 'إلغاء تحديد الكل' : 'Deselect All')
+                              : (ar ? 'تحديد الكل المفلتر' : 'Select All Filtered')}
+                          </button>
+                        </div>
                       </div>
 
-                      <div className="max-h-48 overflow-y-auto space-y-1.5 pe-1">
+                      <div className="max-h-52 overflow-y-auto space-y-1.5 pe-1">
                         {filteredMembers.map(u => {
                           const isSelected = selectedRecipients.includes(u.id);
+                          const activeTitle = (WORKSHOP_CERT_TEMPLATES.find(t => t.id === certType)?.title) || (certType === 'custom' ? customTitle : (certLang === 'en' ? selectedDef?.label : selectedDef?.labelAr));
+                          const memberDuplicate = db.findDuplicateCertificate({
+                            recipientId: u.id,
+                            recipientName: u.fullName,
+                            certType,
+                            title: activeTitle,
+                          });
+
                           return (
                             <div
                               key={u.id}
@@ -1191,31 +2190,76 @@ export const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ curr
                                   : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-slate-300'
                                 }`}
                             >
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 min-w-0">
                                 <input
                                   type="checkbox"
                                   checked={isSelected}
                                   onChange={() => { }}
-                                  className="rounded text-amber-600 focus:ring-amber-500"
+                                  className="rounded text-amber-600 focus:ring-amber-500 shrink-0"
                                 />
-                                <span>{u.fullName}</span>
+                                <span className="truncate">{u.fullName}</span>
+                                {memberDuplicate && (
+                                  <span className="text-[9px] bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 font-black px-1.5 py-0.5 rounded-md shrink-0 border border-amber-300">
+                                    {ar ? 'مستلم مسبقاً ⚠️' : 'Received ⚠️'}
+                                  </span>
+                                )}
                               </div>
-                              <span className="text-[10px] text-slate-400 font-medium">{u.role} ({u.committee})</span>
+                              <span className="text-[10px] text-slate-400 font-medium shrink-0">{u.role} ({u.committee})</span>
                             </div>
                           );
                         })}
                       </div>
                     </div>
                   ) : (
-                    <div className="relative">
-                      <User className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                      <select value={selectedRecipient} onChange={e => setSelectedRecipient(e.target.value)}
-                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl ps-9 pe-3 py-2.5 min-h-[44px] text-xs sm:text-sm text-slate-800 dark:text-slate-100 font-bold leading-normal focus:outline-none focus:border-eye-brand transition-all">
-                        <option value="">{ar ? '-- اختر عضواً --' : '-- Select Recipient --'}</option>
-                        {filteredMembers.map(u => (
-                          <option key={u.id} value={u.id} className="bg-slate-900 text-white py-1">{u.fullName} ({u.role} — {u.committee}) {u.membershipCode ? `[${u.membershipCode}]` : ''}</option>
-                        ))}
-                      </select>
+                    <div className="space-y-2">
+                      <div className="relative">
+                        <User className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                        <select value={selectedRecipient} onChange={e => setSelectedRecipient(e.target.value)}
+                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl ps-9 pe-3 py-2.5 min-h-[44px] text-xs sm:text-sm text-slate-800 dark:text-slate-100 font-bold leading-normal focus:outline-none focus:border-eye-brand transition-all">
+                          <option value="">{ar ? '-- اختر عضواً --' : '-- Select Recipient --'}</option>
+                          {filteredMembers.map(u => (
+                            <option key={u.id} value={u.id} className="bg-slate-900 text-white py-1">{u.fullName} ({u.role} — {u.committee}) {u.membershipCode ? `[${u.membershipCode}]` : ''}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Single Recipient Duplicate Alert */}
+                      {(() => {
+                        if (!selectedRecipient) return null;
+                        const activeTitle = (WORKSHOP_CERT_TEMPLATES.find(t => t.id === certType)?.title) || (certType === 'custom' ? customTitle : (certLang === 'en' ? selectedDef?.label : selectedDef?.labelAr));
+                        const duplicate = db.findDuplicateCertificate({
+                          recipientId: selectedRecipient,
+                          certType,
+                          title: activeTitle,
+                        });
+                        if (!duplicate) return null;
+                        return (
+                          <div className="p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 text-xs font-bold text-amber-800 dark:text-amber-200 flex items-start gap-2.5 shadow-xs animate-in fade-in duration-200">
+                            <span className="text-base leading-none">⚠️</span>
+                            <div className="space-y-1 min-w-0">
+                              <p className="font-black text-amber-900 dark:text-amber-100">
+                                {ar ? 'تنبيه منع التكرار: هذا العضو استلم هذه الشهادة مسبقاً!' : 'Duplicate Alert: Member already received this certificate!'}
+                              </p>
+                              <p className="text-[11px] leading-relaxed opacity-90">
+                                {ar
+                                  ? `حصل العضو على شهادة "${duplicate.title}" بتاريخ ${new Date(duplicate.issuedAt).toLocaleDateString('ar-EG')}. النظام سيمنع التكرار تلقائياً لعدم وصول نفس الشهادة مرتين.`
+                                  : `Issued on ${new Date(duplicate.issuedAt).toLocaleDateString()}. Duplicate delivery is prevented.`}
+                              </p>
+                              <label className="flex items-center gap-1.5 pt-1 cursor-pointer select-none">
+                                <input
+                                  type="checkbox"
+                                  checked={allowDuplicateOverride}
+                                  onChange={e => setAllowDuplicateOverride(e.target.checked)}
+                                  className="rounded text-amber-600 focus:ring-amber-500 w-3.5 h-3.5"
+                                />
+                                <span className="text-[10px] text-amber-900 dark:text-amber-200 font-black">
+                                  {ar ? 'السماح بإصدار نسخة مكررة استثنائياً' : 'Allow duplicate override exceptionally'}
+                                </span>
+                              </label>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   )}
                 </div>
@@ -1271,33 +2315,81 @@ export const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ curr
 
 
 
-            <div className="space-y-2 pt-1">
-              <button onClick={handleIssue}
-                disabled={isGeneratingPdf}
-                className="w-full text-white font-black py-3 rounded-xl text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
-                style={{
-                  background: isBulkMode ? 'linear-gradient(135deg, #d97706, #b45309)' : (canApprove ? 'linear-gradient(135deg, #2b66ff, #1b4cd3)' : 'linear-gradient(135deg, #d97706, #b45309)'),
-                  boxShadow: isBulkMode ? '0 4px 15px rgba(217,119,6,0.35)' : '0 4px 15px rgba(43,102,255,0.35)'
-                }}>
-                <Award className="w-4 h-4" />
-                {isBulkMode
-                  ? (ar ? (canApprove ? `إصدار وإرسال الشهادات لـ (${selectedRecipients.length}) عضو 👥` : `إرسال طلبات اعتماد الشهادات لـ (${selectedRecipients.length}) عضو 📤`) : `Issue to (${selectedRecipients.length}) Members 👥`)
-                  : (ar ? (canApprove ? 'إصدار الشهادة 📜' : 'إرسال طلب اعتماد الشهادة للإدارة 📤') : 'Issue Certificate 📜')}
-              </button>
+            {issueMode === 'sheet' ? (
+              <div className="space-y-2 pt-1">
+                {(() => {
+                  const selectedCount = sheetRecipients.filter(r => r.selected).length;
+                  return (
+                    <>
+                      <button
+                        type="button"
+                        onClick={handleIssue}
+                        disabled={isGeneratingPdf || selectedCount === 0}
+                        className="w-full text-white font-black py-3 rounded-xl text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                        style={{
+                          background: 'linear-gradient(135deg, #059669, #0d9488)',
+                          boxShadow: '0 4px 15px rgba(5,150,105,0.35)'
+                        }}
+                      >
+                        <Award className="w-4 h-4" />
+                        <span>
+                          {ar
+                            ? (canApprove
+                                ? `🚀 إصدار وإرسال الشهادات لـ (${selectedCount}) شخص من الشيت`
+                                : `📤 إرسال طلبات اعتماد الشهادات لـ (${selectedCount}) شخص من الشيت`)
+                            : `Issue & Send to (${selectedCount}) from Sheet`}
+                        </span>
+                      </button>
 
-              {isBulkMode && canApprove && selectedRecipients.length > 0 && (
-                <button
-                  type="button"
-                  onClick={handleIssueAndDownloadBulkPdf}
+                      {canApprove && selectedCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => handleIssueSheet(true)}
+                          disabled={isGeneratingPdf}
+                          className="w-full text-white font-black py-3 rounded-xl text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50"
+                          style={{ boxShadow: '0 4px 15px rgba(43,102,255,0.35)' }}
+                        >
+                          <FileText className="w-4 h-4" />
+                          <span>
+                            {ar
+                              ? `📥 إصدار وتحميل الكل في ملف PDF واحد (${selectedCount}) 📄`
+                              : `Issue & Download All as Single PDF (${selectedCount}) 📄`}
+                          </span>
+                        </button>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+            ) : (
+              <div className="space-y-2 pt-1">
+                <button onClick={handleIssue}
                   disabled={isGeneratingPdf}
-                  className="w-full text-white font-black py-3 rounded-xl text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
-                  style={{ boxShadow: '0 4px 15px rgba(43,102,255,0.35)' }}
-                >
-                  <FileText className="w-4 h-4" />
-                  <span>{ar ? `إصدار وتحميل الكل في ملف PDF واحد (${selectedRecipients.length}) 📄` : `Issue & Download All as Single PDF (${selectedRecipients.length}) 📄`}</span>
+                  className="w-full text-white font-black py-3 rounded-xl text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  style={{
+                    background: isBulkMode ? 'linear-gradient(135deg, #d97706, #b45309)' : (canApprove ? 'linear-gradient(135deg, #2b66ff, #1b4cd3)' : 'linear-gradient(135deg, #d97706, #b45309)'),
+                    boxShadow: isBulkMode ? '0 4px 15px rgba(217,119,6,0.35)' : '0 4px 15px rgba(43,102,255,0.35)'
+                  }}>
+                  <Award className="w-4 h-4" />
+                  {isBulkMode
+                    ? (ar ? (canApprove ? `إصدار وإرسال الشهادات لـ (${selectedRecipients.length}) عضو 👥` : `إرسال طلبات اعتماد الشهادات لـ (${selectedRecipients.length}) عضو 📤`) : `Issue to (${selectedRecipients.length}) Members 👥`)
+                    : (ar ? (canApprove ? 'إصدار الشهادة 📜' : 'إرسال طلب اعتماد الشهادة للإدارة 📤') : 'Issue Certificate 📜')}
                 </button>
-              )}
-            </div>
+
+                {isBulkMode && canApprove && selectedRecipients.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleIssueAndDownloadBulkPdf}
+                    disabled={isGeneratingPdf}
+                    className="w-full text-white font-black py-3 rounded-xl text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+                    style={{ boxShadow: '0 4px 15px rgba(43,102,255,0.35)' }}
+                  >
+                    <FileText className="w-4 h-4" />
+                    <span>{ar ? `إصدار وتحميل الكل في ملف PDF واحد (${selectedRecipients.length}) 📄` : `Issue & Download All as Single PDF (${selectedRecipients.length}) 📄`}</span>
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Preview — updates live as you fill the form */}
@@ -1470,6 +2562,13 @@ export const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ curr
       {/* Manage All Issued Certificates (Admin & Leader Access) */}
       {tab === 'all' && canIssue && (
         <div className="space-y-4">
+          {bulkDeleteSuccessMsg && (
+            <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border-2 border-emerald-300 dark:border-emerald-700 text-xs font-black text-emerald-800 dark:text-emerald-200 flex items-center gap-2 animate-in fade-in duration-300">
+              <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
+              <span>{bulkDeleteSuccessMsg}</span>
+            </div>
+          )}
+
           <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
               <h3 className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-2">
@@ -1493,7 +2592,8 @@ export const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ curr
             </div>
 
             {(() => {
-              const filteredCerts = db.getCertificates().filter(c =>
+              const allSystemCerts = db.getCertificates();
+              const filteredCerts = allSystemCerts.filter(c =>
                 c.recipientName.toLowerCase().includes(issuedSearchQuery.toLowerCase()) ||
                 c.title.toLowerCase().includes(issuedSearchQuery.toLowerCase()) ||
                 c.issuedByName.toLowerCase().includes(issuedSearchQuery.toLowerCase()) ||
@@ -1502,73 +2602,173 @@ export const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ curr
 
               const allFilteredIds = filteredCerts.map(c => c.id);
               const isAllSelected = allFilteredIds.length > 0 && allFilteredIds.every(id => selectedCertIds.includes(id));
+              const pendingCerts = filteredCerts.filter(c => c.status === 'pending');
+              const approvedCerts = filteredCerts.filter(c => c.status !== 'pending' && c.status !== 'rejected');
 
               return (
                 <>
-                  {/* Bulk Action Toolbar */}
+                  {/* Bulk Selection & Action Toolbar */}
                   {filteredCerts.length > 0 && (
-                    <div className="flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-slate-800 dark:to-slate-800/80 p-3 rounded-2xl border border-blue-200/80 dark:border-slate-700">
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (isAllSelected) {
-                              setSelectedCertIds(prev => prev.filter(id => !allFilteredIds.includes(id)));
-                            } else {
-                              setSelectedCertIds(prev => Array.from(new Set([...prev, ...allFilteredIds])));
-                            }
-                          }}
-                          className="px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-black rounded-xl hover:bg-slate-50 transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
-                        >
-                          {isAllSelected ? (
-                            <>
-                              <CheckSquare className="w-3.5 h-3.5 text-eye-brand" />
-                              <span>{ar ? 'إلغاء تحديد الكل' : 'Deselect All'}</span>
-                            </>
-                          ) : (
-                            <>
-                              <Square className="w-3.5 h-3.5 text-slate-400" />
-                              <span>{ar ? `تحديد الكل (${filteredCerts.length})` : `Select All (${filteredCerts.length})`}</span>
-                            </>
+                    <div className="space-y-3 bg-gradient-to-r from-blue-50/70 via-indigo-50/70 to-slate-50 dark:from-slate-800 dark:to-slate-800/80 p-3.5 rounded-2xl border border-blue-200/80 dark:border-slate-700 shadow-xs">
+                      {/* Row 1: Selection Controls & Quick Count */}
+                      <div className="flex flex-wrap items-center justify-between gap-2.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {/* Toggle Select All */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (isAllSelected) {
+                                setSelectedCertIds(prev => prev.filter(id => !allFilteredIds.includes(id)));
+                              } else {
+                                setSelectedCertIds(prev => Array.from(new Set([...prev, ...allFilteredIds])));
+                              }
+                            }}
+                            className="px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-xs font-black rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                          >
+                            {isAllSelected ? (
+                              <>
+                                <CheckSquare className="w-3.5 h-3.5 text-eye-brand" />
+                                <span>{ar ? 'إلغاء تحديد الكل' : 'Deselect All'}</span>
+                              </>
+                            ) : (
+                              <>
+                                <Square className="w-3.5 h-3.5 text-slate-400" />
+                                <span>{ar ? `تحديد الكل (${filteredCerts.length})` : `Select All (${filteredCerts.length})`}</span>
+                              </>
+                            )}
+                          </button>
+
+                          {/* Quick Count Selection Pills */}
+                          <div className="flex items-center gap-1 bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-700 rounded-xl p-1">
+                            <span className="text-[10px] font-bold text-slate-400 px-1">{ar ? 'عدد:' : 'Count:'}</span>
+                            {[5, 10, 25, 50].map(count => {
+                              if (filteredCerts.length < count && count !== 5) return null;
+                              return (
+                                <button
+                                  key={count}
+                                  type="button"
+                                  onClick={() => {
+                                    const subset = allFilteredIds.slice(0, count);
+                                    setSelectedCertIds(subset);
+                                  }}
+                                  className={`px-2 py-0.5 text-[10px] font-black rounded-lg transition-all cursor-pointer ${
+                                    selectedCertIds.length === count
+                                      ? 'bg-eye-brand text-white'
+                                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                                  }`}
+                                >
+                                  {count}
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          {/* Custom Count Input */}
+                          <div className="flex items-center gap-1 bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-0.5">
+                            <input
+                              type="number"
+                              min="1"
+                              max={filteredCerts.length}
+                              value={customSelectCount}
+                              onChange={(e) => setCustomSelectCount(e.target.value)}
+                              placeholder={ar ? 'عدد مخصص' : 'Custom'}
+                              className="w-16 bg-transparent text-xs text-slate-800 dark:text-slate-200 font-bold focus:outline-none text-center"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const n = parseInt(customSelectCount);
+                                if (!isNaN(n) && n > 0) {
+                                  const subset = allFilteredIds.slice(0, Math.min(n, allFilteredIds.length));
+                                  setSelectedCertIds(subset);
+                                }
+                              }}
+                              className="text-[10px] font-black text-eye-brand hover:underline cursor-pointer"
+                            >
+                              {ar ? 'تحديد' : 'Select'}
+                            </button>
+                          </div>
+
+                          {/* Filter by Status Quick Select */}
+                          {pendingCerts.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedCertIds(pendingCerts.map(c => c.id))}
+                              className="px-2 py-1 bg-amber-500/15 border border-amber-400/40 text-amber-800 dark:text-amber-300 text-[10px] font-black rounded-xl hover:bg-amber-500/25 transition-all cursor-pointer"
+                            >
+                              {ar ? `المعلقة (${pendingCerts.length})` : `Pending (${pendingCerts.length})`}
+                            </button>
                           )}
-                        </button>
+                          {approvedCerts.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedCertIds(approvedCerts.map(c => c.id))}
+                              className="px-2 py-1 bg-emerald-500/15 border border-emerald-400/40 text-emerald-800 dark:text-emerald-300 text-[10px] font-black rounded-xl hover:bg-emerald-500/25 transition-all cursor-pointer"
+                            >
+                              {ar ? `المعتمدة (${approvedCerts.length})` : `Approved (${approvedCerts.length})`}
+                            </button>
+                          )}
+                        </div>
 
                         {selectedCertIds.length > 0 && (
-                          <span className="text-xs font-black text-eye-brand dark:text-blue-400 bg-blue-100/70 dark:bg-blue-950/60 px-2.5 py-1 rounded-xl">
-                            {ar ? `المحدد: ${selectedCertIds.length}` : `Selected: ${selectedCertIds.length}`}
+                          <span className="text-xs font-black text-eye-brand dark:text-blue-300 bg-blue-100 dark:bg-blue-950/70 border border-blue-200 dark:border-blue-800 px-3 py-1 rounded-xl">
+                            {ar ? `المحدد: ${selectedCertIds.length} من أصل ${filteredCerts.length}` : `Selected: ${selectedCertIds.length} of ${filteredCerts.length}`}
                           </span>
                         )}
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-2">
-                        {/* Download Selected as Single Multi-Page PDF */}
-                        {selectedCertIds.length > 0 && (
+                      {/* Row 2: Action Buttons */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-blue-200/50 dark:border-slate-700/60">
+                        {/* BULK DELETE BUTTON (RED) */}
+                        {selectedCertIds.length > 0 ? (
                           <button
                             type="button"
-                            disabled={isGeneratingPdf}
-                            onClick={() => {
-                              const certsToDl = db.getCertificates().filter(c => selectedCertIds.includes(c.id));
-                              handleDownloadBatchPdf(certsToDl, `شهادات_محددة_${new Date().toISOString().slice(0, 10)}.pdf`);
-                            }}
-                            className="px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white text-xs font-black rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
+                            onClick={() => setShowBulkDeleteModal(true)}
+                            className="px-4 py-2 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white text-xs font-black rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer animate-in fade-in"
                           >
-                            <FileText className="w-4 h-4" />
-                            <span>{ar ? `تنزيل المحددة كـ PDF مجمع (${selectedCertIds.length}) 📄` : `Download Selected as PDF (${selectedCertIds.length})`}</span>
+                            <Trash2 className="w-4 h-4" />
+                            <span>
+                              {ar
+                                ? `مسح الشهادات المحددة من كل شيء (${selectedCertIds.length}) 🗑️`
+                                : `Purge Selected from Everything (${selectedCertIds.length})`}
+                            </span>
                           </button>
+                        ) : (
+                          <div className="text-[11px] text-slate-500 font-bold italic">
+                            {ar ? '💡 حدد شهادة واحدة أو أكثر لتفعيل خيارات المسح الجماعي والتصدير' : 'Select certs to enable bulk actions'}
+                          </div>
                         )}
 
-                        {/* Download ALL Filtered as 1 Multi-Page PDF */}
-                        <button
-                          type="button"
-                          disabled={isGeneratingPdf || filteredCerts.length === 0}
-                          onClick={() => {
-                            handleDownloadBatchPdf(filteredCerts, `جميع_شهادات_الكيان_${new Date().toISOString().slice(0, 10)}.pdf`);
-                          }}
-                          className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-black rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
-                        >
-                          <FileText className="w-4 h-4" />
-                          <span>{ar ? `تنزيل الكل في ملف PDF واحد (${filteredCerts.length}) 📄` : `Download All in One PDF (${filteredCerts.length})`}</span>
-                        </button>
+                        <div className="flex flex-wrap items-center gap-2 ms-auto">
+                          {/* Download Selected as Single Multi-Page PDF */}
+                          {selectedCertIds.length > 0 && (
+                            <button
+                              type="button"
+                              disabled={isGeneratingPdf}
+                              onClick={() => {
+                                const certsToDl = db.getCertificates().filter(c => selectedCertIds.includes(c.id));
+                                handleDownloadBatchPdf(certsToDl, `شهادات_محددة_${new Date().toISOString().slice(0, 10)}.pdf`);
+                              }}
+                              className="px-3.5 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white text-xs font-black rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
+                            >
+                              <FileText className="w-4 h-4" />
+                              <span>{ar ? `تنزيل المحددة PDF (${selectedCertIds.length})` : `Download Selected PDF (${selectedCertIds.length})`}</span>
+                            </button>
+                          )}
+
+                          {/* Download ALL Filtered as 1 Multi-Page PDF */}
+                          <button
+                            type="button"
+                            disabled={isGeneratingPdf || filteredCerts.length === 0}
+                            onClick={() => {
+                              handleDownloadBatchPdf(filteredCerts, `جميع_شهادات_الكيان_${new Date().toISOString().slice(0, 10)}.pdf`);
+                            }}
+                            className="px-3.5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-black rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
+                          >
+                            <FileText className="w-4 h-4" />
+                            <span>{ar ? `تنزيل الكل PDF واحد (${filteredCerts.length})` : `Download All PDF (${filteredCerts.length})`}</span>
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -1590,7 +2790,7 @@ export const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ curr
                           <div
                             key={cert.id}
                             className={`bg-slate-50 dark:bg-slate-800/60 rounded-2xl p-4 flex items-center justify-between gap-4 border transition-all ${
-                              isSelected ? 'border-amber-400 dark:border-amber-500 bg-amber-50/40 dark:bg-amber-950/20 shadow-xs' : 'border-slate-200/60 dark:border-slate-700'
+                              isSelected ? 'border-amber-400 dark:border-amber-500 bg-amber-50/40 dark:bg-amber-950/20 shadow-xs ring-1 ring-amber-400/50' : 'border-slate-200/60 dark:border-slate-700'
                             }`}
                           >
                             <div className="flex items-center gap-3 min-w-0">
@@ -1666,16 +2866,24 @@ export const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ curr
                                 <span className="hidden sm:inline">PNG</span>
                               </button>
 
+                              {/* PURGE FROM EVERYTHING BUTTON */}
                               <button
                                 onClick={async () => {
-                                  if (window.confirm(ar ? `هل أنت تأكد من سحب/إلغاء شهادة ${cert.recipientName}؟` : `Revoke certificate for ${cert.recipientName}?`)) {
+                                  if (
+                                    window.confirm(
+                                      ar
+                                        ? `هل أنت متأكد من مسح شهادة "${cert.recipientName}" (${cert.title}) نهائياً من قاعدة البيانات، والتخزين المحلي، والإشعارات، وكافة السجلات؟`
+                                        : `Permanently purge certificate for ${cert.recipientName} from database and all records?`
+                                    )
+                                  ) {
                                     await db.deleteCertificate(cert.id, currentUser);
+                                    setSelectedCertIds(prev => prev.filter(id => id !== cert.id));
                                   }
                                 }}
                                 className="p-1.5 text-xs font-bold text-red-600 bg-red-50 dark:bg-red-950/40 hover:bg-red-100 rounded-xl transition-all cursor-pointer"
-                                title={ar ? 'سحب / إلغاء الشهادة' : 'Revoke Certificate'}
+                                title={ar ? 'مسح الشهادة نهائياً من كل شيء' : 'Purge Certificate from Everything'}
                               >
-                                <span className="text-xs">🗑️</span>
+                                <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             </div>
                           </div>
@@ -1860,6 +3068,88 @@ export const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ curr
                 className="bg-gradient-to-r from-blue-600 to-indigo-600 h-full transition-all duration-300 rounded-full"
                 style={{ width: `${pdfProgress && pdfProgress.total > 0 ? (pdfProgress.current / pdfProgress.total) * 100 : 50}%` }}
               />
+            </div>
+          </div>
+        </div>
+      )}
+      {/* BULK DELETE CONFIRMATION MODAL */}
+      {showBulkDeleteModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 text-start relative my-auto">
+            <div className="flex items-center gap-3 text-red-600 dark:text-red-400">
+              <div className="w-12 h-12 rounded-2xl bg-red-100 dark:bg-red-950/50 flex items-center justify-center text-red-600 shrink-0">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-black text-base text-slate-900 dark:text-white">
+                  {ar ? `تأكيد مسح (${selectedCertIds.length}) شهادة نهائياً من كل شيء` : `Confirm Purging ${selectedCertIds.length} Certificates`}
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 font-bold">
+                  {ar ? 'حذف نهائي وشامل لا يمكن استرجاعه' : 'Permanent action cannot be undone'}
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 text-xs font-bold text-red-800 dark:text-red-300 space-y-1.5">
+              <p className="font-black flex items-center gap-1.5">
+                <span>⚠️ تنبيه هام: مسح من كل مكان</span>
+              </p>
+              <p className="text-[11px] leading-relaxed">
+                {ar
+                  ? 'سيتم حذف هذه الشهادات تماماً من قاعدة بيانات سوبابيس (Supabase)، ومن الذاكرة والتخزين المحلي، ومن كافة إشعارات النظام الخاصة بالأعضاء. لن تظهر هذه الشهادات مجدداً في بروفايلات الأعضاء أو سجلات الكيان.'
+                  : 'These certificates will be permanently purged from Supabase database, local cache, and all member notifications.'}
+              </p>
+            </div>
+
+            {/* List Preview of Selected Certificates */}
+            <div className="space-y-1">
+              <p className="text-[10px] font-black text-slate-500 uppercase">
+                {ar ? `الشهادات المحددة للحذف (${selectedCertIds.length}):` : 'Selected Certificates Preview:'}
+              </p>
+              <div className="max-h-48 overflow-y-auto space-y-1.5 pe-1">
+                {db.getCertificates()
+                  .filter(c => selectedCertIds.includes(c.id))
+                  .map(c => (
+                    <div key={c.id} className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 flex items-center justify-between text-xs">
+                      <div className="min-w-0">
+                        <p className="font-black text-slate-800 dark:text-slate-200 truncate">{c.recipientName}</p>
+                        <p className="text-[10px] text-slate-500 truncate">{c.title} • {new Date(c.issuedAt).toLocaleDateString('ar-EG')}</p>
+                      </div>
+                      <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 shrink-0">
+                        {c.status === 'approved' ? (ar ? 'معتمدة' : 'Approved') : (ar ? 'معلقة' : 'Pending')}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                disabled={isDeletingBulk}
+                onClick={() => setShowBulkDeleteModal(false)}
+                className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 text-xs font-black rounded-xl transition-all cursor-pointer"
+              >
+                {ar ? 'إلغاء وتراجع' : 'Cancel'}
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingBulk}
+                onClick={handleBulkDelete}
+                className="px-5 py-2.5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white text-xs font-black rounded-xl shadow-lg shadow-red-500/20 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {isDeletingBulk ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>{ar ? 'جارٍ المسح الشامل...' : 'Purging...'}</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>{ar ? `تأكيد المسح النهائي (${selectedCertIds.length}) 🗑️` : `Confirm Purge (${selectedCertIds.length})`}</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>

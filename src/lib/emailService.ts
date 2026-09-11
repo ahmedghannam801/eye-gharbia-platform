@@ -176,6 +176,46 @@ const trySendOnce = async (to: string[], subject: string, html: string, silent =
   }
 };
 
-export const sendEmailAlert = async (to: string[], subject: string, htmlContent: string): Promise<boolean> => {
-  return trySendOnce(to, subject, htmlContent);
+// In-memory / session deduplication to prevent duplicate email delivery
+const SENT_EMAILS_LOG_KEY = 'eye_sent_emails_hash_log';
+const getSentHashes = (): Record<string, number> => {
+  try { return JSON.parse(sessionStorage.getItem(SENT_EMAILS_LOG_KEY) || '{}'); } catch { return {}; }
 };
+const recordSentHash = (hashKey: string) => {
+  try {
+    const hashes = getSentHashes();
+    hashes[hashKey] = Date.now();
+    // Prune entries older than 48 hours
+    const now = Date.now();
+    const cleaned: Record<string, number> = {};
+    for (const [k, v] of Object.entries(hashes)) {
+      if (now - v < 48 * 60 * 60 * 1000) cleaned[k] = v;
+    }
+    sessionStorage.setItem(SENT_EMAILS_LOG_KEY, JSON.stringify(cleaned));
+  } catch {}
+};
+
+export const isDuplicateEmail = (to: string[], subject: string, htmlContent: string): boolean => {
+  const cleanTo = Array.from(new Set(to.map(e => e.trim().toLowerCase()).filter(e => e.length > 0))).sort().join(',');
+  const hashKey = `${cleanTo}::${subject.trim()}::${htmlContent.length}`;
+  const hashes = getSentHashes();
+  const sentTime = hashes[hashKey];
+  return !!sentTime && (Date.now() - sentTime < 24 * 60 * 60 * 1000);
+};
+
+export const sendEmailAlert = async (to: string[], subject: string, htmlContent: string, allowDuplicate = false): Promise<boolean> => {
+  const cleanTo = Array.from(new Set(to.map(e => e.trim().toLowerCase()).filter(e => e.length > 0))).sort().join(',');
+  const hashKey = `${cleanTo}::${subject.trim()}::${htmlContent.length}`;
+
+  if (!allowDuplicate && isDuplicateEmail(to, subject, htmlContent)) {
+    console.info(`[EYE Email] Duplicate email prevented for ${cleanTo} with subject "${subject}".`);
+    return true; // Pretend sent to prevent failure loops, but avoid spamming
+  }
+
+  const ok = await trySendOnce(to, subject, htmlContent);
+  if (ok) {
+    recordSentHash(hashKey);
+  }
+  return ok;
+};
+
