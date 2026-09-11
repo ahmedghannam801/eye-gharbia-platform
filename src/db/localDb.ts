@@ -932,7 +932,12 @@ class SupabaseDatabase {
     const deletedQuizIds = getDeletedIds('eye_deleted_quiz_ids');
     const deletedWeeklyChallengeIds = getDeletedIds('eye_deleted_weekly_challenge_ids');
 
-    const mergeById = <T extends { id: string }>(remote: T[], local: T[], deletedIds: string[] = []): T[] => {
+    const mergeById = <T extends { id: string }>(
+      remote: T[],
+      local: T[],
+      deletedIds: string[] = [],
+      options?: { isPaginated?: boolean; entityKey?: string }
+    ): T[] => {
       const delSet = new Set(deletedIds);
       const validRemote = remote.filter((r) => !delSet.has(r.id));
       const validLocal = local.filter((l) => !delSet.has(l.id));
@@ -969,8 +974,32 @@ class SupabaseDatabase {
         };
       });
 
-      // Keep all valid local items that do not exist yet on remote (e.g. created locally / offline)
-      const pendingLocal = validLocal.filter(l => !remoteIdSet.has(l.id));
+      // If the collection query is paginated (e.g. limit(100)), keep local items that might be older than page 1
+      if (options?.isPaginated) {
+        const pendingLocal = validLocal.filter(l => !remoteIdSet.has(l.id));
+        return [...mergedRemote, ...pendingLocal];
+      }
+
+      // For authoritative full-table collections from Supabase:
+      // Any item in validLocal that is missing from remoteIdSet was DELETED by an admin/user,
+      // UNLESS it is an un-synced offline draft created locally in this session!
+      const pendingLocal = validLocal.filter(l => {
+        if (remoteIdSet.has(l.id)) return false;
+        const idStr = String(l.id);
+        const isOfflineDraft =
+          idStr.startsWith('tmp-') ||
+          idStr.startsWith('temp-') ||
+          idStr.startsWith('offline-') ||
+          idStr.startsWith('draft-') ||
+          idStr.startsWith('preview-') ||
+          (l as any)._isOfflinePending === true;
+
+        if (!isOfflineDraft && options?.entityKey) {
+          // Record deletion locally so other operations also recognize it as purged
+          this.recordDeletedId(options.entityKey, l.id);
+        }
+        return isOfflineDraft;
+      });
 
       return [...mergedRemote, ...pendingLocal];
     };
@@ -1053,7 +1082,13 @@ class SupabaseDatabase {
       const localCertificates = (this.cache.certificates && this.cache.certificates.length > 0)
         ? this.cache.certificates
         : this._ls<IssuedCertificate>('eye_certificates');
-      this.cache.certificates = mergeById(remoteCertificates, localCertificates, deletedCertIds);
+      this.cache.certificates = mergeById(remoteCertificates, localCertificates, deletedCertIds, { entityKey: 'eye_deleted_certificate_ids' });
+      this._lsSave('eye_certificates', this.cache.certificates);
+    } else {
+      const localCertificates = (this.cache.certificates && this.cache.certificates.length > 0)
+        ? this.cache.certificates
+        : this._ls<IssuedCertificate>('eye_certificates');
+      this.cache.certificates = localCertificates.filter(c => !deletedCertIds.includes(c.id));
       this._lsSave('eye_certificates', this.cache.certificates);
     }
 
@@ -1381,21 +1416,21 @@ class SupabaseDatabase {
         .filter(r => !isCommitteeChange(r) && !isFreeze(r))
         .map(excuseFromRow);
       const localExcuses = this._ls<ExcuseRequest>('eye_excuse_requests');
-      const mergedExcuses = mergeById(remoteExcuses, localExcuses, deletedExcuseIds);
+      const mergedExcuses = mergeById(remoteExcuses, localExcuses, deletedExcuseIds, { entityKey: 'eye_deleted_excuse_ids' });
       this._lsSave('eye_excuse_requests', mergedExcuses);
 
       const remoteFreezes = excusesFreezes.data
         .filter(isFreeze)
         .map(freezeFromRow);
       const localFreezes = this._ls<FreezeRequest>('eye_freeze_requests');
-      const mergedFreezes = mergeById(remoteFreezes, localFreezes, deletedFreezeIds);
+      const mergedFreezes = mergeById(remoteFreezes, localFreezes, deletedFreezeIds, { entityKey: 'eye_deleted_freeze_ids' });
       this._lsSave('eye_freeze_requests', mergedFreezes);
 
       const remoteCommitteeChanges = excusesFreezes.data
         .filter(isCommitteeChange)
         .map(committeeChangeFromRow);
       const localCommitteeChanges = this._ls<CommitteeChangeRequest>('eye_committee_requests');
-      const mergedCommitteeChanges = mergeById(remoteCommitteeChanges, localCommitteeChanges, []);
+      const mergedCommitteeChanges = mergeById(remoteCommitteeChanges, localCommitteeChanges, [], { entityKey: 'eye_deleted_committee_request_ids' });
       this._lsSave('eye_committee_requests', mergedCommitteeChanges);
     }
 
@@ -1432,6 +1467,144 @@ class SupabaseDatabase {
     }, 5000);
   }
 
+  private handleRealtimeChange(table: string, payload: any): void {
+    const eventType = payload.eventType || payload.event;
+    const oldRow = payload.old;
+
+    if (eventType === 'DELETE' && oldRow && oldRow.id) {
+      const deletedId = String(oldRow.id);
+      this.handleRealtimeDelete(table, deletedId);
+      return;
+    }
+
+    this.debouncedRealtimeRefresh();
+  }
+
+  private handleRealtimeDelete(table: string, deletedId: string): void {
+    switch (table) {
+      case 'issued_certificates': {
+        this.cache.certificates = (this.cache.certificates || []).filter(c => c.id !== deletedId);
+        this._lsSave('eye_certificates', this.cache.certificates);
+        this.recordDeletedId('eye_deleted_certificate_ids', deletedId);
+        if (this.cache.notifications) {
+          this.cache.notifications = this.cache.notifications.filter(n => n.relatedId !== deletedId);
+          this._lsSave('eye_notifications', this.cache.notifications);
+        }
+        this.notify();
+        break;
+      }
+      case 'tasks': {
+        this.cache.tasks = (this.cache.tasks || []).filter(t => t.id !== deletedId);
+        this._lsSave('eye_tasks', this.cache.tasks);
+        this.recordDeletedId('eye_deleted_task_ids', deletedId);
+        this.cache.submissions = (this.cache.submissions || []).filter(s => s.taskId !== deletedId);
+        this._lsSave('eye_submissions', this.cache.submissions);
+        if (this.cache.notifications) {
+          this.cache.notifications = this.cache.notifications.filter(n => n.relatedId !== deletedId);
+          this._lsSave('eye_notifications', this.cache.notifications);
+        }
+        this.notify();
+        break;
+      }
+      case 'submissions': {
+        this.cache.submissions = (this.cache.submissions || []).filter(s => s.id !== deletedId);
+        this._lsSave('eye_submissions', this.cache.submissions);
+        this.recordDeletedId('eye_deleted_submission_ids', deletedId);
+        this.notify();
+        break;
+      }
+      case 'excuses_freezes': {
+        const excuses = this._ls<ExcuseRequest>('eye_excuse_requests');
+        this._lsSave('eye_excuse_requests', excuses.filter(e => e.id !== deletedId));
+        const freezes = this._ls<FreezeRequest>('eye_freeze_requests');
+        this._lsSave('eye_freeze_requests', freezes.filter(f => f.id !== deletedId));
+        const comms = this._ls<CommitteeChangeRequest>('eye_committee_requests');
+        this._lsSave('eye_committee_requests', comms.filter(c => c.id !== deletedId));
+        this.recordDeletedId('eye_deleted_excuse_ids', deletedId);
+        this.recordDeletedId('eye_deleted_freeze_ids', deletedId);
+        if (this.cache.notifications) {
+          this.cache.notifications = this.cache.notifications.filter(n => n.relatedId !== deletedId);
+          this._lsSave('eye_notifications', this.cache.notifications);
+        }
+        this.notify();
+        break;
+      }
+      case 'announcements': {
+        this.cache.announcements = (this.cache.announcements || []).filter(a => a.id !== deletedId);
+        this._lsSave('eye_announcements', this.cache.announcements);
+        this.recordDeletedId('eye_deleted_announcement_ids', deletedId);
+        this.notify();
+        break;
+      }
+      case 'notifications': {
+        this.cache.notifications = (this.cache.notifications || []).filter(n => n.id !== deletedId);
+        this._lsSave('eye_notifications', this.cache.notifications);
+        this.recordDeletedId('eye_deleted_notification_ids', deletedId);
+        this.notify();
+        break;
+      }
+      case 'meetings': {
+        this.cache.meetings = (this.cache.meetings || []).filter(m => m.id !== deletedId);
+        this._lsSave('eye_meetings', this.cache.meetings);
+        this.recordDeletedId('eye_deleted_meeting_ids', deletedId);
+        this.cache.attendance = (this.cache.attendance || []).filter(a => a.meetingId !== deletedId);
+        this._lsSave('eye_attendance', this.cache.attendance);
+        this._lsSave('eye_attendance_backup', this.cache.attendance);
+        if (this.cache.notifications) {
+          this.cache.notifications = this.cache.notifications.filter(n => n.relatedId !== deletedId);
+          this._lsSave('eye_notifications', this.cache.notifications);
+        }
+        this.notify();
+        break;
+      }
+      case 'profiles': {
+        this.cache.users = (this.cache.users || []).filter(u => u.id !== deletedId);
+        this._lsSave('eye_users', this.cache.users);
+        this.recordDeletedId('eye_deleted_user_ids', deletedId);
+        this.notify();
+        break;
+      }
+      case 'work_plans': {
+        this.cache.workPlans = (this.cache.workPlans || []).filter(p => p.id !== deletedId);
+        this._lsSave('eye_work_plans', this.cache.workPlans);
+        this.recordDeletedId('eye_deleted_work_plan_ids', deletedId);
+        this.notify();
+        break;
+      }
+      case 'volunteer_ideas': {
+        this.cache.ideas = (this.cache.ideas || []).filter(i => i.id !== deletedId);
+        this._lsSave('eye_ideas', this.cache.ideas);
+        this.recordDeletedId('eye_deleted_idea_ids', deletedId);
+        this.notify();
+        break;
+      }
+      case 'member_evaluations': {
+        this.cache.evaluations = (this.cache.evaluations || []).filter(e => e.id !== deletedId);
+        this._lsSave('eye_member_evaluations', this.cache.evaluations);
+        this.recordDeletedId('eye_deleted_evaluation_ids', deletedId);
+        this.notify();
+        break;
+      }
+      case 'disciplinary_records': {
+        this.cache.disciplinaryRecords = (this.cache.disciplinaryRecords || []).filter(d => d.id !== deletedId);
+        this._lsSave('eye_disciplinary_records', this.cache.disciplinaryRecords);
+        this.recordDeletedId('eye_deleted_disciplinary_ids', deletedId);
+        this.notify();
+        break;
+      }
+      case 'live_workshops': {
+        this.cache.workshops = (this.cache.workshops || []).filter(w => w.id !== deletedId);
+        this._lsSave('eye_live_workshops', this.cache.workshops);
+        this.recordDeletedId('eye_deleted_workshop_ids', deletedId);
+        this.notify();
+        break;
+      }
+      default: {
+        this.debouncedRealtimeRefresh();
+      }
+    }
+  }
+
   // Keep the app in sync when ANY user changes shared data.
   private subscribeRealtime() {
     // Only subscribe if Supabase is configured
@@ -1441,77 +1614,33 @@ class SupabaseDatabase {
     }
 
     try {
-      // Subscribe to tasks table changes with optimistic local cache updates
-      const tasksChannel = supabase
-        .channel('eye-tasks-sync')
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'tasks' },
-          (payload) => {
-            const { event, new: newRow, old: oldRow } = payload;
-
-            if (event === 'INSERT' && newRow) {
-              const newTask = taskFromRow(newRow);
-              const existingIndex = this.cache.tasks.findIndex(t => t.id === newTask.id);
-
-              if (existingIndex === -1) {
-                // New task - add to cache
-                this.cache.tasks.unshift(newTask);
-                this._lsSave('eye_tasks', this.cache.tasks);
-                this.notify();
-              }
-            } else if (event === 'UPDATE' && newRow) {
-              const updatedTask = taskFromRow(newRow);
-              const targetIndex = this.cache.tasks.findIndex(t => t.id === updatedTask.id);
-
-              if (targetIndex !== -1) {
-                // Task exists - update locally
-                this.cache.tasks[targetIndex] = updatedTask;
-                this._lsSave('eye_tasks', this.cache.tasks);
-                this.notify();
-              }
-            } else if (event === 'DELETE' && oldRow) {
-              const deletedId = oldRow.id;
-              const targetIndex = this.cache.tasks.findIndex(t => t.id === deletedId);
-
-              if (targetIndex !== -1) {
-                // Remove from local cache
-                this.cache.tasks.splice(targetIndex, 1);
-                this._lsSave('eye_tasks', this.cache.tasks);
-                this.notify();
-              }
-            }
-          }
-        )
-        .subscribe();
-
-      // Subscribe to all platform tables for instant real-time synchronization across devices (debounced to preserve bandwidth)
+      // Subscribe to all platform tables for instant real-time synchronization across devices
       supabase
         .channel('eye-hub-changes')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' },              () => { this.debouncedRealtimeRefresh(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' },                 () => { this.debouncedRealtimeRefresh(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'submissions' },           () => { this.debouncedRealtimeRefresh(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'announcements' },         () => { this.debouncedRealtimeRefresh(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' },         () => { this.debouncedRealtimeRefresh(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'activity_logs' },          () => { this.debouncedRealtimeRefresh(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'meetings' },              () => { this.debouncedRealtimeRefresh(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance' },            () => { this.debouncedRealtimeRefresh(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'excuses_freezes' },       () => { this.debouncedRealtimeRefresh(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'work_plans' },            () => { this.debouncedRealtimeRefresh(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'volunteer_ideas' },       () => { this.debouncedRealtimeRefresh(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'member_evaluations' },    () => { this.debouncedRealtimeRefresh(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'leader_feedbacks' },      () => { this.debouncedRealtimeRefresh(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'disciplinary_records' },  () => { this.debouncedRealtimeRefresh(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'live_workshops' },        () => { this.debouncedRealtimeRefresh(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'issued_certificates' },  () => { this.debouncedRealtimeRefresh(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'reward_items' },          () => { this.debouncedRealtimeRefresh(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'reward_purchases' },      () => { this.debouncedRealtimeRefresh(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'weekly_quizzes' },        () => { this.debouncedRealtimeRefresh(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'weekly_challenges' },     () => { this.debouncedRealtimeRefresh(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'memory_wall' },           () => { this.debouncedRealtimeRefresh(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'occasions' },             () => { this.debouncedRealtimeRefresh(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'issued_posters' },        () => { this.debouncedRealtimeRefresh(); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'academy_courses' },       () => { this.debouncedRealtimeRefresh(); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' },              (p) => this.handleRealtimeChange('profiles', p))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' },                 (p) => this.handleRealtimeChange('tasks', p))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'submissions' },           (p) => this.handleRealtimeChange('submissions', p))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'announcements' },         (p) => this.handleRealtimeChange('announcements', p))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' },         (p) => this.handleRealtimeChange('notifications', p))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'activity_logs' },          (p) => this.handleRealtimeChange('activity_logs', p))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'meetings' },              (p) => this.handleRealtimeChange('meetings', p))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance' },            (p) => this.handleRealtimeChange('attendance', p))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'excuses_freezes' },       (p) => this.handleRealtimeChange('excuses_freezes', p))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'work_plans' },            (p) => this.handleRealtimeChange('work_plans', p))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'volunteer_ideas' },       (p) => this.handleRealtimeChange('volunteer_ideas', p))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'member_evaluations' },    (p) => this.handleRealtimeChange('member_evaluations', p))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'leader_feedbacks' },      (p) => this.handleRealtimeChange('leader_feedbacks', p))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'disciplinary_records' },  (p) => this.handleRealtimeChange('disciplinary_records', p))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'live_workshops' },        (p) => this.handleRealtimeChange('live_workshops', p))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'issued_certificates' },  (p) => this.handleRealtimeChange('issued_certificates', p))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'reward_items' },          (p) => this.handleRealtimeChange('reward_items', p))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'reward_purchases' },      (p) => this.handleRealtimeChange('reward_purchases', p))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'weekly_quizzes' },        (p) => this.handleRealtimeChange('weekly_quizzes', p))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'weekly_challenges' },     (p) => this.handleRealtimeChange('weekly_challenges', p))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'memory_wall' },           (p) => this.handleRealtimeChange('memory_wall', p))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'occasions' },             (p) => this.handleRealtimeChange('occasions', p))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'issued_posters' },        (p) => this.handleRealtimeChange('issued_posters', p))
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'academy_courses' },       (p) => this.handleRealtimeChange('academy_courses', p))
         .subscribe();
 
       console.debug('Full-platform real-time subscriptions established successfully');
@@ -2500,6 +2629,7 @@ class SupabaseDatabase {
             supabase.from('reward_purchases').delete().eq('user_id', id),
             supabase.from('issued_posters').delete().eq('user_id', id),
             supabase.from('issued_certificates').delete().eq('user_id', id),
+            supabase.from('issued_certificates').delete().eq('recipient_id', id),
             deleteAuthUsers([id]),
           ]);
 
@@ -3137,13 +3267,22 @@ class SupabaseDatabase {
       this.cache.tasks.splice(idx, 1);
       this.recordDeletedId('eye_deleted_task_ids', taskId);
       this._lsSave('eye_tasks', this.cache.tasks);
+
+      // Clean related submissions & notifications locally
+      this.cache.submissions = this.cache.submissions.filter(s => s.taskId !== taskId);
+      this._lsSave('eye_submissions', this.cache.submissions);
+      if (this.cache.notifications) {
+        this.cache.notifications = this.cache.notifications.filter(n => n.relatedId !== taskId);
+        this._lsSave('eye_notifications', this.cache.notifications);
+      }
       this.notify();
 
       if (isSupabaseConfigured && supabase) {
-        await supabase
-          .from('tasks')
-          .delete()
-          .eq('id', taskId);
+        await Promise.allSettled([
+          supabase.from('tasks').delete().eq('id', taskId),
+          supabase.from('submissions').delete().eq('task_id', taskId),
+          supabase.from('notifications').delete().eq('related_id', taskId),
+        ]);
       }
 
       this.logActivity(updater.id, updater.fullName, updater.role, 'Task Deletion', `Deleted task "${taskName}".`);
@@ -4171,7 +4310,11 @@ class SupabaseDatabase {
       this.notify();
 
       if (isSupabaseConfigured && supabase) {
-        await supabase.from('meetings').delete().eq('id', meetingId);
+        await Promise.allSettled([
+          supabase.from('meetings').delete().eq('id', meetingId),
+          supabase.from('attendance').delete().eq('meeting_id', meetingId),
+          supabase.from('notifications').delete().eq('related_id', meetingId),
+        ]);
       }
       this.logActivity(actor.id, actor.fullName, actor.role, 'Meeting Deleted', `Deleted meeting ${meetingId}`);
     } catch (err) {
@@ -5670,6 +5813,9 @@ class SupabaseDatabase {
   }
 
   async deleteCertificate(certId: string, actor: UserProfile): Promise<boolean> {
+    // 0) Record tombstone so refreshAll or mergeById never resurrects it
+    this.recordDeletedId('eye_deleted_certificate_ids', certId);
+
     // 1) Remove from localStorage
     const all = this._ls<IssuedCertificate>('eye_certificates');
     this._lsSave('eye_certificates', all.filter(c => c.id !== certId));
@@ -5703,6 +5849,9 @@ class SupabaseDatabase {
   async deleteCertificatesBulk(certIds: string[], actor: UserProfile): Promise<{ deletedCount: number; success: boolean }> {
     if (!certIds || certIds.length === 0) return { deletedCount: 0, success: true };
     const idSet = new Set(certIds);
+
+    // 0) Record tombstones
+    certIds.forEach(id => this.recordDeletedId('eye_deleted_certificate_ids', id));
 
     // 1) Remove from localStorage
     const all = this._ls<IssuedCertificate>('eye_certificates');
@@ -7820,16 +7969,131 @@ class SupabaseDatabase {
     return this.getExcuseRequests(_currentUser);
   }
 
-  clearAllExcuseAndFreezeRequests(actor: UserProfile): void {
+  async clearAllExcuseAndFreezeRequests(actor: UserProfile): Promise<void> {
     if (!isSuperAdmin(actor)) {
       console.warn('Unauthorized: Only Super Admin can clear all requests.');
       return;
     }
+    const allExcuses = this._ls<ExcuseRequest>('eye_excuse_requests') || [];
+    const allFreezes = this._ls<FreezeRequest>('eye_freeze_requests') || [];
+    const allComms = this._ls<CommitteeChangeRequest>('eye_committee_requests') || [];
+
+    allExcuses.forEach(e => this.recordDeletedId('eye_deleted_excuse_ids', e.id));
+    allFreezes.forEach(f => this.recordDeletedId('eye_deleted_freeze_ids', f.id));
+    allComms.forEach(c => this.recordDeletedId('eye_deleted_excuse_ids', c.id));
+
     this._lsSave('eye_excuse_requests', []);
     this._lsSave('eye_freeze_requests', []);
     this._lsSave('eye_committee_requests', []);
     this.notify();
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await supabase.from('excuses_freezes').delete().neq('id', '___NEVER___');
+      } catch (err) {
+        console.warn('[clearAllExcuseAndFreezeRequests Supabase error]:', err);
+      }
+    }
     this.logActivity(actor.id, actor.fullName, actor.role, 'Excuses & Freezes Cleared', 'Cleared all excuses, freeze requests, and committee change requests.');
+  }
+
+  async deleteExcuseRequest(id: string, actor: UserProfile): Promise<boolean> {
+    const list = this._ls<ExcuseRequest>('eye_excuse_requests') || [];
+    const target = list.find(r => r.id === id);
+    if (!target) return false;
+
+    if (!isSuperAdmin(actor) && actor.id !== target.memberId) {
+      console.warn('Unauthorized: Only Super Admin or the requester can delete this excuse.');
+      return false;
+    }
+
+    this._lsSave('eye_excuse_requests', list.filter(r => r.id !== id));
+    this.recordDeletedId('eye_deleted_excuse_ids', id);
+
+    if (this.cache.notifications) {
+      this.cache.notifications = this.cache.notifications.filter(n => n.relatedId !== id);
+      this._lsSave('eye_notifications', this.cache.notifications);
+    }
+    this.notify();
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await Promise.allSettled([
+          supabase.from('excuses_freezes').delete().eq('id', id),
+          supabase.from('notifications').delete().eq('related_id', id),
+        ]);
+      } catch (err) {
+        console.warn('[deleteExcuseRequest Supabase error]:', err);
+      }
+    }
+    this.logActivity(actor.id, actor.fullName, actor.role, 'Excuse Deleted', `Deleted excuse request ID: ${id}`);
+    return true;
+  }
+
+  async deleteFreezeRequest(id: string, actor: UserProfile): Promise<boolean> {
+    const list = this._ls<FreezeRequest>('eye_freeze_requests') || [];
+    const target = list.find(r => r.id === id);
+    if (!target) return false;
+
+    if (!isSuperAdmin(actor) && actor.id !== target.memberId) {
+      console.warn('Unauthorized: Only Super Admin or the requester can delete this freeze request.');
+      return false;
+    }
+
+    this._lsSave('eye_freeze_requests', list.filter(r => r.id !== id));
+    this.recordDeletedId('eye_deleted_freeze_ids', id);
+
+    if (this.cache.notifications) {
+      this.cache.notifications = this.cache.notifications.filter(n => n.relatedId !== id);
+      this._lsSave('eye_notifications', this.cache.notifications);
+    }
+    this.notify();
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await Promise.allSettled([
+          supabase.from('excuses_freezes').delete().eq('id', id),
+          supabase.from('notifications').delete().eq('related_id', id),
+        ]);
+      } catch (err) {
+        console.warn('[deleteFreezeRequest Supabase error]:', err);
+      }
+    }
+    this.logActivity(actor.id, actor.fullName, actor.role, 'Freeze Deleted', `Deleted freeze request ID: ${id}`);
+    return true;
+  }
+
+  async deleteCommitteeChangeRequest(id: string, actor: UserProfile): Promise<boolean> {
+    const list = this._ls<CommitteeChangeRequest>('eye_committee_requests') || [];
+    const target = list.find(r => r.id === id);
+    if (!target) return false;
+
+    if (!isSuperAdmin(actor) && actor.id !== target.memberId) {
+      console.warn('Unauthorized: Only Super Admin or the requester can delete this transfer request.');
+      return false;
+    }
+
+    this._lsSave('eye_committee_requests', list.filter(r => r.id !== id));
+    this.recordDeletedId('eye_deleted_excuse_ids', id);
+
+    if (this.cache.notifications) {
+      this.cache.notifications = this.cache.notifications.filter(n => n.relatedId !== id);
+      this._lsSave('eye_notifications', this.cache.notifications);
+    }
+    this.notify();
+
+    if (isSupabaseConfigured && supabase) {
+      try {
+        await Promise.allSettled([
+          supabase.from('excuses_freezes').delete().eq('id', id),
+          supabase.from('notifications').delete().eq('related_id', id),
+        ]);
+      } catch (err) {
+        console.warn('[deleteCommitteeChangeRequest Supabase error]:', err);
+      }
+    }
+    this.logActivity(actor.id, actor.fullName, actor.role, 'Committee Change Deleted', `Deleted committee change request ID: ${id}`);
+    return true;
   }
 
   createExcuseRequest(req: Omit<ExcuseRequest, 'id' | 'createdAt' | 'status'>, actor: UserProfile): ExcuseRequest {

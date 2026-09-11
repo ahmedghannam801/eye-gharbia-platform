@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../db/localDb';
 import { UserProfile, ExcuseRequest, FreezeRequest, CommitteeChangeRequest, ExcuseType, Meeting, Task } from '../types';
 import { isAdminUser, isSuperAdmin, canApproveExcuseOrRequest, canApproveCommitteeTransfer } from '../lib/permissions';
-import { FileText, Snowflake, Clock, CheckCircle2, XCircle, Send, MessageSquare, ArrowRightLeft } from 'lucide-react';
+import { FileText, Snowflake, Clock, CheckCircle2, XCircle, Send, MessageSquare, ArrowRightLeft, Trash2 } from 'lucide-react';
 import { useLanguage } from '../lib/LanguageContext';
 
 interface ExcusesAndFreezeProps {
@@ -113,12 +113,48 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
     return () => unsub();
   }, []);
 
-  const handleClearAllSampleRequests = () => {
-    if (confirm(isAr ? 'هل أنت متأكد من مسح جميع طلبات الأعذار والفريز وتغيير اللجان؟' : 'Clear all excuse, freeze, and committee requests?')) {
-      db.clearAllExcuseAndFreezeRequests(currentUser);
+  const handleClearAllSampleRequests = async () => {
+    if (confirm(isAr ? 'هل أنت متأكد من مسح جميع طلبات الأعذار والفريز وتغيير اللجان نهائياً من كل الأجهزة وقاعدة البيانات؟' : 'Permanently clear all excuse, freeze, and committee requests from all devices and database?')) {
+      await db.clearAllExcuseAndFreezeRequests(currentUser);
       loadData();
-      setSuccessMsg(isAr ? 'تم مسح جميع الطلبات بنجاح.' : 'Cleared all requests.');
+      setSuccessMsg(isAr ? 'تم مسح جميع الطلبات بنجاح من كافة الأجهزة.' : 'Cleared all requests across all devices.');
       setTimeout(() => setSuccessMsg(''), 3000);
+    }
+  };
+
+  const handleDeleteExcuse = async (id: string) => {
+    if (!confirm(isAr ? 'هل أنت متأكد من حذف هذا العذر نهائياً من كل الأجهزة وقاعدة البيانات؟' : 'Permanently delete this excuse from all devices?')) return;
+    try {
+      await db.deleteExcuseRequest(id, currentUser);
+      loadData();
+      setSuccessMsg(isAr ? 'تم حذف العذر نهائياً بنجاح.' : 'Excuse deleted successfully.');
+      setTimeout(() => setSuccessMsg(''), 3000);
+    } catch (e: any) {
+      alert(e?.message || (isAr ? 'حدث خطأ أثناء حذف العذر' : 'Error deleting excuse'));
+    }
+  };
+
+  const handleDeleteFreeze = async (id: string) => {
+    if (!confirm(isAr ? 'هل أنت متأكد من حذف طلب الفريز نهائياً من كل الأجهزة وقاعدة البيانات؟' : 'Permanently delete this freeze request from all devices?')) return;
+    try {
+      await db.deleteFreezeRequest(id, currentUser);
+      loadData();
+      setSuccessMsg(isAr ? 'تم حذف طلب الفريز نهائياً بنجاح.' : 'Freeze request deleted successfully.');
+      setTimeout(() => setSuccessMsg(''), 3000);
+    } catch (e: any) {
+      alert(e?.message || (isAr ? 'حدث خطأ أثناء حذف طلب الفريز' : 'Error deleting freeze request'));
+    }
+  };
+
+  const handleDeleteCommitteeChange = async (id: string) => {
+    if (!confirm(isAr ? 'هل أنت متأكد من حذف طلب نقل اللجنة نهائياً من كل الأجهزة وقاعدة البيانات؟' : 'Permanently delete this transfer request from all devices?')) return;
+    try {
+      await db.deleteCommitteeChangeRequest(id, currentUser);
+      loadData();
+      setSuccessMsg(isAr ? 'تم حذف طلب نقل اللجنة نهائياً بنجاح.' : 'Transfer request deleted successfully.');
+      setTimeout(() => setSuccessMsg(''), 3000);
+    } catch (e: any) {
+      alert(e?.message || (isAr ? 'حدث خطأ أثناء حذف طلب النقل' : 'Error deleting transfer request'));
     }
   };
 
@@ -1036,7 +1072,18 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
                       </div>
 
                       <div className="flex sm:flex-col items-center sm:items-end justify-between gap-2 shrink-0">
-                        {getStatusBadge(commReq.status)}
+                        <div className="flex items-center gap-1.5">
+                          {getStatusBadge(commReq.status)}
+                          {(isSuperAdmin(currentUser) || commReq.memberId === currentUser.id) && (
+                            <button
+                              onClick={() => handleDeleteCommitteeChange(commReq.id)}
+                              className="p-1.5 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-500 hover:text-rose-600 transition-colors cursor-pointer"
+                              title={isAr ? 'حذف الطلب نهائياً' : 'Delete Request'}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
 
                         {commReq.status === 'Pending' && (
                           canApproveCommitteeTransfer(currentUser) ? (
@@ -1103,7 +1150,18 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
                       </div>
 
                       <div className="flex sm:flex-col items-center sm:items-end justify-between gap-2 shrink-0">
-                        {getStatusBadge(exc.status)}
+                        <div className="flex items-center gap-1.5">
+                          {getStatusBadge(exc.status)}
+                          {(isSuperAdmin(currentUser) || exc.memberId === currentUser.id) && (
+                            <button
+                              onClick={() => handleDeleteExcuse(exc.id)}
+                              className="p-1.5 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-500 hover:text-rose-600 transition-colors cursor-pointer"
+                              title={isAr ? 'حذف العذر نهائياً' : 'Delete Excuse'}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
 
                         {exc.status === 'Pending' && (
                           canApproveRequest(exc.committee, exc.memberId) ? (
@@ -1169,7 +1227,18 @@ export const ExcusesAndFreezeModal: React.FC<ExcusesAndFreezeProps> = ({ current
                       </div>
 
                       <div className="flex sm:flex-col items-center sm:items-end justify-between gap-2 shrink-0">
-                        {getStatusBadge(frz.status)}
+                        <div className="flex items-center gap-1.5">
+                          {getStatusBadge(frz.status)}
+                          {(isSuperAdmin(currentUser) || frz.memberId === currentUser.id) && (
+                            <button
+                              onClick={() => handleDeleteFreeze(frz.id)}
+                              className="p-1.5 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-500 hover:text-rose-600 transition-colors cursor-pointer"
+                              title={isAr ? 'حذف طلب الفريز نهائياً' : 'Delete Freeze'}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
 
                         {frz.status === 'Pending' && (
                           canApproveRequest(frz.committee, frz.memberId) ? (
