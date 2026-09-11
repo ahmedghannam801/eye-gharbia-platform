@@ -17,6 +17,7 @@ export interface UserProfile {
   department: string; // HRM, EPR, Graphic Design, VIP, etc.
   membershipCode: string; // e.g. EYE-HRM-0023
   avatarUrl?: string;
+  avatar?: string;
   joinedDate: string;
   dateOfBirth?: string; // YYYY-MM-DD
   bio?: string;

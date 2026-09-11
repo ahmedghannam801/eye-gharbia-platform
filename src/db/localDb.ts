@@ -2476,7 +2476,7 @@ class SupabaseDatabase {
     const deletedUser = this.cache.users[idx];
     this.cache.users.splice(idx, 1);
 
-    this.cache.certificates = this.cache.certificates.filter(c => c.userId !== id);
+    this.cache.certificates = this.cache.certificates.filter(c => c.recipientId !== id && (c as any).userId !== id);
     this._lsSave('eye_certificates', this.cache.certificates);
     this.recordDeletedId('eye_deleted_user_ids', id);
     this._lsSave('eye_users', this.cache.users);
@@ -7816,6 +7816,10 @@ class SupabaseDatabase {
     return this._ls<ExcuseRequest>('eye_excuse_requests') || [];
   }
 
+  getExcuses(_currentUser?: UserProfile): ExcuseRequest[] {
+    return this.getExcuseRequests(_currentUser);
+  }
+
   clearAllExcuseAndFreezeRequests(actor: UserProfile): void {
     if (!isSuperAdmin(actor)) {
       console.warn('Unauthorized: Only Super Admin can clear all requests.');
@@ -8851,8 +8855,8 @@ class SupabaseDatabase {
 
         // 3. Check if member has an approved excuse for this task
         const hasApprovedExcuse = excuses.some(e =>
-          (e.status === 'Accepted' || e.status === 'مقبول' || e.status === 'Approved') &&
-          String(e.memberId || e.userId).trim() === String(member.id).trim() &&
+          (e.status === 'Approved' || (e.status as any) === 'Accepted' || (e.status as any) === 'مقبول') &&
+          String(e.memberId || (e as any).userId || '').trim() === String(member.id).trim() &&
           ((e.targetId && String(e.targetId).trim() === String(task.id).trim()) ||
            (e.targetTitle && task.name && e.targetTitle.trim().toLowerCase() === task.name.trim().toLowerCase()))
         );

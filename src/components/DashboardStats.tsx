@@ -5,7 +5,7 @@ import {
   Users, FileCheck, CheckSquare, Clock, UserPlus, ShieldAlert, CheckCircle, 
   XCircle, ArrowUpRight, Award, Plus, Trash2, Shield, Calendar, RefreshCcw, 
   ChevronLeft, ChevronRight, FileSpreadsheet, ArrowLeft, ArrowRight, BarChart3, MapPin,
-  CalendarDays, Megaphone, Flame, Star, Trophy, Sparkles, MessageSquare, BookOpen, Gift, CheckCheck, Lightbulb
+  CalendarDays, Megaphone, Flame, Star, Trophy, Sparkles, MessageSquare, BookOpen, Gift, CheckCheck, Lightbulb, QrCode
 } from 'lucide-react';
 import { useLanguage } from '../lib/LanguageContext';
 import { formatDateTime } from '../lib/dateUtils';

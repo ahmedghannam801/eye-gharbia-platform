@@ -8,7 +8,7 @@ import {
   AlertTriangle, File, HelpCircle, ChevronRight, ChevronLeft, CornerDownRight, Download, Trash2, Search,
   Star, Award, Users, Video, Target, UserCheck, Check, Clock, Eye, Layers, Filter, X,
   FileSpreadsheet, Loader2, Edit3, ExternalLink, Copy, Play, Image,
-  Link as LinkIcon, Globe, Sparkles
+  Link as LinkIcon, Globe, Sparkles, Cloud
 } from 'lucide-react';
 import { useLanguage } from '../lib/LanguageContext';
 import { downloadCertificate } from '../lib/certificateGenerator';

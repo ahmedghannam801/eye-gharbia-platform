@@ -124,11 +124,13 @@ const AllMembersEvaluationsView: React.FC<{
   const memberEvaluationsData = useMemo(() => {
     const evalsByMember = new Map<string, MemberEvaluation[]>();
     for (const e of allEvaluations) {
-      const list = evalsByMember.get(e.memberId);
+      const mId = (e as any).memberId || e.targetUserId;
+      if (!mId) continue;
+      const list = evalsByMember.get(mId);
       if (list) {
         list.push(e);
       } else {
-        evalsByMember.set(e.memberId, [e]);
+        evalsByMember.set(mId, [e]);
       }
     }
 

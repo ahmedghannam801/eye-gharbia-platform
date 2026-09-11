@@ -788,6 +788,8 @@ export const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ curr
   // Issue Mode: single | bulk | sheet
   const [issueMode, setIssueMode] = useState<'single' | 'bulk' | 'sheet'>('single');
   const isBulkMode = issueMode === 'bulk';
+  const [selectedRecipients, setSelectedRecipients] = useState<string[]>([]);
+  const [bulkCountSuccess, setBulkCountSuccess] = useState<number | null>(null);
 
   // Sheet Import State
   const [sheetRecipients, setSheetRecipients] = useState<SheetRecipient[]>([]);
@@ -1170,10 +1172,6 @@ export const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ curr
     };
     setLivePreview(preview);
   }, [selectedRecipient, selectedRecipients, sheetRecipients, issueMode, isBulkMode, certType, selectedStyle, certLang, customTitle, customBody, certGrade]);
-
-  // Bulk issue state
-  const [selectedRecipients, setSelectedRecipients] = useState<string[]>([]);
-  const [bulkCountSuccess, setBulkCountSuccess] = useState<number | null>(null);
 
   const handleToggleSelectMember = (id: string) => {
     setSelectedRecipients(prev =>

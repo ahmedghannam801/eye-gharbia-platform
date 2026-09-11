@@ -3,6 +3,7 @@ import { db } from '../db/localDb';
 import { UserProfile, ExcuseRequest, FreezeRequest, CommitteeChangeRequest, ExcuseType, Meeting, Task } from '../types';
 import { isAdminUser, isSuperAdmin, canApproveExcuseOrRequest, canApproveCommitteeTransfer } from '../lib/permissions';
 import { FileText, Snowflake, Clock, CheckCircle2, XCircle, Send, MessageSquare, ArrowRightLeft } from 'lucide-react';
+import { useLanguage } from '../lib/LanguageContext';
 
 interface ExcusesAndFreezeProps {
   currentUser: UserProfile;

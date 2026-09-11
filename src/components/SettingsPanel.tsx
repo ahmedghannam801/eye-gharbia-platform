@@ -21,6 +21,12 @@ interface SettingsPanelProps {
   onNavigateToView?: (view: string, targetId?: string) => void;
 }
 
+const matchesSearch = (fields: (string | undefined | null)[], query: string): boolean => {
+  if (!query || !query.trim()) return true;
+  const q = query.trim().toLowerCase();
+  return fields.some(f => f && f.toLowerCase().includes(q));
+};
+
 const ROLE_COLORS: Record<string, string> = {
   'Super Admin': 'bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-950/50 dark:text-purple-300 dark:border-purple-800/60',
   'Vice': 'bg-indigo-100 text-indigo-800 border-indigo-300 dark:bg-indigo-950/50 dark:text-indigo-300 dark:border-indigo-800/60',
@@ -2290,7 +2296,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                   </label>
                   <select
                     value={settings.theme || 'System'}
-                    onChange={e => setSettings({ ...settings, theme: e.target.value })}
+                    onChange={e => setSettings({ ...settings, theme: e.target.value as 'Light' | 'Dark' | 'System' })}
                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold focus:outline-none focus:border-indigo-500"
                   >
                     <option value="System">{ar ? 'تلقائي (حسب النظام)' : 'System Default'}</option>
@@ -2305,7 +2311,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({ currentUser, onNav
                   </label>
                   <select
                     value={settings.language || 'Arabic'}
-                    onChange={e => setSettings({ ...settings, language: e.target.value })}
+                    onChange={e => setSettings({ ...settings, language: e.target.value as 'English' | 'Arabic' })}
                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs font-bold focus:outline-none focus:border-indigo-500"
                   >
                     <option value="Arabic">العربية (Egypt 🇪🇬)</option>
