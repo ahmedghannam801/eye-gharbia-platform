@@ -35,6 +35,9 @@ const CERT_TYPE_META: Record<CertificateType, { label: string; icon: string; gra
   training: { label: 'شهادة إتمام تدريب', icon: '📚', gradient: 'linear-gradient(135deg, #3b82f6 0%, #06b6d4 100%)' },
   leadership: { label: 'شهادة القيادة المتميزة', icon: '👑', gradient: 'linear-gradient(135deg, #10b981 0%, #14b8a6 100%)' },
   custom: { label: 'شهادة مخصصة', icon: '✨', gradient: 'linear-gradient(135deg, #fb7185 0%, #ec4899 100%)' },
+  linkedin_workshop: { label: 'شهادة LinkedIn', icon: '💼', gradient: 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)' },
+  career_skills_workshop: { label: 'شهادة تطوير المهارات المهنية', icon: '📄', gradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' },
+  career_dev_workshop: { label: 'شهادة Career Development الشاملة', icon: '🎯', gradient: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)' },
 };
 
 const CERT_TYPES: { id: CertificateType; labelAr: string; label: string; color: string; icon: string }[] = [
@@ -43,6 +46,9 @@ const CERT_TYPES: { id: CertificateType; labelAr: string; label: string; color: 
   { id: 'training', labelAr: 'شهادة إتمام تدريب', label: 'Certificate of Training Completion', color: 'from-blue-500 to-cyan-500', icon: '📚' },
   { id: 'leadership', labelAr: 'شهادة القيادة المتميزة', label: 'Leadership Excellence Certificate', color: 'from-emerald-500 to-teal-600', icon: '👑' },
   { id: 'custom', labelAr: 'شهادة مخصصة', label: 'Custom Certificate', color: 'from-rose-400 to-pink-500', icon: '✨' },
+  { id: 'linkedin_workshop', labelAr: 'شهادة LinkedIn', label: 'LinkedIn Professional Branding Certificate', color: 'from-sky-500 to-blue-700', icon: '💼' },
+  { id: 'career_skills_workshop', labelAr: 'شهادة CV + ATS + Portfolio + Personal Branding', label: 'Career Development Skills Certificate', color: 'from-emerald-500 to-teal-700', icon: '📄' },
+  { id: 'career_dev_workshop', labelAr: 'شهادة Career Development — لمن حضر الاثنين', label: 'Career Development Certificate', color: 'from-indigo-500 to-purple-700', icon: '🎯' },
 ];
 
 // Convert an IssuedCertificate to the shape the certificateGenerator expects

@@ -2,20 +2,39 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import html2canvas from 'html2canvas';
 import { db } from '../db/localDb';
 import { UserProfile, CertificateType, IssuedCertificate, getUserRoleTitle } from '../types';
-import { Award, Download, User, Star, CheckCircle, Eye, Mail, X, Search, FileText, CheckSquare, Square, Loader2 } from 'lucide-react';
+import { Award, Download, User, Star, CheckCircle, Eye, Mail, X, Search, FileText, CheckSquare, Square, Loader2, Sparkles, Clock } from 'lucide-react';
 import { useLanguage } from '../lib/LanguageContext';
 import { downloadCertificate, downloadBulkCertificatesAsPdf, downloadCertificateAsPdf, printCertificate, getCommitteeSignatories, formatArabicConjunctions } from '../lib/certificateGenerator';
+import {
+  WORKSHOP_CERT_TEMPLATES,
+  WorkshopCertTemplate,
+  isWorkshopCertsActive,
+  getWorkshopRemainingTime,
+  formatBodyForRecipient,
+  isWorkshopCertType,
+} from '../lib/workshopCerts';
 import QRCode from 'qrcode';
 
 interface CertificateGeneratorProps { currentUser: UserProfile; }
 
-const CERT_TYPES: { id: CertificateType; labelAr: string; label: string; color: string; icon: string }[] = [
+const BASE_CERT_TYPES: { id: CertificateType; labelAr: string; label: string; color: string; icon: string }[] = [
   { id: 'appreciation', labelAr: 'شهادة تقدير وعرفان', label: 'Certificate of Appreciation', color: 'from-amber-400 to-orange-500', icon: '🌟' },
   { id: 'excellence', labelAr: 'شهادة تميز وإتقان', label: 'Certificate of Excellence', color: 'from-purple-500 to-indigo-600', icon: '🏆' },
   { id: 'training', labelAr: 'شهادة إتمام تدريب', label: 'Certificate of Training Completion', color: 'from-blue-500 to-cyan-500', icon: '📚' },
   { id: 'leadership', labelAr: 'شهادة القيادة المتميزة', label: 'Leadership Excellence Certificate', color: 'from-emerald-500 to-teal-600', icon: '👑' },
   { id: 'custom', labelAr: 'شهادة مخصصة', label: 'Custom Certificate', color: 'from-rose-400 to-pink-500', icon: '✨' },
 ];
+
+const WORKSHOP_TYPES_LIST: { id: CertificateType; labelAr: string; label: string; color: string; icon: string }[] = WORKSHOP_CERT_TEMPLATES.map(t => ({
+  id: t.id,
+  labelAr: `${t.labelAr} (مؤقتة ⏳)`,
+  label: t.title,
+  color: t.color,
+  icon: t.icon,
+}));
+
+const ALL_KNOWN_CERT_TYPES = [...BASE_CERT_TYPES, ...WORKSHOP_TYPES_LIST];
+const CERT_TYPES = ALL_KNOWN_CERT_TYPES;
 
 export const CERT_STYLES = [
   { id: 'style1' as const, labelAr: 'القالب الأصلي المعتمد 👑', label: 'Original Approved Template', descAr: 'الإطار الأزرق الملكي المعتمد لجميع شهادات الكيان', icon: '👑', color: 'from-blue-600 to-indigo-700' },
@@ -446,6 +465,30 @@ export const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ curr
   const [issuedSearchQuery, setIssuedSearchQuery] = useState('');
   const [error, setError] = useState('');
 
+  // 24-Hour Workshop Certificates Countdown & Lifecycle
+  const [workshopRemaining, setWorkshopRemaining] = useState(getWorkshopRemainingTime());
+  const isWorkshopActive = !workshopRemaining.isExpired;
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setWorkshopRemaining(getWorkshopRemainingTime());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const activeCertTypes = isWorkshopActive
+    ? [...BASE_CERT_TYPES, ...WORKSHOP_TYPES_LIST]
+    : BASE_CERT_TYPES;
+
+  const handleApplyWorkshopTemplate = (tpl: WorkshopCertTemplate) => {
+    setCertType(tpl.id);
+    setCertLang('en');
+    setCustomTitle(tpl.title);
+    const recipient = users.find(u => u.id === selectedRecipient);
+    const resolvedBody = formatBodyForRecipient(tpl.bodyTemplate, recipient?.fullName || '[Name]');
+    setCustomBody(resolvedBody);
+  };
+
   const toCertGeneratorData = (cert: IssuedCertificate) => ({
     memberName: cert.recipientName,
     recipientRole: cert.recipientRole,
@@ -607,13 +650,22 @@ export const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ curr
 
   const users = db.getUsers(currentUser).filter(u => u.id !== currentUser.id);
   const myCerts = db.getMyCertificates(currentUser.id);
-  const selectedDef = CERT_TYPES.find(c => c.id === certType)!;
+  const selectedDef = ALL_KNOWN_CERT_TYPES.find(c => c.id === certType) || BASE_CERT_TYPES[0];
   const [memberSearch, setMemberSearch] = useState('');
 
   const buildDefaultBody = (recipientId: string, type: CertificateType, lang: 'ar' | 'en' = 'ar') => {
     const r = users.find(u => u.id === recipientId);
-    const name = r?.fullName || '';
-    if (lang === 'en') {
+    const name = r?.fullName || '[Name]';
+    if (lang === 'en' || isWorkshopCertType(type)) {
+      if (type === 'linkedin_workshop') {
+        return `This certificate is proudly presented to ${name} in recognition of their participation in the LinkedIn session, covering key practices for building and optimizing a professional LinkedIn profile and strengthening their professional presence.`;
+      }
+      if (type === 'career_skills_workshop') {
+        return `This certificate is proudly presented to ${name} in recognition of their participation in the Career Development session, covering CV writing, ATS optimization, portfolio development, and personal branding.`;
+      }
+      if (type === 'career_dev_workshop') {
+        return `This certificate is proudly presented to ${name} in recognition of their successful participation in the Career Development Program, covering LinkedIn, CV writing, ATS optimization, portfolio development, and personal branding.`;
+      }
       if (type === 'appreciation') return `The Egyptian Youth Entity (EYE) presents this certificate in recognition and appreciation of member ${name} for outstanding efforts and sincere dedication in serving the team and achieving the entity's goals.`;
       if (type === 'excellence') return `The Egyptian Youth Entity (EYE) certifies that ${name} has demonstrated exceptional performance and high level of excellence, reflecting true competence and high volunteer spirit deserving of appreciation.`;
       if (type === 'training') return `This is to certify that ${name} has successfully completed the specified training program within the EYE entity and passed all required standards with efficiency.`;
@@ -632,9 +684,15 @@ export const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ curr
     if (!selectedRecipient) { setLivePreview(null); return; }
     const recipient = users.find(u => u.id === selectedRecipient);
     if (!recipient) return;
-    const isEnCert = certLang === 'en';
-    const title = certType === 'custom' ? (customTitle || (isEnCert ? 'Custom Certificate' : 'شهادة مخصصة')) : (isEnCert ? selectedDef.label : selectedDef.labelAr);
-    const body = customBody || buildDefaultBody(selectedRecipient, certType, certLang);
+    const isEnCert = certLang === 'en' || isWorkshopCertType(certType);
+    const workshopTpl = WORKSHOP_CERT_TEMPLATES.find(t => t.id === certType);
+    const title = workshopTpl
+      ? (customTitle || workshopTpl.title)
+      : certType === 'custom'
+        ? (customTitle || (isEnCert ? 'Custom Certificate' : 'شهادة مخصصة'))
+        : (isEnCert ? (selectedDef?.label || 'Certificate') : (selectedDef?.labelAr || 'شهادة'));
+    const rawBody = customBody || buildDefaultBody(selectedRecipient, certType, certLang);
+    const body = formatBodyForRecipient(rawBody, recipient.fullName);
     const preview: IssuedCertificate = {
       id: 'preview-0000',
       recipientId: recipient.id,
@@ -687,8 +745,13 @@ export const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ curr
         setError(ar ? 'يرجى تحديد عضو واحد على الأقل لإصدار الشهادات.' : 'Please select at least one recipient.');
         return;
       }
-      const isEnCert = certLang === 'en';
-      const title = certType === 'custom' ? customTitle : (isEnCert ? selectedDef.label : selectedDef.labelAr);
+      const isEnCert = certLang === 'en' || isWorkshopCertType(certType);
+      const workshopTpl = WORKSHOP_CERT_TEMPLATES.find(t => t.id === certType);
+      const title = workshopTpl
+        ? (customTitle || workshopTpl.title)
+        : certType === 'custom'
+          ? customTitle
+          : (isEnCert ? (selectedDef?.label || 'Certificate') : (selectedDef?.labelAr || 'شهادة'));
       if (certType === 'custom' && !customTitle) {
         setError(ar ? 'يرجى كتابة عنوان الشهادة.' : 'Please enter a certificate title.');
         return;
@@ -700,7 +763,8 @@ export const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ curr
         for (const recipientId of selectedRecipients) {
           const recipient = users.find(u => u.id === recipientId);
           if (!recipient) continue;
-          const body = customBody || buildDefaultBody(recipientId, certType, certLang);
+          const rawBody = customBody || buildDefaultBody(recipientId, certType, certLang);
+          const body = formatBodyForRecipient(rawBody, recipient.fullName);
           const cert = await db.issueCertificate(
             recipient.id,
             recipient.fullName,
@@ -732,11 +796,17 @@ export const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ curr
 
     // Single Recipient Issue
     if (!selectedRecipient) { setError(ar ? 'يرجى اختيار العضو.' : 'Please select a recipient.'); return; }
-    const isEnCert = certLang === 'en';
-    const title = certType === 'custom' ? customTitle : (isEnCert ? selectedDef.label : selectedDef.labelAr);
-    const body = customBody || buildDefaultBody(selectedRecipient, certType, certLang);
+    const isEnCert = certLang === 'en' || isWorkshopCertType(certType);
+    const workshopTpl = WORKSHOP_CERT_TEMPLATES.find(t => t.id === certType);
+    const title = workshopTpl
+      ? (customTitle || workshopTpl.title)
+      : certType === 'custom'
+        ? customTitle
+        : (isEnCert ? (selectedDef?.label || 'Certificate') : (selectedDef?.labelAr || 'شهادة'));
     if (certType === 'custom' && !customTitle) { setError(ar ? 'يرجى كتابة عنوان الشهادة.' : 'Please enter a certificate title.'); return; }
     const recipient = users.find(u => u.id === selectedRecipient)!;
+    const rawBody = customBody || buildDefaultBody(selectedRecipient, certType, certLang);
+    const body = formatBodyForRecipient(rawBody, recipient.fullName);
     try {
       const cert = await db.issueCertificate(recipient.id, recipient.fullName, recipient.role, certType, title, body, currentUser, recipient.committee, certGrade ? parseInt(certGrade) : undefined, certLang);
       setIssueSuccess(cert);
@@ -761,8 +831,13 @@ export const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ curr
       setError(ar ? 'يرجى تحديد عضو واحد على الأقل لإصدار الشهادات.' : 'Please select at least one recipient.');
       return;
     }
-    const isEnCert = certLang === 'en';
-    const title = certType === 'custom' ? customTitle : (isEnCert ? selectedDef.label : selectedDef.labelAr);
+    const isEnCert = certLang === 'en' || isWorkshopCertType(certType);
+    const workshopTpl = WORKSHOP_CERT_TEMPLATES.find(t => t.id === certType);
+    const title = workshopTpl
+      ? (customTitle || workshopTpl.title)
+      : certType === 'custom'
+        ? customTitle
+        : (isEnCert ? (selectedDef?.label || 'Certificate') : (selectedDef?.labelAr || 'شهادة'));
     if (certType === 'custom' && !customTitle) {
       setError(ar ? 'يرجى كتابة عنوان الشهادة.' : 'Please enter a certificate title.');
       return;
@@ -777,7 +852,8 @@ export const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ curr
         const recipientId = selectedRecipients[i];
         const recipient = users.find(u => u.id === recipientId);
         if (!recipient) continue;
-        const body = customBody || buildDefaultBody(recipientId, certType, certLang);
+        const rawBody = customBody || buildDefaultBody(recipientId, certType, certLang);
+        const body = formatBodyForRecipient(rawBody, recipient.fullName);
         const cert = await db.issueCertificate(
           recipient.id,
           recipient.fullName,
@@ -972,6 +1048,92 @@ export const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ curr
               </div>
             </div>
 
+            {/* 24-Hour Temporary Workshop Certificates Showcase Banner & Quick Selectors */}
+            {isWorkshopActive && (
+              <div className="relative overflow-hidden rounded-2xl p-3.5 sm:p-4 bg-gradient-to-br from-amber-500/10 via-blue-500/5 to-indigo-500/10 border-2 border-amber-400/60 dark:border-amber-500/40 shadow-lg space-y-3">
+                {/* Glow decor */}
+                <div className="absolute top-0 end-0 -mt-6 -me-6 w-24 h-24 bg-amber-400/20 rounded-full blur-2xl pointer-events-none" />
+
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-300/40 dark:border-amber-500/30 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="flex items-center justify-center w-7 h-7 rounded-xl bg-amber-500 text-white shadow-sm font-black text-xs">
+                      ⚡
+                    </span>
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-black text-slate-900 dark:text-white flex items-center gap-1.5">
+                        <span>{ar ? 'نماذج ورش العمل المعتمدة مؤقتاً' : 'Exclusive Workshop Certificate Templates'}</span>
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-400/40">
+                          {ar ? 'متاحة 24 ساعة فقط ⏳' : '24h Limited Edition ⏳'}
+                        </span>
+                      </h4>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">
+                        {ar
+                          ? 'اضغط على أي نموذج لتطبيقه وتوليد نصه بالإنجليزية مع دمج اسم العضو المختار تلقائياً'
+                          : 'Click any template to auto-populate English content with dynamic member name'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Live Countdown Timer */}
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 text-amber-400 font-mono text-xs font-black shadow-inner border border-amber-500/30 ms-auto">
+                    <Clock className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+                    <span>{ar ? 'متبقي:' : 'Left:'} {workshopRemaining.formattedCountdown}</span>
+                  </div>
+                </div>
+
+                {/* The 3 Workshop Certificate Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  {WORKSHOP_CERT_TEMPLATES.map(tpl => {
+                    const isSelected = certType === tpl.id;
+                    return (
+                      <div
+                        key={tpl.id}
+                        onClick={() => handleApplyWorkshopTemplate(tpl)}
+                        className={`cursor-pointer group relative rounded-xl p-3 border-2 transition-all flex flex-col justify-between gap-2 bg-white dark:bg-slate-900 ${
+                          isSelected
+                            ? 'border-eye-brand ring-2 ring-eye-brand/30 shadow-md scale-[1.01]'
+                            : 'border-slate-200 dark:border-slate-800 hover:border-amber-400 hover:shadow-xs'
+                        }`}
+                      >
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="text-xl">{tpl.icon}</span>
+                            <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-sans">
+                              {tpl.badgeAr}
+                            </span>
+                          </div>
+                          <div>
+                            <p className="text-xs font-black text-slate-900 dark:text-white group-hover:text-eye-brand transition-colors leading-tight">
+                              {tpl.number}. {tpl.labelAr}
+                            </p>
+                            <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 font-mono mt-0.5 truncate">
+                              {tpl.title}
+                            </p>
+                          </div>
+                          <p className="text-[10px] text-slate-600 dark:text-slate-400 line-clamp-2 leading-relaxed bg-slate-50 dark:bg-slate-800/60 p-1.5 rounded-lg border border-slate-200/50 dark:border-slate-700/50">
+                            {tpl.descriptionAr}
+                          </p>
+                        </div>
+
+                        <div className="pt-1 flex items-center justify-between text-[11px] font-black">
+                          <button
+                            type="button"
+                            className={`w-full py-1.5 px-2 rounded-lg text-center font-bold text-[10px] transition-all flex items-center justify-center gap-1 ${
+                              isSelected
+                                ? 'bg-eye-brand text-white shadow-xs'
+                                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 group-hover:bg-amber-500 group-hover:text-white'
+                            }`}
+                          >
+                            {isSelected ? (ar ? '✓ النموذج المختار' : '✓ Selected') : (ar ? 'تطبيق النموذج ⚡' : 'Apply Template ⚡')}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Recipient Search & Selector */}
             {(() => {
               const filteredMembers = users.filter(u =>
@@ -1063,9 +1225,18 @@ export const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ curr
             {/* Cert Type */}
             <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider">{ar ? 'نوع الشهادة' : 'Certificate Type'}</label>
-              <div className="grid grid-cols-1 gap-2">
-                {CERT_TYPES.map(ct => (
-                  <button key={ct.id} onClick={() => setCertType(ct.id)}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {activeCertTypes.map(ct => (
+                  <button key={ct.id} onClick={() => {
+                    setCertType(ct.id);
+                    const wTpl = WORKSHOP_CERT_TEMPLATES.find(t => t.id === ct.id);
+                    if (wTpl) {
+                      setCertLang('en');
+                      setCustomTitle(wTpl.title);
+                      const recipient = users.find(u => u.id === selectedRecipient);
+                      setCustomBody(formatBodyForRecipient(wTpl.bodyTemplate, recipient?.fullName || '[Name]'));
+                    }
+                  }}
                     className={`flex items-center gap-2 p-2.5 rounded-xl border-2 text-start transition-all text-xs font-bold ${certType === ct.id ? `border-eye-brand bg-blue-50 dark:bg-blue-950/20 text-eye-brand` : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-300'}`}>
                     <span className="text-xl">{ct.icon}</span>
                     <span>{ar ? ct.labelAr : ct.label}</span>

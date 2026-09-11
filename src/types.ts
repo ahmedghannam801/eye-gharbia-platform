@@ -577,7 +577,15 @@ export interface UserBadge {
 // ─────────────────────────────────────────────
 // CERTIFICATE GENERATOR
 // ─────────────────────────────────────────────
-export type CertificateType = 'appreciation' | 'excellence' | 'training' | 'leadership' | 'custom';
+export type CertificateType =
+  | 'appreciation'
+  | 'excellence'
+  | 'training'
+  | 'leadership'
+  | 'custom'
+  | 'linkedin_workshop'
+  | 'career_skills_workshop'
+  | 'career_dev_workshop';
 export type CertificateDesignStyle = 'style1' | 'style2' | 'style3' | 'style4' | 'style5';
 
 export const getUserRoleTitle = (
