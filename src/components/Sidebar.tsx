@@ -3,7 +3,7 @@ import { EyeLogo, MinistryLogo } from './EyeLogo';
 
 import { UserProfile, getUserRoleTitle } from '../types';
 import { db, saveProfileOverride } from '../db/localDb';
-import { PanelRightClose, PanelRightOpen, LayoutDashboard, FolderKanban, Megaphone, BarChart3, User, Settings, LogOut, X, Phone, Share2, Trophy, Bell, CalendarDays, Star, Target, Lightbulb, BookOpen, Gift, HelpCircle, Crown, Video, Radio, FileCheck, Calendar, MessageSquare, Flame, FolderDown, Bot, Camera, Clock, Award, Palette, ShieldAlert, Library } from 'lucide-react';
+import { PanelRightClose, PanelRightOpen, LayoutDashboard, FolderKanban, Megaphone, BarChart3, User, Settings, LogOut, X, Phone, Share2, Trophy, Bell, CalendarDays, Star, Target, Lightbulb, BookOpen, Gift, HelpCircle, Crown, Video, Radio, FileCheck, Calendar, MessageSquare, Flame, FolderDown, Bot, Camera, Clock, Award, Palette, ShieldAlert, Library, Sparkles } from 'lucide-react';
 import { useLanguage } from '../lib/LanguageContext';
 import { useTheme } from '../lib/ThemeContext';
 
@@ -81,7 +81,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           items: [
             { id: 'dashboard',     label: language === 'ar' ? 'الرئيسية' : t('dashboard'),     icon: LayoutDashboard, roles: ALL_ROLES },
             { id: 'tasks',         label: language === 'ar' ? 'المهام والتسليمات' : t('tasks'), icon: FolderKanban,   roles: ALL_ROLES },
-            { id: 'academy',       label: language === 'ar' ? 'المراجع وبنك المعرفة 📚' : 'Knowledge & References', icon: Library, roles: ALL_ROLES },
+            { id: 'academy',       label: language === 'ar' ? 'حاجات هتفيدك 💡' : 'Helpful Resources 💡', icon: Sparkles, roles: ALL_ROLES },
             { id: 'meetings',      label: language === 'ar' ? 'الاجتماعات والحضور' : 'Meetings', icon: CalendarDays,   roles: ALL_ROLES },
             { id: 'announcements', label: language === 'ar' ? 'الإعلانات والتعاميم' : t('announcements'), icon: Megaphone, roles: ALL_ROLES, badge: unreadCount },
           ],
@@ -111,7 +111,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           items: [
             { id: 'dashboard',     label: language === 'ar' ? 'لوحة التحكم الرئيسية' : t('dashboard'), icon: LayoutDashboard, roles: ALL_ROLES },
             { id: 'tasks',         label: language === 'ar' ? 'إدارة المهام والتسليمات' : t('tasks'), icon: FolderKanban, roles: ALL_ROLES },
-            { id: 'academy',       label: language === 'ar' ? 'المراجع وبنك المعرفة 📚' : 'Knowledge & References', icon: Library, roles: ALL_ROLES },
+            { id: 'academy',       label: language === 'ar' ? 'حاجات هتفيدك 💡' : 'Helpful Resources 💡', icon: Sparkles, roles: ALL_ROLES },
             { id: 'meetings',      label: language === 'ar' ? 'الاجتماعات وتسجيل الحضور' : 'Meetings', icon: CalendarDays, roles: ALL_ROLES },
             { id: 'announcements', label: language === 'ar' ? 'الإعلانات والتعاميم' : t('announcements'), icon: Megaphone, roles: ALL_ROLES, badge: unreadCount },
             { id: 'profile',       label: t('profile'), icon: User, roles: ALL_ROLES },

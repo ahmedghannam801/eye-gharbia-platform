@@ -452,6 +452,7 @@ export interface AcademyCourse {
   committee: string; // 'All' or specific committee
   readsCount: number;
   completedBy: string[]; // array of userIds
+  pointsReward?: number; // Optional reward points (default 0 or specified by admin)
   createdAt?: string;
   createdBy?: string;
   createdByName?: string;

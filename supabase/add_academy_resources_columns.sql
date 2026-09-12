@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS public.academy_courses (
   duration text,
   author text,
   tags jsonb DEFAULT '[]',
+  points_reward integer DEFAULT 0,
   created_at timestamptz DEFAULT now(),
   created_by text,
   created_by_name text
@@ -34,6 +35,7 @@ ALTER TABLE IF EXISTS public.academy_courses
   ADD COLUMN IF NOT EXISTS duration text,
   ADD COLUMN IF NOT EXISTS author text,
   ADD COLUMN IF NOT EXISTS tags jsonb DEFAULT '[]',
+  ADD COLUMN IF NOT EXISTS points_reward integer DEFAULT 0,
   ADD COLUMN IF NOT EXISTS governorate text DEFAULT 'الغربية',
   ADD COLUMN IF NOT EXISTS created_at timestamptz DEFAULT now(),
   ADD COLUMN IF NOT EXISTS created_by text,
