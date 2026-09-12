@@ -595,6 +595,25 @@
 .animate-slide-in-right { animation: slide-in-right 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
 .animate-slide-in-left  { animation: slide-in-left 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
 
+@keyframes slide-out-right {
+  0%   { transform: translateX(0) scale(1); opacity: 1; }
+  100% { transform: translateX(120%) scale(0.95); opacity: 0; }
+}
+@keyframes slide-out-left {
+  0%   { transform: translateX(0) scale(1); opacity: 1; }
+  100% { transform: translateX(-120%) scale(0.95); opacity: 0; }
+}
+.animate-slide-out-right { animation: slide-out-right 0.22s cubic-bezier(0.4, 0, 1, 1) forwards; }
+.animate-slide-out-left  { animation: slide-out-left 0.22s cubic-bezier(0.4, 0, 1, 1) forwards; }
+
+@keyframes toast-progress {
+  from { width: 100%; }
+  to   { width: 0%; }
+}
+.animate-toast-progress {
+  animation: toast-progress linear forwards;
+}
+
 @keyframes spin-slow {
   from { transform: rotate(0deg); }
   to   { transform: rotate(360deg); }

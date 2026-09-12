@@ -435,16 +435,26 @@ export interface VolunteerIdea {
 // ─────────────────────────────────────────────
 // ACADEMY & TRAINING LIBRARY
 // ─────────────────────────────────────────────
+export type AcademyResourceType = 'video' | 'book' | 'article' | 'guide' | 'reference';
+
 export interface AcademyCourse {
   id: string;
   title: string;
   description: string;
-  category: string; // e.g. "Design", "Management", "General"
+  category: string; // e.g. "Design", "Management", "General", "HR", "Technical"
+  type?: AcademyResourceType; // 'video' | 'book' | 'article' | 'guide' | 'reference'
   pdfUrl?: string;
-  videoUrl?: string;
-  committee: string; // 'All' or specific
+  videoUrl?: string; // YouTube URL or direct video link
+  linkUrl?: string; // External article, Google Drive, book, or reference URL
+  duration?: string; // e.g. "15 دقيقة", "قراءة 10 دقائق"
+  author?: string; // Speaker, instructor, or author name
+  tags?: string[];
+  committee: string; // 'All' or specific committee
   readsCount: number;
   completedBy: string[]; // array of userIds
+  createdAt?: string;
+  createdBy?: string;
+  createdByName?: string;
 }
 
 // ─────────────────────────────────────────────

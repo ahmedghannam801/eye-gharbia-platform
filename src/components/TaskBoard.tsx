@@ -629,9 +629,9 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
   const [memberSearchQuery, setMemberSearchQuery] = useState('');
 
-  // Member Upload States (Supports multiple files, photos, and Google Drive cloud links)
   const [submissionMode, setSubmissionMode] = useState<'files' | 'link'>('files');
   const [cloudSubmissionLink, setCloudSubmissionLink] = useState('');
+  const [isResubmitting, setIsResubmitting] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -640,6 +640,10 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
   const [customFileSize, setCustomFileSize] = useState('');
   const [uploadError, setUploadError] = useState('');
   const [localCompletedSubtasks, setLocalCompletedSubtasks] = useState<string[]>([]);
+
+  useEffect(() => {
+    setIsResubmitting(false);
+  }, [selectedTask?.id]);
 
   // Leader Review States & Sub-committee Grouping
   const [selectedReviewSub, setSelectedReviewSub] = useState<Submission | null>(null);
@@ -1091,14 +1095,13 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
     }
 
     if (submissionMode === 'link') {
-      const cleanLink = cloudSubmissionLink.trim();
+      let cleanLink = cloudSubmissionLink.trim();
       if (!cleanLink) {
-        setUploadError(language === 'ar' ? 'يرجى إدخال رابط الحل (Google Drive أو OneDrive أو غيره)' : 'Please enter solution link');
+        setUploadError(language === 'ar' ? 'يرجى إدخال رابط الحل (Google Drive أو OneDrive أو Figma أو غيره)' : 'Please enter solution link');
         return;
       }
       if (!cleanLink.startsWith('http://') && !cleanLink.startsWith('https://')) {
-        setUploadError(language === 'ar' ? 'يرجى التأكد من أن الرابط يبدأ بـ https://' : 'URL must start with https://');
-        return;
+        cleanLink = 'https://' + cleanLink;
       }
     }
 
@@ -1112,17 +1115,24 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
       let totalCountForNotify = uploadFiles.length;
 
       if (submissionMode === 'link') {
-        const cleanLink = cloudSubmissionLink.trim();
+        let cleanLink = cloudSubmissionLink.trim();
+        if (!cleanLink.startsWith('http://') && !cleanLink.startsWith('https://')) {
+          cleanLink = 'https://' + cleanLink;
+        }
         const isGDrive = /drive\.google\.com|docs\.google\.com/i.test(cleanLink);
         const isOneDrive = /onedrive|1drv\.ms/i.test(cleanLink);
         const isFigma = /figma\.com/i.test(cleanLink);
         const isGithub = /github\.com/i.test(cleanLink);
+        const isCanva = /canva\.com/i.test(cleanLink);
+        const isNotion = /notion\.so/i.test(cleanLink);
 
         let defaultTitle = 'رابط تسليم سحابي 🔗';
         if (isGDrive) defaultTitle = 'مشروع Google Drive 📁';
-        else if (isOneDrive) defaultTitle = 'مشروع OneDrive 📁';
-        else if (isFigma) defaultTitle = 'مشروع Figma 🎨';
+        else if (isFigma) defaultTitle = 'تصميم Figma 🎨';
+        else if (isCanva) defaultTitle = 'مشروع Canva 📐';
         else if (isGithub) defaultTitle = 'مشروع GitHub 💻';
+        else if (isOneDrive) defaultTitle = 'مشروع OneDrive 📁';
+        else if (isNotion) defaultTitle = 'مستند Notion 📝';
 
         submittedFileName = customFileName.trim() || defaultTitle;
         submittedFileSize = 'رابط سحابي ☁️';
@@ -1364,6 +1374,7 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
       setCloudSubmissionLink('');
       setCustomFileName('');
       setCustomFileSize('');
+      setIsResubmitting(false);
       await loadData();
     } catch (err: any) {
       setIsUploading(false);
@@ -1502,6 +1513,10 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-[10px] font-black uppercase tracking-widest text-amber-600">
                   {language === 'ar' ? `لجنة ${translateCommittee(selectedTask.committee)} • قسم ${translateDepartment(selectedTask.department)}` : `${selectedTask.committee} Committee • ${selectedTask.department} Dept`}
+                </span>
+                <span className="text-[10px] bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                  <LinkIcon className="w-3 h-3" />
+                  <span>{language === 'ar' ? 'التسليم باللينك متاح 🔗' : 'Link Submission Supported'}</span>
                 </span>
                 {selectedTask.assignedMemberIds && Array.isArray(selectedTask.assignedMemberIds) && selectedTask.assignedMemberIds.length > 0 && (
                   <span className="text-[10px] bg-purple-50 text-purple-600 dark:bg-purple-950/30 dark:text-purple-400 border border-purple-200 dark:border-purple-800 px-2 py-0.5 rounded-full font-bold">
@@ -1672,7 +1687,7 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
             )}
           </div>
 
-          {userSubmission ? (
+          {userSubmission && !isResubmitting ? (
             <div className="p-4 bg-slate-50 dark:bg-slate-850 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3 text-start">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-2">
@@ -1692,7 +1707,7 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
                   return (
                     <div className="pt-2 border-t border-slate-200 dark:border-slate-800">
                       <a href={userSubmission.fileUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 rounded-xl font-bold text-xs border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900 transition-colors">
-                        <LinkIcon className="w-4 h-4" /> {language === 'ar' ? 'زيارة الرابط السحابي' : 'Open Cloud Link'}
+                        <LinkIcon className="w-4 h-4" /> {language === 'ar' ? 'زيارة الرابط السحابي المسلم ↗' : 'Open Submitted Cloud Link ↗'}
                       </a>
                     </div>
                   );
@@ -1751,11 +1766,55 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
                   <strong>ملاحظات المراجعة:</strong> {userSubmission.comment}
                 </p>
               )}
+
+              {/* Resubmit / Edit Link Button */}
+              <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between flex-wrap gap-2">
+                <span className="text-[11px] text-slate-500 font-medium">
+                  {selectedTask.allowResubmission
+                    ? (language === 'ar' ? '✅ تسمح هذه المهمة بإعادة التسليم وتحديث الرابط' : 'Resubmission is allowed for this task')
+                    : (language === 'ar' ? 'تعديل أو إعادة إرسال التسليم' : 'Edit or resubmit')}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const isLink = isCloudLink(userSubmission.fileUrl);
+                    if (isLink) {
+                      setSubmissionMode('link');
+                      setCloudSubmissionLink(userSubmission.fileUrl);
+                      setCustomFileName(userSubmission.fileName || '');
+                    } else {
+                      setSubmissionMode('files');
+                    }
+                    setIsResubmitting(true);
+                  }}
+                  className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>{language === 'ar' ? 'إعادة التسليم أو تعديل الرابط 🔄' : 'Resubmit / Edit Link 🔄'}</span>
+                </button>
+              </div>
             </div>
           ) : (
             <form onSubmit={handleFileSubmit} className="space-y-4">
               {uploadError && <p className="p-3 text-xs font-semibold text-red-600 bg-red-50 rounded-xl border border-red-100">{uploadError}</p>}
-              
+
+              {/* Resubmitting Banner */}
+              {isResubmitting && (
+                <div className="p-3.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-2xl flex items-center justify-between gap-3 text-xs font-bold text-amber-900 dark:text-amber-200 shadow-sm animate-fadeIn">
+                  <div className="flex items-center gap-2">
+                    <RefreshCw className="w-4 h-4 text-amber-600 animate-spin shrink-0" />
+                    <span>{language === 'ar' ? 'أنت الآن بصدد تعديل تسليمك أو وضع رابط جديد للمهمة' : 'You are currently updating your submission / link.'}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsResubmitting(false)}
+                    className="px-3 py-1 bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-300 text-xs font-bold rounded-xl hover:bg-amber-100 transition-colors shrink-0 cursor-pointer"
+                  >
+                    {language === 'ar' ? 'إلغاء التعديل ✕' : 'Cancel ✕'}
+                  </button>
+                </div>
+              )}
+
               <div className="flex rounded-2xl bg-slate-100 dark:bg-slate-800 p-1">
                 <button
                   type="button"
@@ -1779,7 +1838,7 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
                   }`}
                 >
                   <LinkIcon className="w-3.5 h-3.5" />
-                  <span>{language === 'ar' ? '🔗 رابط Google Drive أو سحابي ☁️' : 'Cloud / Drive Link ☁️'}</span>
+                  <span>{language === 'ar' ? '🔗 تسليم باللينك (Google Drive / Figma / رابط)' : 'Submit by Link 🔗'}</span>
                 </button>
               </div>
 
@@ -1893,20 +1952,35 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
                 </>
               ) : (
                 /* Cloud Link Mode */
-                <div className="space-y-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-blue-100 dark:border-blue-950/60">
-                  <div className="flex items-start gap-2.5 p-3 rounded-xl bg-blue-50/70 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300 text-xs">
+                <div className="space-y-4 bg-white dark:bg-slate-900 p-4 sm:p-5 rounded-2xl border border-blue-100 dark:border-blue-950/60 shadow-sm animate-fadeIn">
+                  <div className="flex items-start gap-3 p-3.5 rounded-2xl bg-blue-50/70 dark:bg-blue-950/40 text-blue-900 dark:text-blue-200 text-xs border border-blue-200/50 dark:border-blue-800/40">
                     <Cloud className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
                     <div className="space-y-1">
                       <p className="font-bold">
                         {language === 'ar' 
-                          ? '🚀 تسليم بدون أي استهلاك لباقة السيرفر (Google Drive / OneDrive / Figma / GitHub)' 
-                          : 'Zero-bandwidth submission via Cloud Link'}
+                          ? '🚀 تسليم الحل برابط مباشر (Google Drive / Figma / Canva / GitHub)' 
+                          : 'Zero-bandwidth submission via Cloud Project Link'}
                       </p>
-                      <p className="text-[11px] opacity-80">
+                      <p className="text-[11px] opacity-85 leading-relaxed">
                         {language === 'ar'
-                          ? 'ارفع مشروعك أو ملفاتك الكبيرة على Google Drive وضع الرابط هنا، وتأكد من جعل خيار المشاركة: "أي شخص لديه الرابط يمكنه العرض" (Anyone with the link can view).'
-                          : 'Upload to Google Drive and paste the public link here.'}
+                          ? 'ضع رابط حلك هنا وتأكد من جعل خيار المشاركة في الرابط: "أي شخص لديه الرابط يمكنه العرض" (Anyone with the link can view).'
+                          : 'Paste your project link here and ensure public view permissions are enabled.'}
                       </p>
+                    </div>
+                  </div>
+
+                  {/* Supported Platform Chips */}
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                      {language === 'ar' ? 'منصات وروابط مدعومة ومستحسنة:' : 'Supported platforms:'}
+                    </span>
+                    <div className="flex flex-wrap gap-1.5 text-[11px] font-bold">
+                      <span className="px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">Google Drive 📁</span>
+                      <span className="px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">Figma 🎨</span>
+                      <span className="px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">Canva 📐</span>
+                      <span className="px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">GitHub 💻</span>
+                      <span className="px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">Notion 📝</span>
+                      <span className="px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">OneDrive ☁️</span>
                     </div>
                   </div>
 
@@ -1914,18 +1988,26 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
                     <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
                       <span className="flex items-center gap-1.5">
                         <LinkIcon className="w-3.5 h-3.5 text-blue-500" />
-                        <span>{language === 'ar' ? 'رابط التسليم السحابي' : 'Cloud Project Link'}</span>
+                        <span>{language === 'ar' ? 'رابط التسليم (Link URL) *' : 'Submission Link URL *'}</span>
                       </span>
-                      <span className="text-[10px] text-amber-600 dark:text-amber-400 font-normal">
-                        {language === 'ar' ? 'مستحسن للمشاريع والفيديوهات الكبيرة' : 'Recommended for large files'}
-                      </span>
+                      {cloudSubmissionLink.trim() && (
+                        <a
+                          href={cloudSubmissionLink.startsWith('http') ? cloudSubmissionLink : `https://${cloudSubmissionLink}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+                        >
+                          <span>{language === 'ar' ? 'تجربة فتح الرابط ↗' : 'Test Link ↗'}</span>
+                        </a>
+                      )}
                     </label>
                     <input
                       type="url"
-                      placeholder={language === 'ar' ? 'https://drive.google.com/drive/folders/... أو https://www.figma.com/...' : 'https://drive.google.com/...'}
+                      required
+                      placeholder={language === 'ar' ? 'https://drive.google.com/... أو https://www.figma.com/...' : 'https://drive.google.com/...'}
                       value={cloudSubmissionLink}
                       onChange={(e) => setCloudSubmissionLink(e.target.value)}
-                      className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                      className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40 font-mono"
                     />
                   </div>
 
@@ -1935,7 +2017,7 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
                     </label>
                     <input
                       type="text"
-                      placeholder={language === 'ar' ? 'مثال: ملفات تصميم واجهة المستخدم، فيديو الشرح على الدرايف' : 'e.g., UI design files on Drive'}
+                      placeholder={language === 'ar' ? 'مثال: مشروع البوستر على فيجما، فيديو الشرح على الدرايف' : 'e.g., UI design files on Figma'}
                       value={customFileName}
                       onChange={(e) => setCustomFileName(e.target.value)}
                       className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
@@ -2540,6 +2622,22 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
                           </td>
                           <td className="py-3">
                             {(() => {
+                              const isLink = isCloudLink(sub.fileUrl);
+                              if (isLink) {
+                                return (
+                                  <a
+                                    href={sub.fileUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-blue-500/15 hover:bg-blue-500/25 text-blue-400 border border-blue-500/30 text-[11px] font-bold transition-all shadow-sm group"
+                                    title="فتح الرابط في نافذة جديدة"
+                                  >
+                                    <LinkIcon className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                                    <span className="truncate max-w-[120px]">{sub.fileName || 'رابط التسليم 🔗'}</span>
+                                    <ExternalLink className="w-3 h-3 text-blue-400 shrink-0 opacity-70 group-hover:opacity-100" />
+                                  </a>
+                                );
+                              }
                               const atts = getSubmissionAttachments(sub);
                               if (atts.length === 0) {
                                 return <span className="text-slate-500 text-[10px]">لا يوجد ملف</span>;
@@ -3278,6 +3376,10 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
                     <input type="checkbox" checked={allowedImages} onChange={e => setAllowedImages(e.target.checked)} className="accent-amber-500" />
                     <span>PNG / JPG</span>
                   </label>
+                  <label className="flex items-center gap-2 cursor-pointer text-blue-600 dark:text-blue-400 font-bold">
+                    <input type="checkbox" defaultChecked disabled className="accent-blue-500" />
+                    <span>تسليم باللينك متاح (Google Drive / Figma) 🔗</span>
+                  </label>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input type="checkbox" checked={newTaskResubmit} onChange={e => setNewTaskResubmit(e.target.checked)} className="accent-amber-500" />
                     <span>السماح بإعادة التسليم</span>
@@ -3584,8 +3686,39 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
               </button>
             </div>
 
-            {/* View Member Attachments */}
-            {(() => {
+            {/* View Member Attachments or Direct Cloud Link */}
+            {selectedReviewSub && isCloudLink(selectedReviewSub.fileUrl) ? (
+              <div className="bg-blue-50 dark:bg-blue-950/40 p-4 rounded-2xl border border-blue-200 dark:border-blue-800 space-y-2.5 animate-fadeIn">
+                <div className="flex items-center justify-between text-xs font-bold text-blue-900 dark:text-blue-200">
+                  <span className="flex items-center gap-2">
+                    <LinkIcon className="w-4 h-4 text-blue-500" />
+                    <span>رابط تسليم العضو للمشروع:</span>
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 text-blue-200 text-[10px] font-bold font-mono">
+                    تسليم برابط مباشر 🔗
+                  </span>
+                </div>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-3.5 rounded-xl border border-blue-100 dark:border-blue-900">
+                  <div className="min-w-0">
+                    <p className="text-xs font-black text-slate-800 dark:text-slate-100 truncate">
+                      {selectedReviewSub.fileName || 'مشروع التسليم'}
+                    </p>
+                    <p className="text-[10px] text-blue-600 dark:text-blue-400 font-mono truncate dir-ltr">
+                      {selectedReviewSub.fileUrl}
+                    </p>
+                  </div>
+                  <a
+                    href={selectedReviewSub.fileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black shrink-0 flex items-center justify-center gap-1.5 shadow-md shadow-blue-600/20 transition-all cursor-pointer"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>فتح رابط التسليم ↗</span>
+                  </a>
+                </div>
+              </div>
+            ) : (() => {
               const atts = getSubmissionAttachments(selectedReviewSub);
               if (atts.length === 0) return null;
               return (
@@ -3596,7 +3729,7 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
                       <span>الملفات والصور المسلمة ({atts.length}):</span>
                     </span>
                     <span className="text-[10px] text-slate-400 font-mono">
-                      {selectedReviewSub.fileSize || ''}
+                      {selectedReviewSub?.fileSize || ''}
                     </span>
                   </div>
                   <div className="flex items-center gap-2 overflow-x-auto pb-1">

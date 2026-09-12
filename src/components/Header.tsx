@@ -7,6 +7,7 @@ import { useTheme } from '../lib/ThemeContext';
 import { MinistryLogo } from './EyeLogo';
 import { sendTestPushNotification } from '../lib/pushNotifications';
 import { matchesSearch } from '../lib/searchUtils';
+import { FloatingToast } from './FloatingToast';
 
 
 interface HeaderProps {
@@ -356,12 +357,9 @@ export const Header: React.FC<HeaderProps> = ({
           seenNotifIdsRef.current.add(n.id);
           setToasts(prev => {
             if (prev.some(t => t.id === n.id)) return prev;
-            return [...prev, n];
+            const updated = [...prev, n];
+            return updated.slice(-3); // Keep only top 3 most recent notifications
           });
-          // Auto-remove toast after 7 seconds
-          setTimeout(() => {
-            setToasts(prev => prev.filter(t => t.id !== n.id));
-          }, 7000);
         });
       }
     }
@@ -480,16 +478,19 @@ export const Header: React.FC<HeaderProps> = ({
     }
   };
 
-  const getNotifBg = (type: string) => {
+  const getNotifBg = (type: string, isRead: boolean = false) => {
+    if (isRead) {
+      return 'bg-white dark:bg-slate-800/60 hover:bg-slate-50 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-700/80 opacity-75';
+    }
     switch (type) {
       case 'success':
-        return 'bg-emerald-500/10 border-emerald-500/20';
+        return 'bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100/60 dark:hover:bg-emerald-950/60 border-emerald-300 dark:border-emerald-800';
       case 'warning':
-        return 'bg-amber-500/10 border-amber-500/20';
+        return 'bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100/60 dark:hover:bg-amber-950/60 border-amber-300 dark:border-amber-800';
       case 'error':
-        return 'bg-red-500/10 border-red-500/20';
+        return 'bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100/60 dark:hover:bg-rose-950/60 border-rose-300 dark:border-rose-800';
       default:
-        return 'bg-blue-500/10 border-blue-500/20';
+        return 'bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100/60 dark:hover:bg-blue-950/60 border-blue-300 dark:border-blue-800';
     }
   };
 
@@ -705,7 +706,7 @@ export const Header: React.FC<HeaderProps> = ({
                     return (
                       <div
                         key={notif.id}
-                        className={`p-3 rounded-xl border flex items-start gap-3 cursor-pointer hover:bg-slate-50 transition-colors relative group ${getNotifBg(notif.type)} ${!notif.isRead ? 'border-emerald-500/30' : 'border-slate-200 opacity-75'}`}
+                        className={`p-3 rounded-xl border flex items-start gap-3 cursor-pointer transition-all relative group ${getNotifBg(notif.type, notif.isRead)}`}
                         onClick={() => {
                           setShowNotifPanel(false);
                           db.markNotificationRead(notif.id);
@@ -716,12 +717,12 @@ export const Header: React.FC<HeaderProps> = ({
                       >
                         <div className="mt-0.5 shrink-0">{getNotifIcon(notif.type)}</div>
                         <div className="flex-1 space-y-0.5">
-                          <p className="text-xs font-bold text-slate-800 flex items-center justify-between">
+                          <p className="text-xs font-bold text-slate-800 dark:text-slate-100 flex items-center justify-between">
                             <span>{localized.title}</span>
                             {!notif.isRead && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />}
                           </p>
-                          <p className="text-[10px] text-slate-600 leading-relaxed">{localized.message}</p>
-                          <p className="text-[9px] text-slate-400 font-mono pt-1">
+                          <p className="text-[10px] text-slate-600 dark:text-slate-300 leading-relaxed">{localized.message}</p>
+                          <p className="text-[9px] text-slate-400 dark:text-slate-400 font-mono pt-1">
                             {new Date(notif.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </p>
                         </div>
@@ -896,43 +897,25 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Floating Toast Notification Stack */}
       <div className={`fixed z-[100] max-w-sm w-full flex flex-col gap-3 pointer-events-none top-20 ${isRtl ? 'left-4 md:left-6' : 'right-4 md:right-6'}`} style={{ zIndex: 9999 }}>
-        {toasts.map(toast => {
-          const localized = translateNotification(toast.title, toast.message, language);
-          return (
-            <div
-              key={toast.id}
-              onClick={() => {
-                // Mark as read
-                db.markNotificationRead(toast.id);
-                loadNotifications();
-                // Remove toast
-                setToasts(prev => prev.filter(t => t.id !== toast.id));
-                // Route the user to the page that matches this notification type
-                const dest = getNotifDestination(toast, currentUser.role);
-                onNavigateToView(dest.view, dest.targetId);
-              }}
-              className={`pointer-events-auto w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl p-4 flex gap-3 cursor-pointer hover:shadow-xl transition-all duration-300 transform translate-y-0 ${isRtl ? 'animate-slide-in-left' : 'animate-slide-in-right'} ${getNotifBg(toast.type)}`}
-            >
-              <div className="mt-0.5 shrink-0 bg-slate-100 dark:bg-slate-800 p-1.5 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 flex items-center justify-center h-8 w-8">{getNotifIcon(toast.type)}</div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-black text-slate-900 dark:text-white flex items-center justify-between">
-                  <span className="truncate">{localized.title}</span>
-                  <span className="w-1.5 h-1.5 rounded-full bg-eye-brand shrink-0" />
-                </p>
-                <p className="text-[11px] text-slate-700 dark:text-slate-200 leading-relaxed mt-1 font-semibold line-clamp-2">{localized.message}</p>
-              </div>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setToasts(prev => prev.filter(t => t.id !== toast.id));
-                }}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 shrink-0 self-start p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          );
-        })}
+        {toasts.map(toast => (
+          <FloatingToast
+            key={toast.id}
+            toast={toast}
+            language={language}
+            isRtl={isRtl}
+            duration={3500}
+            onDismiss={(id) => {
+              setToasts(prev => prev.filter(t => t.id !== id));
+            }}
+            onClick={(toast) => {
+              db.markNotificationRead(toast.id);
+              loadNotifications();
+              setToasts(prev => prev.filter(t => t.id !== toast.id));
+              const dest = getNotifDestination(toast, currentUser.role);
+              onNavigateToView(dest.view, dest.targetId);
+            }}
+          />
+        ))}
       </div>
 
       {/* PWA App Installation Modal */}

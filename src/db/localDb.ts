@@ -29,6 +29,7 @@ import {
   OKRStatus,
   VolunteerIdea,
   AcademyCourse,
+  AcademyResourceType,
   RewardItem,
   RewardPurchase,
   ExcuseRequest,
@@ -1225,9 +1226,19 @@ class SupabaseDatabase {
         title: r.title,
         description: r.description || '',
         category: r.category || 'General',
+        type: r.type || 'reference',
+        videoUrl: r.video_url || undefined,
+        linkUrl: r.link_url || undefined,
+        pdfUrl: r.pdf_url || undefined,
+        duration: r.duration || undefined,
+        author: r.author || undefined,
+        tags: Array.isArray(r.tags) ? r.tags : [],
         committee: r.committee || 'All',
         readsCount: r.reads_count || 0,
         completedBy: Array.isArray(r.completed_by) ? r.completed_by : [],
+        createdAt: r.created_at || undefined,
+        createdBy: r.created_by || undefined,
+        createdByName: r.created_by_name || undefined,
       }));
       const localCourses = this._ls<AcademyCourse>('eye_academy_courses');
       const mergedCourses = mergeById(remoteCourses, localCourses, deletedAcademyCourseIds);
@@ -6953,23 +6964,119 @@ class SupabaseDatabase {
   }
 
   // ═══════════════════════════════════════════════════
-  // INTERNAL ACADEMY & TRAINING LIBRARY
+  // INTERNAL ACADEMY & KNOWLEDGE REFERENCES LIBRARY
   // ═══════════════════════════════════════════════════
   getCourses(): AcademyCourse[] {
-    const list = this._ls<AcademyCourse>('eye_academy_courses');
+    let list = this._ls<AcademyCourse>('eye_academy_courses');
     const deletedIds: string[] = JSON.parse(localStorage.getItem('eye_deleted_academy_course_ids') || '[]');
-    return list.filter(c => !deletedIds.includes(c.id));
+    list = list.filter(c => !deletedIds.includes(c.id));
+    if (list.length === 0) {
+      const defaultCourses: AcademyCourse[] = [
+        {
+          id: 'res-seed-yt-leadership',
+          title: 'فيديو إثرائي: أسرار القيادة والتأثير الفعال في فرق العمل',
+          description: 'دليل ملهم ومكثف حول بناء ثقافة الفريق، التواصل الفعّال، وإدارة الضغوط وتحفيز الشباب في العمل المؤسسي والتطوعي.',
+          category: 'Management',
+          type: 'video',
+          videoUrl: 'https://www.youtube.com/watch?v=fW8amMCVAJQ',
+          duration: '18 دقيقة',
+          author: 'أكاديمية القيادة والتطوير',
+          tags: ['قيادة', 'فريق_العمل', 'إدارة'],
+          committee: 'All',
+          readsCount: 14,
+          completedBy: [],
+          createdAt: new Date().toISOString(),
+          createdByName: 'إدارة المنصة',
+        },
+        {
+          id: 'res-seed-book-thinking',
+          title: 'مرجع وقراءة: التفكير الاستراتيجي وحل المشكلات المعقدة',
+          description: 'مرجع متكامل في أساليب التفكير التحليلي، خرائط الذهن، واتخاذ القرارات الذكية في تخطيط المبادرات والفعاليات بنجاح.',
+          category: 'General',
+          type: 'book',
+          linkUrl: 'https://archive.org',
+          duration: 'قراءة 20 دقيقة',
+          author: 'مكتبة التطوير المعرفي',
+          tags: ['تخطيط', 'تفكير_نقدي', 'مهارات'],
+          committee: 'All',
+          readsCount: 22,
+          completedBy: [],
+          createdAt: new Date().toISOString(),
+          createdByName: 'إدارة المنصة',
+        },
+        {
+          id: 'res-seed-yt-design',
+          title: 'أساسيات وتناسق الألوان في صناعة البوسترات والهوية البصرية',
+          description: 'شرح عملي ومبسط لكيفية اختيار باليتات الألوان وقواعد التباين التي تجعل تصاميم السوشيال ميديا جذابة ومريحة للعين.',
+          category: 'Design',
+          type: 'video',
+          videoUrl: 'https://www.youtube.com/watch?v=_2LLXnUdUIc',
+          duration: '12 دقيقة',
+          author: 'فريق التصميم والميديا',
+          tags: ['تصميم', 'ألوان', 'سوشيال_ميديا'],
+          committee: 'SM',
+          readsCount: 9,
+          completedBy: [],
+          createdAt: new Date().toISOString(),
+          createdByName: 'لجنة الميديا',
+        },
+        {
+          id: 'res-seed-article-hr',
+          title: 'دليل استقطاب وتحفيز المواهب في بيئة العمل الشبابية',
+          description: 'مقالة شاملة تغطي استراتيجيات إدارة الموارد البشرية، المقابلات الشخصية، وتقييم الأداء المؤسسي بفاعلية.',
+          category: 'HR',
+          type: 'article',
+          linkUrl: 'https://hbr.org',
+          duration: 'قراءة 15 دقيقة',
+          author: 'إدارة الموارد البشرية HRM',
+          tags: ['HR', 'تقييم_الأداء', 'استقطاب'],
+          committee: 'HR',
+          readsCount: 18,
+          completedBy: [],
+          createdAt: new Date().toISOString(),
+          createdByName: 'مسئول HRM',
+        },
+      ];
+      this._lsSave('eye_academy_courses', defaultCourses);
+      return defaultCourses;
+    }
+    return list;
   }
 
-  createCourse(title: string, description: string, category: string, committee: string, actor: UserProfile): AcademyCourse {
+  createCourse(
+    title: string,
+    description: string,
+    category: string,
+    committee: string,
+    actor: UserProfile,
+    extra?: {
+      type?: AcademyResourceType;
+      videoUrl?: string;
+      linkUrl?: string;
+      pdfUrl?: string;
+      duration?: string;
+      author?: string;
+      tags?: string[];
+    }
+  ): AcademyCourse {
     const newCourse: AcademyCourse = {
       id: 'course-' + Math.random().toString(36).slice(2, 9),
       title,
       description,
       category,
       committee,
+      type: extra?.type || (extra?.videoUrl ? 'video' : extra?.linkUrl ? 'reference' : 'guide'),
+      videoUrl: extra?.videoUrl || '',
+      linkUrl: extra?.linkUrl || '',
+      pdfUrl: extra?.pdfUrl || '',
+      duration: extra?.duration || '',
+      author: extra?.author || actor.fullName,
+      tags: extra?.tags || [],
       readsCount: 0,
       completedBy: [],
+      createdAt: new Date().toISOString(),
+      createdBy: actor.id,
+      createdByName: actor.fullName,
     };
     const list = this.getCourses();
     const updated = [newCourse, ...list];
@@ -6983,14 +7090,51 @@ class SupabaseDatabase {
         description: newCourse.description,
         category: newCourse.category,
         committee: newCourse.committee,
+        type: newCourse.type,
+        video_url: newCourse.videoUrl,
+        link_url: newCourse.linkUrl,
+        pdf_url: newCourse.pdfUrl,
+        duration: newCourse.duration,
+        author: newCourse.author,
+        tags: newCourse.tags,
         reads_count: newCourse.readsCount,
         completed_by: newCourse.completedBy,
         governorate: actor.governorate || 'الغربية',
+        created_at: newCourse.createdAt,
+        created_by: newCourse.createdBy,
+        created_by_name: newCourse.createdByName,
       }).then();
     }
 
-    this.logActivity(actor.id, actor.fullName, actor.role, 'Course Created', `Added academy course "${title}"`);
+    this.logActivity(actor.id, actor.fullName, actor.role, 'Resource Created', `Added academy resource "${title}"`);
     return newCourse;
+  }
+
+  updateCourse(id: string, updates: Partial<AcademyCourse>, actor: UserProfile): void {
+    const list = this.getCourses();
+    const idx = list.findIndex(c => c.id === id);
+    if (idx === -1) return;
+    list[idx] = { ...list[idx], ...updates };
+    this._lsSave('eye_academy_courses', list);
+    this.notify();
+
+    if (isSupabaseConfigured && supabase) {
+      supabase.from('academy_courses').update({
+        title: list[idx].title,
+        description: list[idx].description,
+        category: list[idx].category,
+        committee: list[idx].committee,
+        type: list[idx].type,
+        video_url: list[idx].videoUrl,
+        link_url: list[idx].linkUrl,
+        pdf_url: list[idx].pdfUrl,
+        duration: list[idx].duration,
+        author: list[idx].author,
+        tags: list[idx].tags,
+      }).eq('id', id).then();
+    }
+
+    this.logActivity(actor.id, actor.fullName, actor.role, 'Resource Updated', `Updated resource "${list[idx].title}"`);
   }
 
   async deleteCourse(id: string, actor: UserProfile): Promise<void> {
@@ -7005,7 +7149,7 @@ class SupabaseDatabase {
       await supabase.from('academy_courses').delete().eq('id', id);
     }
 
-    this.logActivity(actor.id, actor.fullName, actor.role, 'Course Deleted', `Deleted academy course ${id}`);
+    this.logActivity(actor.id, actor.fullName, actor.role, 'Resource Deleted', `Deleted academy resource ${id}`);
   }
 
   trackRead(courseId: string, userId: string): void {
@@ -7014,10 +7158,16 @@ class SupabaseDatabase {
     if (!course) return;
 
     let updatedPoints = false;
-    if (!course.completedBy.includes(userId)) {
+    const isAlreadyCompleted = course.completedBy.includes(userId);
+
+    if (!isAlreadyCompleted) {
       course.completedBy.push(userId);
-      course.readsCount += 1;
+      course.readsCount = (course.readsCount || 0) + 1;
       updatedPoints = true;
+    } else {
+      // Toggle off
+      course.completedBy = course.completedBy.filter(id => id !== userId);
+      course.readsCount = Math.max(0, (course.readsCount || 1) - 1);
     }
     this._lsSave('eye_academy_courses', list);
 
@@ -7029,7 +7179,7 @@ class SupabaseDatabase {
       const user = this.cache.users.find(u => u.id === userId);
       if (user) {
         const currentBonus = user.bonusPoints || 0;
-        this.updateUserBonusPoints(userId, currentBonus + 20);
+        this.updateUserBonusPoints(userId, currentBonus + 25);
       }
     }
     this.notify();

@@ -314,6 +314,7 @@ export default function App() {
           newRole: currentUser.role,
           details: `🎉 تم تحديث منصبك الإداري وصلاحياتك فوراً إلى (${currentUser.role}) ${currentUser.committee && currentUser.committee !== 'None' ? '✦ لجنة ' + currentUser.committee : ''} ${currentUser.department ? '(' + currentUser.department + ')' : ''}`,
         });
+        setTimeout(() => setRoleChangeToast(null), 5000);
       }
     }
 
@@ -534,6 +535,7 @@ export default function App() {
       case 'trivia':
         return <WeeklyTrivia currentUser={currentUser} />;
       case 'academy':
+        return <InternalAcademy currentUser={currentUser} />;
       case 'challenges':
       case 'memory-wall':
         return <DashboardStats currentUser={currentUser} onNavigateToView={handleNavigateToView} />;
@@ -633,7 +635,7 @@ export default function App() {
         <main ref={mainScrollRef} className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-900/60 relative p-4 md:p-6 pb-24 lg:pb-6 safe-pb-mobile">
           {/* Real-time Role / Position Promotion Toast Alert */}
           {roleChangeToast?.show && (
-            <div className="fixed top-5 right-5 left-5 md:left-auto md:max-w-md z-50 bg-gradient-to-r from-amber-600 via-amber-500 to-amber-700 text-white p-4 rounded-2xl shadow-2xl shadow-amber-500/50 border border-amber-300/40 animate-bounce transition-all flex items-start gap-3">
+            <div className="fixed top-5 right-5 left-5 md:left-auto md:max-w-md z-50 bg-gradient-to-r from-amber-600 via-amber-500 to-amber-700 text-white p-4 rounded-2xl shadow-2xl shadow-amber-500/50 border border-amber-300/40 animate-fade-in transition-all flex items-start gap-3">
               <div className="text-2xl p-2 bg-white/20 rounded-xl backdrop-blur-md shrink-0">👑</div>
               <div className="flex-1 min-w-0">
                 <h4 className="font-extrabold text-sm text-amber-100">تم تحديث منصبك وصلاحياتك مباشرة!</h4>
