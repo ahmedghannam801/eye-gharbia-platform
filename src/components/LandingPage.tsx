@@ -64,8 +64,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
       code: 'OR',
       name: language === 'ar' ? 'لجنة العلاقات التنظيمية والدعم اللوجستي (OR)' : 'Organizational Committee (OR)',
       departments: language === 'ar'
-        ? ['إدارة كبار الشخصيات VIP', 'التخطيط الاستراتيجي للفعاليات', 'التنسيق العام', 'الدعم والعمليات اللوجستية']
-        : ['VIP Management', 'Strategic Planning', 'Coordination', 'Logistics Operations'],
+        ? ['إدارة كبار الشخصيات VIP', 'التخطيط والتنسيق للفعاليات (Planning & Coordination)', 'الدعم والعمليات اللوجستية (Logistics)']
+        : ['VIP Management', 'Planning & Coordination', 'Logistics Operations'],
       description: language === 'ar'
         ? 'التنفيذ الميداني وتطبيق البروتوكول الرسمي، ضبط الميزانيات وتوفير الدعم التنظيمي واللوجستي المتكامل للفعاليات.'
         : 'Ground execution, protocol enforcement, budgeting, and flawless event logistics.',

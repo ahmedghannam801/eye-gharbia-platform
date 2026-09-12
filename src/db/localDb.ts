@@ -115,6 +115,12 @@ const userFromRow = (r: any): UserProfile => {
     dept = 'HRM';
   }
 
+  // Automatic consolidation: Merge Planning and Coordination into 'Planning & Coordination'
+  let resolvedDept = override.department !== undefined ? override.department : (r.department || dept || 'None');
+  if (resolvedDept === 'Planning' || resolvedDept === 'Coordination') {
+    resolvedDept = 'Planning & Coordination';
+  }
+
   return {
     id: r.id,
     fullName: fullName,
@@ -123,7 +129,7 @@ const userFromRow = (r: any): UserProfile => {
     role: (override.role !== undefined ? override.role : (r.role || r.user_role || 'Member')) as UserRole,
     status: (override.status !== undefined ? override.status : (r.status || 'Active')) as UserStatus,
     committee: override.committee !== undefined ? override.committee : (r.committee || 'None'),
-    department: override.department !== undefined ? override.department : (r.department || dept || 'None'),
+    department: resolvedDept,
     subCommittee: override.subCommittee !== undefined ? override.subCommittee : (r.sub_committee || r.sub_committee_name),
     membershipCode: override.membershipCode !== undefined ? override.membershipCode : r.membership_code,
     avatarUrl: getPermanentStorageUrl((override.avatarUrl !== undefined ? override.avatarUrl : (r.avatar_url && r.avatar_url.trim())) || ''),
@@ -142,30 +148,36 @@ const userFromRow = (r: any): UserProfile => {
   };
 };
 
-const taskFromRow = (r: any): Task => ({
-  id: r.id,
-  name: r.name,
-  description: r.description,
-  instructions: r.instructions,
-  priority: r.priority,
-  deadline: r.deadline,
-  committee: r.committee,
-  department: r.department,
-  status: r.status,
-  createdBy: r.created_by,
-  createdByName: r.created_by_name,
-  createdDate: r.created_date,
-  allowedFileTypes: r.allowed_file_types || [],
-  maxUploadSizeMb: r.max_upload_size_mb,
-  allowResubmission: r.allow_resubmission,
-  attachments: (r.attachments || []).map((att: any) => typeof att === 'string' ? getPermanentStorageUrl(att) : att),
-  subtasks: r.subtasks || [],
-  isTeamTask: r.is_team_task || false,
-  isVideoTask: r.is_video_task ?? r.isVideoTask ?? false,
-  videoUrl: r.video_url || r.videoUrl || undefined,
-  assignedMemberIds: r.assigned_member_ids || r.assignedMemberIds || [],
-  targetAudience: r.target_audience || r.targetAudience || undefined,
-});
+const taskFromRow = (r: any): Task => {
+  let dept = r.department;
+  if (dept === 'Planning' || dept === 'Coordination') {
+    dept = 'Planning & Coordination';
+  }
+  return {
+    id: r.id,
+    name: r.name,
+    description: r.description,
+    instructions: r.instructions,
+    priority: r.priority,
+    deadline: r.deadline,
+    committee: r.committee,
+    department: dept,
+    status: r.status,
+    createdBy: r.created_by,
+    createdByName: r.created_by_name,
+    createdDate: r.created_date,
+    allowedFileTypes: r.allowed_file_types || [],
+    maxUploadSizeMb: r.max_upload_size_mb,
+    allowResubmission: r.allow_resubmission,
+    attachments: (r.attachments || []).map((att: any) => typeof att === 'string' ? getPermanentStorageUrl(att) : att),
+    subtasks: r.subtasks || [],
+    isTeamTask: r.is_team_task || false,
+    isVideoTask: r.is_video_task ?? r.isVideoTask ?? false,
+    videoUrl: r.video_url || r.videoUrl || undefined,
+    assignedMemberIds: r.assigned_member_ids || r.assignedMemberIds || [],
+    targetAudience: r.target_audience || r.targetAudience || undefined,
+  };
+};
 
 const parseSubmissionAttachments = (r: any): SubmissionAttachment[] => {
   if (r.attachments && Array.isArray(r.attachments) && r.attachments.length > 0) {
@@ -201,6 +213,10 @@ const submissionFromRow = (r: any): Submission => {
   const attachments = parseSubmissionAttachments(r);
   const primaryUrl = attachments.length > 0 ? attachments[0].url : getPermanentStorageUrl(r.file_url);
   const primaryName = attachments.length > 0 ? attachments[0].name : r.file_name;
+  let dept = r.department;
+  if (dept === 'Planning' || dept === 'Coordination') {
+    dept = 'Planning & Coordination';
+  }
   return {
     id: r.id,
     taskId: r.task_id,
@@ -209,7 +225,7 @@ const submissionFromRow = (r: any): Submission => {
     memberName: r.member_name,
     memberEmail: r.member_email,
     committee: r.committee,
-    department: r.department,
+    department: dept,
     submittedAt: r.submitted_at,
     status: r.status,
     fileUrl: primaryUrl,
@@ -2878,12 +2894,19 @@ class SupabaseDatabase {
       if (user.committee === 'Events' || (user.committee as any) === 'Event') {
         updates.committee = 'OR';
         if (!user.department || user.department === 'Events' || user.department === 'None') {
-          updates.department = 'Planning';
+          updates.department = 'Planning & Coordination';
         }
         supabaseUpdates.committee = 'OR';
         supabaseUpdates.department = updates.department;
         needsDbUpdate = true;
         results.fixedEventsCount++;
+      }
+
+      // A.2) Merge Planning or Coordination into Planning & Coordination
+      if (user.department === 'Planning' || user.department === 'Coordination') {
+        updates.department = 'Planning & Coordination';
+        supabaseUpdates.department = 'Planning & Coordination';
+        needsDbUpdate = true;
       }
 
       // B) Fix missing / placeholder membership codes
@@ -6695,7 +6718,7 @@ class SupabaseDatabase {
         HR: ['HRM', 'HR OF PR', 'HR OF SM', 'HR OF OR', 'HRS', 'HRIS', 'HRD'],
         PR: ['EPR', 'IPR'],
         SM: ['Content', 'Graphic Design', 'Photography', 'Video Editing'],
-        OR: ['VIP', 'Planning', 'Coordination', 'Logistics'],
+        OR: ['VIP', 'Planning & Coordination', 'Logistics'],
       };
       const depts = deptStructure[_committee!] || ['General'];
       committeeBreakdown = depts.map(dept => {

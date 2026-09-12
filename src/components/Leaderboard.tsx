@@ -64,7 +64,7 @@ const COMMITTEE_DEPTS_MAP: Record<string, string[]> = {
   HR: ['HR OF PR', 'HR OF SM', 'HR OF OR', 'HRD', 'HRS', 'HRIS'],
   PR: ['EPR', 'IPR'],
   SM: ['Content', 'Graphic Design', 'Photography', 'Video Editing'],
-  OR: ['VIP', 'Planning', 'Coordination', 'Logistics'],
+  OR: ['VIP', 'Planning & Coordination', 'Logistics'],
 };
 
 const getAvailableDepts = (committee: string, allUsersList: UserProfile[]): string[] => {

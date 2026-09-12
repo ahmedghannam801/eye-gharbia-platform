@@ -287,7 +287,7 @@ export const COMMITTEE_STRUCTURE: Record<string, string[]> = {
   HR: ['HRM', 'HRD', 'HRS', 'HRIS'],
   PR: ['EPR', 'IPR'],
   SM: ['Content', 'Graphic Design', 'Photography', 'Video Editing'],
-  OR: ['VIP', 'Planning', 'Coordination', 'Logistics'],
+  OR: ['VIP', 'Planning & Coordination', 'Logistics'],
 };
 
 export const HRM_SUB_COMMITTEES: string[] = [

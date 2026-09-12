@@ -84,11 +84,8 @@ export const classifyAttendeeSubGroup = (
     if (combined.includes('VIP') || rawDept.includes('زوار') || rawDept.includes('VIP')) {
       return { committee, subGroup: 'VIP', committeeLabelAr, subGroupLabelAr: 'استقبال كبار الزوار (VIP)' };
     }
-    if (combined.includes('PLANNING') || rawDept.includes('تخطيط')) {
-      return { committee, subGroup: 'Planning', committeeLabelAr, subGroupLabelAr: 'التخطيط (Planning)' };
-    }
-    if (combined.includes('COORD') || rawDept.includes('تنسيق')) {
-      return { committee, subGroup: 'Coordination', committeeLabelAr, subGroupLabelAr: 'التنسيق والمتابعة (Coordination)' };
+    if (combined.includes('PLANNING') || combined.includes('COORD') || rawDept.includes('تخطيط') || rawDept.includes('تنسيق')) {
+      return { committee, subGroup: 'Planning & Coordination', committeeLabelAr, subGroupLabelAr: 'التخطيط والتنسيق (Planning & Coordination)' };
     }
     if (combined.includes('LOGIST') || rawDept.includes('لوجست') || rawDept.includes('دعم فني')) {
       return { committee, subGroup: 'Logistics', committeeLabelAr, subGroupLabelAr: 'اللوجستيات والدعم الفني (Logistics)' };

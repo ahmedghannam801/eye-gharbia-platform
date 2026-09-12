@@ -400,8 +400,9 @@ const TaskBoardInner: React.FC<TaskBoardProps> = ({ currentUser, selectedTaskIdF
       'Photography': language === 'ar' ? 'Photography — التصوير الفوتوغرافي' : 'Photography',
       'Video Editing': language === 'ar' ? 'Video Editing — المونتاج وصناعة الفيديو' : 'Video Editing',
       'VIP': language === 'ar' ? 'VIP — استقبال كبار الزوار' : 'VIP',
-      'Planning': language === 'ar' ? 'Planning — التخطيط' : 'Planning',
-      'Coordination': language === 'ar' ? 'Coordination — التنسيق والمتابعة' : 'Coordination',
+      'Planning & Coordination': language === 'ar' ? 'Planning & Coordination — التخطيط والتنسيق' : 'Planning & Coordination',
+      'Planning': language === 'ar' ? 'Planning & Coordination — التخطيط والتنسيق' : 'Planning & Coordination',
+      'Coordination': language === 'ar' ? 'Planning & Coordination — التخطيط والتنسيق' : 'Planning & Coordination',
       'Logistics': language === 'ar' ? 'Logistics — اللوجستيات والدعم الفني' : 'Logistics',
     };
     return deptMap[d] || d;

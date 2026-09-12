@@ -107,7 +107,7 @@ export function buildEyeKnowledgeBasePrompt(currentUser: UserProfile): string {
    - HR: HRM (إدارة HR العامة), HRM - HR OF PR, HRM - HR OF SM, HRM - HR OF OR, HRS (الدعم والخدمات), HRIS (نظم المعلومات), HRD (التطوير والتأهيل).
    - PR: EPR (العلاقات الخارجية), IPR (العلاقات الداخلية).
    - SM: Content (كتابة المحتوى), Graphic Design (التصميم), Photography (التصوير), Video Editing (المونتاج).
-   - OR: VIP (استقبال كبار الشخصيات), Planning (التخطيط), Coordination (التنسيق), Logistics (الدعم اللوجستي).
+   - OR: VIP (استقبال كبار الشخصيات), Planning & Coordination (التخطيط والتنسيق), Logistics (الدعم اللوجستي).
 
 💻 أنظمة ووظائف المنصة (EYE Workflow Hub):
 1. نظام إدارة المهام (Tasks & Submissions):
@@ -323,7 +323,7 @@ function generateDomainKnowledgeResponse(
           `• **HR (الموارد البشرية)**: تضم أقسام HRM (الإدارة العامة), HRS (الدعم والخدمات), HRIS (نظم المعلومات), HRD (التطوير والدورات).\n` +
           `• **PR (العلاقات العامة)**: تضم قسمي EPR (العلاقات الخارجية) و IPR (العلاقات الداخلية).\n` +
           `• **SM (وسائل التواصل الاجتماعي)**: تضم أقسام Content (المحتوى), Graphic Design (التصميم), Photography (التصوير), Video Editing (المونتاج).\n` +
-          `• **OR (التنظيم واللوجستيات)**: تضم أقسام VIP (استقبال كبار الشخصيات), Planning (التخطيط), Coordination (التنسيق), Logistics (الدعم اللوجستي).\n` +
+          `• **OR (التنظيم واللوجستيات)**: تضم أقسام VIP (استقبال كبار الشخصيات), Planning & Coordination (التخطيط والتنسيق), Logistics (الدعم اللوجستي).\n` +
           `• **Media (الإعلام والإنتاج)**.\n\n` +
           `حسابك الحالي مسجل في نطاق: **لجنة ${userCommittee}** بكود عضوية \`${currentUser.membershipCode}\`.`
         : `🏛️ **EYE Structure:** 5 primary committees (HR, PR, SM, OR, Media) with specialized sub-departments.`,

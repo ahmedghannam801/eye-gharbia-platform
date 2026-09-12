@@ -32,8 +32,9 @@ const DEPARTMENT_LABELS: Record<string, string> = {
   'Video Editing': 'المونتاج وصناعة الفيديو (Video Editing)',
   // OR Departments
   'VIP': 'إدارة كبار الشخصيات والبروتوكول (VIP)',
-  'Planning': 'التخطيط وإدارة الفعاليات (Planning)',
-  'Coordination': 'التنسيق والاتصال (Coordination)',
+  'Planning & Coordination': 'التخطيط والتنسيق (Planning & Coordination)',
+  'Planning': 'التخطيط والتنسيق (Planning & Coordination)',
+  'Coordination': 'التخطيط والتنسيق (Planning & Coordination)',
   'Logistics': 'الدعم اللوجستي والميداني (Logistics)',
 };
 

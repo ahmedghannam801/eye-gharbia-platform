@@ -17,7 +17,7 @@ const COMMITTEE_DEPTS_MAPPING: Record<string, string[]> = {
   HR: ['HRM', 'HRD', 'HRS', 'HRIS'],
   PR: ['EPR', 'IPR'],
   SM: ['Content', 'Graphic Design', 'Photography', 'Video Editing'],
-  OR: ['VIP', 'Planning', 'Coordination', 'Logistics'],
+  OR: ['VIP', 'Planning & Coordination', 'Logistics'],
 };
 const HRM_SUB_OPTIONS = ['HR OF PR', 'HR OF SM', 'HR OF OR', 'HR OF HR', 'HRM General'];
 

@@ -44,8 +44,9 @@ const getShortLabel = (code: string, label: string): string => {
     Photography: 'التصوير',
     'Video Editing': 'المونتاج',
     VIP: 'VIP',
-    Planning: 'التخطيط',
-    Coordination: 'التنسيق',
+    'Planning & Coordination': 'التخطيط والتنسيق',
+    Planning: 'التخطيط والتنسيق',
+    Coordination: 'التخطيط والتنسيق',
     Logistics: 'اللوجستيات',
     'Social Media': 'سوشيال',
     OR: 'تنظيم',
@@ -360,7 +361,7 @@ export const MeetingAttendance: React.FC<MeetingsProps> = ({ currentUser, onNavi
             });
 
             // Sort sub-groups so HRM, HRD, HRS, HRIS are in clean priority order
-            const subPriority: Record<string, number> = { HRM: 1, HRD: 2, HRS: 3, HRIS: 4, EPR: 10, IPR: 11, Content: 20, 'Graphic Design': 21, Photography: 22, 'Video Editing': 23, VIP: 30, Planning: 31, Coordination: 32, Logistics: 33 };
+            const subPriority: Record<string, number> = { HRM: 1, HRD: 2, HRS: 3, HRIS: 4, EPR: 10, IPR: 11, Content: 20, 'Graphic Design': 21, Photography: 22, 'Video Editing': 23, VIP: 30, 'Planning & Coordination': 31, Planning: 31, Coordination: 31, Logistics: 33 };
             const sortedSubGroups = Array.from(subGroupsSet.entries()).sort(([aKey, aVal], [bKey, bVal]) => {
               const pA = subPriority[aVal.code] || 99;
               const pB = subPriority[bVal.code] || 99;

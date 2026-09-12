@@ -262,7 +262,7 @@ export const ExecutiveReportBuilder: React.FC<ExecutiveReportBuilderProps> = ({ 
         });
       }
       case 'departments': {
-        const depts = ['HRM', 'HRS', 'HRIS', 'HRD', 'EPR', 'IPR', 'Content', 'Graphic Design', 'Photography', 'Video Editing', 'VIP', 'Planning', 'Coordination', 'Logistics'];
+        const depts = ['HRM', 'HRS', 'HRIS', 'HRD', 'EPR', 'IPR', 'Content', 'Graphic Design', 'Photography', 'Video Editing', 'VIP', 'Planning & Coordination', 'Logistics'];
         return depts.map(d => {
           const members = adminUsers.filter(u => u.department === d && u.role === 'Member').length;
           const totalTasks = adminTasks.filter(t => t.department === d).length;
